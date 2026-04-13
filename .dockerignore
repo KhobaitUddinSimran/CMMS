@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.vscode
+.idea
+__pycache__
+.pytest_cache
+node_modules
+.next
+.DS_Store
+miscellaneous/
+docs/
+scripts/

@@ -1,0 +1,93 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cmms_postgres
+    environment:
+      POSTGRES_USER: cmms_user
+      POSTGRES_PASSWORD: cmms_password_dev_only
+      POSTGRES_DB: cmms_production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cmms_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cmms_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: cmms_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+    volumes:
+      - redis_data:/data
+    networks:
+      - cmms_network
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.api
+    container_name: cmms_api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cmms_user:cmms_password_dev_only@postgres:5432/cmms_production
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET_KEY: dev-secret-key-change-in-production
+      ORIGINS: "http://localhost:3000,http://localhost"
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cmms_network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.web
+    container_name: cmms_web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+    networks:
+      - cmms_network
+    command: npm run dev
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: cmms_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - cmms_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  cmms_network:
+    driver: bridge

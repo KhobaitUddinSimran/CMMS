@@ -1,0 +1,99 @@
+name: MCP Integration - GitHub & Jira Sync
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+  issues:
+    types: [opened, closed, reopened]
+
+jobs:
+  github-jira-sync:
+    runs-on: ubuntu-latest
+    name: Sync GitHub with Jira
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Extract issue key from branch/PR
+        id: extract-issue
+        run: |
+          # Extract CMMS-XXX from branch name or PR title
+          if [[ "${{ github.event.pull_request.head.ref }}" =~ CMMS-[0-9]+ ]]; then
+            ISSUE_KEY="${BASH_REMATCH[0]}"
+          elif [[ "${{ github.event.pull_request.title }}" =~ CMMS-[0-9]+ ]]; then
+            ISSUE_KEY="${BASH_REMATCH[0]}"
+          elif [[ "${{ github.event.issue.title }}" =~ CMMS-[0-9]+ ]]; then
+            ISSUE_KEY="${BASH_REMATCH[0]}"
+          else
+            echo "No CMMS issue key found"
+            exit 0
+          fi
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+      - name: Link PR to Jira
+        if: github.event.pull_request
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issueKey = '${{ steps.extract-issue.outputs.issue_key }}';
+            if (!issueKey) return;
+            
+            console.log(`Linking PR #${{ github.event.pull_request.number }} to ${issueKey}`);
+            // Integration would happen here with Jira API
+            // POST https://{JIRA_HOST}/rest/api/3/issues/{issueKey}/changelog
+
+      - name: Update Jira issue with PR link
+        if: github.event.pull_request
+        env:
+          JIRA_HOST: ${{ secrets.JIRA_HOST }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          ISSUE_KEY="${{ steps.extract-issue.outputs.issue_key }}"
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "No issue key found"
+            exit 0
+          fi
+          
+          PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          COMMENT_BODY="GitHub PR: [${{ github.event.pull_request.title }}]($PR_URL)"
+          
+          # Update Jira issue with PR link (would use Jira API)
+          echo "Would update $ISSUE_KEY with PR link: $PR_URL"
+
+      - name: Transition issue on PR merge
+        if: github.event.pull_request.merged == true
+        env:
+          JIRA_HOST: ${{ secrets.JIRA_HOST }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          ISSUE_KEY="${{ steps.extract-issue.outputs.issue_key }}"
+          if [ -z "$ISSUE_KEY" ]; then
+            echo "No issue key found"
+            exit 0
+          fi
+          
+          # Transition issue to "In Review" when PR is merged
+          echo "Would transition $ISSUE_KEY to 'In Review' status"
+
+      - name: Create GitHub issue from Jira
+        if: github.event.issues
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // This would sync from Jira to GitHub
+            console.log("GitHub issue created: ${{ github.event.issue.number }}");
+            // Integration would sync to Jira if needed
+
+      - name: Post workflow summary
+        if: always()
+        run: |
+          echo "## MCP Integration Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub & Jira Sync Status**: ✅ Configured" >> $GITHUB_STEP_SUMMARY
+          echo "**Issue Key**: ${{ steps.extract-issue.outputs.issue_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "**PR Number**: ${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View in Jira](https://your-company.atlassian.net/browse/${{ steps.extract-issue.outputs.issue_key }})" >> $GITHUB_STEP_SUMMARY

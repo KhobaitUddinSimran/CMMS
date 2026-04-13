@@ -1,0 +1,76 @@
+C a rry M a rk M a n a g e m e n t S y s te m
+CMMS · UTM · SCSJ 3104</color>
+
+S p r in t 1 Foundation, Auth & Base UI
+9 A p r - 1 7 A p r< /co lo r>
+
+S p r in t 2 Course Setup & Roster
+20 A pr - 1 M ay< /color>
+
+S p r in t 3 G rading & Publication
+4 M ay - 15 M ay</color>
+
+S p rin t 4 O versight, Export & AI
+18 M ay - 29 M ay</color>
+
+In te g ra tio n P h a s e C om pletion & V alidation
+1 Jun - 12 Jun</color>
+
+In fra s tru c tu re
+Docker · PostgreSQL · Env Config</color>
+
+C o o rd in ato r F lo w s
+C ourse Shells · Lecturer Assignm ent</color>
+
+S m a rt G rid
+V irtual S croll · C oncurrency · A udit Log</color>
+
+S tu d e n t Q u e rie s
+Q uery on M ark · Lecturer R esolution</color>
+
+S y s te m In te g ra tio n
+End-to-End Testing · API Validation</color>
+
+A u th S y s te m
+JWT · RBAC · OTP · Password Reset</color>
+
+S e lf-S e e d in g
+Excel Upload · O TP Dispatch · Enrolm ent Linking</color>
+
+G ra d in g F e a tu re s
+DELAYED · Flag Review · Bulk Excel Import</color>
+
+H O D D a s h b o a rd
+M etrics · A lerts · D ept V isibility< /color>
+
+U A T T e s tin g
+All 5 R oles · Bug Triage</color>
+
+E m a il S e rv ic e
+R esend/M ailgun · Tem plates</color>
+
+A ssessm ent S chem a
+Form · W eight Validation · Schem a Lock</color>
+
+P u b lic a tio n
+DRAFT to PUBLISHED · Email Dispatch · Student Dashboard</color>
+
+F in a l E x p o rt
+CSV Precondition Check · Blocking UI</color>
+
+B u g F ixes & P o lish
+UI/UX Refinem ents · Regression Tests</color>
+
+Base UI
+N ext.js · C om ponents · R oute G uards · Toast</color>
+
+R o s te r O p e ra tio n s
+A dd/D rop · S oft-D elete · A udit Trail</color>
+
+A d m in & A I
+Account M gm t · D B Backup · Z-Score Anom aly</color>
+
+F in al D o cs
+API R eference · D eploym ent G uide</color>
+
+

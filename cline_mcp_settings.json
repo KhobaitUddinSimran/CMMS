@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "description": "MCP Server configuration for CMMS project - GitHub and Jira integration",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "github-mcp-server"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+        "GITHUB_OWNER": "utmcsj",
+        "GITHUB_REPO": "cmms"
+      },
+      "timeout": 30000,
+      "description": "GitHub repository management and automation",
+      "features": [
+        "search_repositories",
+        "list_issues",
+        "create_issue",
+        "list_pull_requests",
+        "create_pull_request",
+        "search_code",
+        "get_file_contents"
+      ]
+    },
+    "jira": {
+      "command": "npx",
+      "args": ["-y", "jira-mcp-server"],
+      "env": {
+        "JIRA_HOST": "${JIRA_HOST}",
+        "JIRA_EMAIL": "${JIRA_EMAIL}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
+        "JIRA_PROJECT_KEY": "CMMS"
+      },
+      "timeout": 30000,
+      "description": "Jira project management and issue tracking",
+      "features": [
+        "get_issues",
+        "create_issue",
+        "update_issue",
+        "get_sprints",
+        "get_board",
+        "search_users",
+        "add_comment",
+        "transition_issue"
+      ]
+    }
+  },
+  "serverOrder": ["github", "jira"],
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "file": ".mcp_debug.log"
+  },
+  "features": {
+    "autoConnect": true,
+    "healthCheck": {
+      "enabled": true,
+      "interval": 3600000
+    },
+    "retryPolicy": {
+      "maxRetries": 3,
+      "backoffMs": 1000
+    }
+  }
+}

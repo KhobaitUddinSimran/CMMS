@@ -1,0 +1,802 @@
+CARRY MARK MANAGEMENT SYSTEM
+Software Requirements & System Architecture Specification
+Project
+Carry Mark Management System (CMMS)
+Course
+SCSJ 3104 – Application Development
+Author
+Khobait Uddin Simran (A23MJ3006)
+Institution
+Universiti Teknologi Malaysia (UTM)
+Document Version
+3.0 – AI-Enhanced Revised Specification
+Stack
+React / Next.js · Python (FastAPI) · PostgreSQL · Docker
+1. System Overview
+The Carry Mark Management System (CMMS) is a standalone, decentralised web application designed to digitise and automate continuous assessment tracking for university faculties. It replaces manual Excel workflows with a secure, interactive Smart Grid environment built on a modern technology stack.
+The system operates independently of the university’s central API and is fully containerised via Docker, allowing faculties to deploy and maintain it without dependency on central IT infrastructure.
+1.1 Technology Stack
+Layer
+Technology
+Purpose
+Frontend
+React / Next.js
+Smart Grid UI, student dashboard, all interactive views
+Backend
+Python (FastAPI)
+REST API, business logic, authentication, file parsing, AI orchestration
+Database
+PostgreSQL
+Primary data store with row-level security
+AI / LLM Layer
+FastAPI + LangChain + OpenAI / Anthropic SDK
+Anomaly detection, predictive analytics, query assistance
+Containerisation
+Docker / Docker Compose
+Deployment, service orchestration, environment isolation
+Email
+Transactional API (Resend / Mailgun)
+Password reset tokens, publish notifications
+1.2 Core Design Principles
+Data integrity enforced at both service layer and database level.
+Strict role-based access — every API endpoint is gated by actor role.
+Row-level security — no actor can read or write data outside their authorised scope.
+Immutable audit trail — all mark changes are shadow-logged automatically.
+No volatile file retention — uploaded Excel files are destroyed immediately after parsing.
+Email-based communication — no verbal or manual credential handoff between actors.
+AI-augmented decision support — intelligent suggestions and anomaly detection assist all actors without replacing human judgement.
+2. Actors & Use Case Overview
+The system enforces strict functional boundaries across five primary actors. Each actor has a defined scope that is enforced at the API level — no role can exceed its permissions regardless of frontend state.
+2.1 Program Coordinator — The Dispatcher
+Creates empty Course Shells (e.g., SCSJ 3104 – Section 01) before the semester begins.
+Assigns Lecturers to Course Shells by linking Lecturer ID to Course ID.
+Monitors credit hour loads — tracks minimum and maximum assignments per faculty member.
+Cannot view or modify student marks — read access to course metadata only.
+2.2 Lecturer — The Data Manager
+Initialises a course by uploading the official Excel class roster to trigger student self-seeding.
+Defines the assessment schema: adds assessments (name, type, max score, percentage weight) via the Add Assessment form.
+Inputs and edits continuous assessment marks via the Smart Grid.
+Imports bulk marks via structured Excel upload (see Section 6.5).
+Marks assessments as DELAYED for students presenting a valid Medical Certificate.
+Flags specific mark cells for internal review.
+Manages manual Add/Drop operations for late enrolments and withdrawals.
+Triggers password reset for locked-out students (generates a token sent to the student’s university email).
+Publishes marks, triggering automated student email notifications.
+Uses the AI Mark Query Assistant to draft responses to student disputes (see Section 14).
+2.3 Student — The End User
+Logs in using their official @graduate.utm.my email address and a personal password.
+Must complete a forced password change on first login.
+Views their published carry mark breakdown in real-time after a Lecturer publishes.
+Raises a mark query on any specific published assessment cell (see Section 6.6).
+Cannot view any marks in DRAFT state.
+2.4 Head of Department (HOD) — The Auditor
+Global read-only access across all courses in the department.
+Views assessment schemas and grading distributions for any section.
+Receives system-generated alerts when a section’s failure rate exceeds the configured threshold (default: 40%).
+Receives AI-generated predictive alerts forecasting sections at risk before the semester ends (see Section 14).
+Views alerts for sections with missing or unfilled assessments approaching the semester deadline.
+Cannot modify any data.
+2.5 Admin — System IT
+Manages Coordinator and HOD accounts (create, suspend, reset).
+Performs Admin-level overrides on locked assessment schemas (fully logged operation).
+Manages global database backups and restoration.
+The most privileged account — all Admin actions generate a mandatory audit log entry.
+3. Authentication & Security
+3.1 Initial Account Creation — Self-Seeding
+When a Lecturer uploads a class roster, the FastAPI backend processes each row and handles two cases:
+If the student email already exists in the users table: create a new enrolment record linking the student to the course. No password change.
+If the student email does not exist: extract the student’s details, generate a cryptographically random 16-character alphanumeric one-time password (OTP) using Python’s secrets module, hash it with passlib[bcrypt], and store the new user record. Create the enrolment record.
+ℹ The ISID (matric number) is never used as a password or credential at any point in the system. It is stored as an identifier only.
+3.2 First-Login Forced Password Change
+Every newly seeded student account carries a force_password_change = true flag. On first successful login, the system redirects the student to a mandatory password change screen before any other content is accessible. The session is not fully established until this step is complete.
+⚠ Any student who has not completed their forced password change cannot be considered to have a secure account. The Lecturer dashboard should display a count of students who have not yet completed first login.
+3.3 Password Reset Flow
+Students who are locked out of their accounts request a reset from their Lecturer. The Lecturer clicks Reset Password on the student’s row in the roster. The system generates a new secure OTP via Python’s secrets module, stores it hashed with passlib[bcrypt], and dispatches it to the student’s @graduate.utm.my email via the configured transactional email service. The student uses the OTP to log in and is immediately forced to set a new password.
+✖ The old credential-reverting reset (back to ISID hash) described in earlier drafts is removed. Password reset tokens are always delivered directly to the student’s university email — never visible to the Lecturer.
+3.4 Email Infrastructure
+The system integrates with a transactional email API (recommended: Resend or Mailgun free tier). The FastAPI backend dispatches email via a single HTTP POST using the httpx async client to the provider’s API endpoint, requiring only an API key stored as an environment variable in Docker Compose. Two email templates are required:
+Password reset: subject line, OTP value, expiry time (recommended: 24 hours), and a login link.
+Marks published notification: course name, section, and a login link. This email must NOT include the student’s actual marks — only the notification that marks are available to view within the authenticated portal.
+3.5 Domain Restriction
+The system categorically rejects user creation for any email address not belonging to @utm.my or @graduate.utm.my. This validation occurs at both the frontend (form validation) and the FastAPI service layer (Pydantic validator, before any database write). Exchange students or collaborative programme students with non-UTM email addresses must be provisioned manually by Admin with an approved exception.
+3.6 Row-Level Security
+Beyond role-based access, the system enforces row-level data isolation. Specific rules enforced at the FastAPI service layer on every API call:
+A Lecturer can only read and write marks for courses explicitly assigned to them.
+A Student can only read their own enrolment and mark records.
+A Coordinator can only read course metadata — never mark data.
+A HOD can read all records within their department but cannot write any.
+3.7 Session & Access Policy
+Session tokens expire after 8 hours of inactivity. Re-authentication is required before the following high-risk operations: publishing marks, dropping a student, and any Admin-level data override. Multi-factor authentication (TOTP) is recommended for Lecturer, Coordinator, and HOD accounts and should be implemented as a configurable option in a future release.
+3.8 Immutable Audit Log
+Every UPDATE or DELETE on the marks table triggers a PostgreSQL database trigger that writes a shadow log record capturing: acting User ID, target Student ID, Course ID, Assessment ID, timestamp (UTC), old value, and new value. This log is append-only — no role, including Admin, can modify or delete audit log entries through the application layer.
+4. Global Data Flow Architecture
+The lifecycle of data within the CMMS follows six sequential phases from initial provisioning through to final export.
+Phase 1 — Provisioning
+Program Coordinator logs in to the system.
+Coordinator creates a Course Record: course code, name, section number, academic year, semester.
+Coordinator links a Lecturer ID to the Course ID — creating the teaching assignment.
+Phase 2 — Self-Seeding
+Lecturer accesses their assigned Course Shell.
+Lecturer uploads the official Excel class roster (.xlsx).
+FastAPI backend parses the file row by row in memory using openpyxl.
+For each row: check if email exists. If not, generate OTP via secrets module, hash with passlib[bcrypt], create user record. In both cases, create enrolment record linking student to course.
+Uploaded file is immediately destroyed from server memory — never written to disk.
+Students can log in using the OTP delivered to their university email.
+Phase 3 — Schema Configuration
+Lecturer opens the course and clicks Add Assessment.
+Lecturer fills in: assessment name, type (quiz / test / assignment / project / other), maximum raw score, percentage weight.
+FastAPI validates that the cumulative total of all assessment weights does not exceed the programme’s maximum carry mark allowance. If the addition would cause a breach, the request is rejected with HTTP 422 and a Pydantic validation error showing the remaining allocatable percentage.
+Once any mark has been entered against an assessment, that assessment’s name and percentage weight are locked. Only Admin can override this, and it is fully logged.
+Phase 4 — Execution (Grading)
+Lecturer opens the Smart Grid for the course section.
+Grid renders: enrolled students on the Y-axis, defined assessments on the X-axis.
+Lecturer enters a raw score into a cell. Frontend sends payload to API: { student_id, assessment_id, raw_score }.
+FastAPI normalises the score against the assessment schema (normalised_score = raw_score / max_score * percentage_weight) and saves to the marks table with status = DRAFT.
+Cell turns green on successful save. Students cannot see any mark in DRAFT state.
+Phase 5 — Publication
+Lecturer reviews the marks and clicks Publish for the desired assessment (or Publish All).
+All selected marks transition from status = DRAFT to status = PUBLISHED.
+FastAPI dispatches a notification email to all enrolled active students for the course via the transactional email API using an async background task (FastAPI BackgroundTasks).
+Student dashboards update to show the published marks on next login or page refresh.
+Phase 6 — Conclusion
+Semester ends. Lecturer reviews all marks are filled (no blank or DELAYED cells outstanding).
+Lecturer clicks Export CSV to generate the finalised mark sheet in the university’s legacy grading format.
+Export is blocked if any assessment cells remain in DELAYED status — the Lecturer must resolve or acknowledge each pending mark before export is permitted.
+5. Assessment Schema Management
+5.1 Add Assessment Form
+Lecturers define assessments for their course via a modal form. The following fields are required:
+Field
+Type
+Rules
+Assessment Name
+Text
+Max 100 characters. Must be unique within the course.
+Type
+Enum
+Quiz / Test / Assignment / Project / Other.
+Maximum Raw Score
+Decimal
+The out-of value for the raw score (e.g., 50). Must be > 0.
+Percentage Weight
+Decimal
+Contribution to total carry mark. Sum of all weights must not exceed the programme maximum.
+Assessment Date
+Date
+Optional. Used for ordering and HOD timeline views.
+5.2 Percentage Validation
+The system enforces incremental percentage validation. As the Lecturer adds assessments, a running total is displayed showing: allocated, remaining, and maximum. If a new assessment’s weight would cause the total to exceed the maximum, the submission is blocked with a message:
+ℹ You have 5% remaining. This assessment would exceed the maximum carry mark allocation. Reduce the weight or remove another assessment first.
+5.3 Schema Lock Rule
+An assessment becomes locked (read-only for name and percentage weight) as soon as any mark — including a DELAYED marker — is saved against it. The locked state is indicated visually in the assessment list. A locked assessment cannot be deleted. Only Admin can edit a locked assessment, and the action generates a mandatory audit log entry including a justification note.
+⚠ Changing a locked assessment’s percentage weight retroactively invalidates all previously normalised marks. The Admin override must be followed by a recalculation job — the system must recompute all stored normalised_score values for that assessment and flag affected rows in the audit log.
+6. Core Feature Specifications
+6.1 Smart Grid — Grading Interface
+The Smart Grid is the primary grading interface. It renders a virtual-scrolling data grid using TanStack Virtual (or AG Grid Community) to support cohorts of up to 500 students without performance degradation.
+Grid layout
+Y-axis (rows): enrolled active students, sorted by matric number by default.
+X-axis (columns): defined assessments, in creation order. A final column shows the running carry mark total.
+Each cell is editable inline. On blur or Enter, the value is sent to the FastAPI API.
+Cell states and visual indicators
+State
+Colour
+Meaning
+Empty
+White
+No mark entered yet.
+Draft
+Green
+Mark saved, not yet published. Not visible to student.
+Published
+Blue
+Mark published. Visible to student.
+Delayed
+Amber
+Retest or re-quiz pending. Mark to be entered later.
+Flagged
+Red
+Lecturer has flagged this cell for internal review.
+Queried
+Teal
+Student has raised a mark query on this cell.
+AI-Flagged
+Purple
+AI anomaly detector has identified an unusual mark pattern (see Section 14).
+Concurrent edit protection
+Each mark record stores an updated_at timestamp. When the Lecturer submits a cell update, the FastAPI endpoint checks if the stored updated_at matches the value the frontend last received. If they differ (indicating another session edited the cell), the API returns HTTP 409 Conflict with the current value. The frontend displays a notification and refreshes the cell.
+6.2 DELAYED Status (Retest / Re-Quiz)
+When a student misses an assessment and presents a valid Medical Certificate, the Lecturer right-clicks the cell and selects Mark as Delayed. A modal prompts for the reason (Retest / Re-Quiz) and an optional expected completion date.
+Rules governing DELAYED marks
+The student’s carry mark total on their dashboard displays a ‘X assessments pending’ indicator. The running total excludes DELAYED assessments from both the numerator and denominator — the student is not penalised while awaiting a retest.
+When the Lecturer enters the actual mark from the retest, the cell transitions from DELAYED to DRAFT (or directly to PUBLISHED if marks for that assessment have already been published for other students).
+If the semester end date is reached and a DELAYED mark is still unfilled, the system flags it as OVERDUE and blocks the final CSV export for that course until the Lecturer either enters a mark or explicitly acknowledges the cell with a written justification.
+A student may have multiple DELAYED assessments in the same course. Each is tracked independently.
+Only the Lecturer assigned to the course can set or resolve a DELAYED mark. Coordinators and HOD cannot modify this status.
+ℹ The DELAYED status replaces the earlier EXCUSED concept. There is no automatic zero and no proration. The actual mark from the retest is always entered manually by the Lecturer.
+6.3 Add / Drop Roster Management
+Add student
+Lecturer clicks Add Student and enters: full name, matric number, and @graduate.utm.my email.
+If the email does not exist in the users table: a new account is created with an OTP dispatched to the student’s email, with force_password_change = true.
+If the email already exists (e.g., student re-enrolling): the existing account is linked to the course via a new enrolment record.
+Any assessments already graded for other students remain blank for the newly added student — the Lecturer must enter marks manually.
+Drop student
+Lecturer selects the student row and clicks Drop Student. A confirmation dialog is shown.
+The system applies a soft delete to the enrolment record: status is set to dropped, with a timestamp and the Lecturer’s user ID.
+The student disappears from the active grading grid immediately.
+All historical marks for the student remain intact in the database.
+HOD can view dropped students in a separate Dropped Students view per course.
+A dropped student cannot be reinstated through the frontend — this requires Admin action.
+6.4 Mark Flagging (Lecturer)
+A Lecturer can right-click any mark cell and select Flag for Review. A text note is required. Flagged cells display a red indicator in the grid. Flags are internal — students cannot see that a mark has been flagged. The Lecturer can resolve a flag by right-clicking and selecting Resolve Flag, which archives the flag note and clears the indicator. All flag events are recorded in the audit log.
+6.5 Excel Bulk Import
+Expected file format
+The import file must be a .xlsx file with the following column structure in the first worksheet, starting from row 1 as headers:
+Col
+Header Name
+Format
+Validation
+A
+matric_number
+Text
+Must match an enrolled active student in this course.
+B
+raw_score
+Numeric
+Must be between 0 and the assessment’s max score.
+ℹ The header row must use the exact column names shown above (case-insensitive). The Lecturer selects which assessment the import applies to before uploading.
+Two-step import process
+Lecturer selects the target assessment from a dropdown, then uploads the Excel file.
+The FastAPI backend parses the file using openpyxl and presents a preview table showing all rows. Rows with errors are highlighted in red with a reason (e.g., ‘Matric number not found’, ‘Score exceeds maximum’).
+Lecturer reviews the preview and clicks Confirm Import. Only valid rows are written to the database. Invalid rows are skipped and listed in a post-import summary report.
+Overwrite behaviour
+If a mark already exists for a student-assessment pair and the import file includes a new value for that pair, the system will overwrite the existing mark. The Lecturer is warned in the preview step for every row that would overwrite an existing mark (shown in amber). Overwrites are recorded in the audit log.
+6.6 Student Mark Query
+Students can raise a query against any published mark cell from their dashboard. They click the mark value, which opens a Query dialog. The student enters a brief description of the concern (max 500 characters) and submits.
+The Lecturer sees a teal Queried indicator on the affected cell in the Smart Grid.
+The Lecturer can open the query thread, read the student’s comment, and either respond with a note or directly edit the mark.
+The AI Query Assistant (see Section 14.3) can suggest a draft response to the Lecturer based on the student’s concern and the mark history.
+If the Lecturer edits the mark, the query is automatically resolved and the student sees the updated mark with a resolved timestamp.
+If no mark change is needed, the Lecturer can close the query with a note explaining the outcome.
+Students can raise at most one open query per assessment cell at a time.
+All query activity is stored in a separate course_queries table and included in HOD audit views.
+ℹ This feature keeps all mark dispute communication inside the system, creating a traceable record. It does not replace formal academic appeals — it is a first-contact resolution tool.
+7. Publication & Email Notifications
+7.1 Publication Flow
+A Lecturer can publish marks at the assessment level (publish all marks for Quiz 1) or at the course level (publish all unpublished marks across all assessments). The publication action:
+Transitions all target marks from status = DRAFT to status = PUBLISHED.
+Triggers a FastAPI BackgroundTask that dispatches notification emails to all enrolled active students for the course.
+Logs the publication event: Lecturer ID, course ID, assessment IDs published, timestamp.
+7.2 Notification Email Specification
+The notification email is a plain-text or minimal HTML message. It must contain:
+Subject: Your carry marks for [Course Code] – [Course Name] have been published.
+Body: A single sentence informing the student that marks are available, followed by a login link to the portal.
+The email must NOT include the student’s actual mark values — marks are only visible inside the authenticated portal.
+✖ Including raw mark values in an email is a data privacy risk. Emails are transmitted in plaintext over infrastructure not controlled by UTM. Keep the notification content-free of grade data.
+7.3 Email Service Configuration
+The transactional email provider is configured via environment variables in the Docker Compose file. Required variables:
+EMAIL_PROVIDER_API_KEY — API key for the chosen provider.
+EMAIL_FROM_ADDRESS — the sender address (e.g., noreply@cmms.utm.my).
+EMAIL_PROVIDER_ENDPOINT — provider API URL (for easy provider switching).
+ℹ Recommended providers for academic deployments with low volume: Resend (free tier: 3,000 emails/month), Mailgun (free tier: 5,000 emails/month for 3 months). Both require only a simple HTTP POST via Python httpx — no SMTP configuration.
+8. Head of Department Monitoring
+8.1 Dashboard Metrics
+The HOD dashboard aggregates real-time metrics across all active courses in the department. Displayed metrics include:
+Per-course: number of enrolled students, number of published assessments, percentage of marks entered, percentage of marks still in DRAFT.
+Per-section failure rate: percentage of students with a carry mark total below 50% of the maximum. This is recalculated on every mark publication.
+Pending DELAYED marks: list of all DELAYED cells across all courses with their expected completion date and days overdue (if applicable).
+AI Predictive Risk Score: colour-coded probability indicator per section showing likelihood of exceeding the failure threshold before semester end (see Section 14.2).
+8.2 Alert Thresholds
+System-generated alerts are displayed on the HOD dashboard and optionally emailed to the HOD. Default thresholds (configurable by Admin per programme):
+Alert Condition
+Default Threshold
+Severity
+Section carry mark failure rate
+≥ 40%
+High — displayed prominently
+Assessment unpublished near deadline
+7 days before semester end
+Medium
+DELAYED marks overdue
+Past expected date
+Medium
+No marks entered for a course
+4 weeks into semester
+Low
+AI: Section predicted to breach failure threshold
+Probability > 70% with ≥ 50% of assessments completed
+High — AI-generated predictive alert
+8.3 Mark Query Visibility
+The HOD can view all open and resolved mark queries across the department in a read-only table. This provides visibility into grade dispute patterns without exposing who raised specific queries to other actors.
+9. Final CSV Export
+9.1 Export Preconditions
+The export function is blocked unless all of the following conditions are met:
+All defined assessments have marks entered for all active enrolled students.
+No marks remain in DELAYED status — each must be resolved to an actual mark or explicitly acknowledged with a written justification by the Lecturer.
+The Lecturer has published all assessments. The export reflects the published state only.
+⚠ If any student has an unresolved DELAYED assessment at export time, the system will list every blocking cell with the student’s name and assessment name. The Lecturer must resolve each item or provide an acknowledgement note before export proceeds.
+9.2 CSV Format
+The output CSV is formatted for direct import into UTM’s legacy grading system. The column specification must be confirmed with the Registrar’s Office and hardcoded into the FastAPI export service. The following structure is the reference template:
+Col
+Field
+Source
+Notes
+A
+matric_number
+users table
+Student matric number.
+B
+student_name
+users table
+Full name as registered.
+C
+total_carry_mark
+Calculated
+Sum of all normalised published marks. Rounded to 2 decimal places.
+D+
+[Assessment Name]
+marks table
+One column per assessment, containing the raw score. Dynamic columns based on schema.
+✖ This format is a reference template only. The actual column names, ordering, and encoding required by UTM’s legacy system must be confirmed with the Registrar’s Office before the export feature is implemented. Mismatched formats will cause the import to fail silently.
+10. Database Schema Reference
+The following tables form the core relational schema. All tables include created_at and updated_at timestamp columns managed by PostgreSQL triggers. Foreign key constraints enforce referential integrity.
+users
+Column
+Type
+Nullable
+Notes
+id
+UUID PK
+No
+Auto-generated.
+email
+VARCHAR(255)
+No
+Unique. Must be @utm.my or @graduate.utm.my.
+password_hash
+VARCHAR(72)
+No
+passlib[bcrypt] hash.
+full_name
+VARCHAR(255)
+No
+matric_number
+VARCHAR(20)
+Yes
+Students only. Stored as plain identifier — not a credential.
+role
+ENUM
+No
+student | lecturer | coordinator | hod | admin.
+force_password_change
+BOOLEAN
+No
+Default true for self-seeded accounts.
+is_active
+BOOLEAN
+No
+Default true. Set false to suspend without deleting.
+courses
+Column
+Type
+Nullable
+Notes
+id
+UUID PK
+No
+course_code
+VARCHAR(20)
+No
+e.g. SCSJ3104.
+course_name
+VARCHAR(255)
+No
+section
+VARCHAR(10)
+No
+e.g. 01.
+lecturer_id
+UUID FK
+Yes
+References users.id.
+academic_year
+VARCHAR(10)
+No
+e.g. 2024/2025.
+semester
+SMALLINT
+No
+1 or 2.
+max_carry_mark
+DECIMAL(5,2)
+No
+Programme maximum. Assessments cannot exceed this total.
+semester_end_date
+DATE
+Yes
+Used for DELAYED overdue alerts and export blocking.
+assessments
+Column
+Type
+Nullable
+Notes
+id
+UUID PK
+No
+course_id
+UUID FK
+No
+References courses.id.
+name
+VARCHAR(100)
+No
+Unique within course.
+type
+ENUM
+No
+quiz | test | assignment | project | other.
+max_score
+DECIMAL(6,2)
+No
+Raw score out-of value.
+weight_percentage
+DECIMAL(5,2)
+No
+Contribution to carry mark total.
+is_locked
+BOOLEAN
+No
+True once any mark exists. Prevents weight edits.
+assessment_date
+DATE
+Yes
+Optional. For ordering and timeline views.
+enrollments
+Column
+Type
+Nullable
+Notes
+id
+UUID PK
+No
+student_id
+UUID FK
+No
+References users.id.
+course_id
+UUID FK
+No
+References courses.id.
+status
+ENUM
+No
+active | dropped.
+dropped_at
+TIMESTAMPTZ
+Yes
+Populated on soft-delete.
+dropped_by
+UUID FK
+Yes
+Lecturer user ID who performed the drop.
+marks
+Column
+Type
+Nullable
+Notes
+id
+UUID PK
+No
+student_id
+UUID FK
+No
+References users.id.
+assessment_id
+UUID FK
+No
+References assessments.id.
+raw_score
+DECIMAL(6,2)
+Yes
+Null when status = delayed.
+normalised_score
+DECIMAL(5,2)
+Yes
+Computed: raw_score / max_score * weight_percentage.
+status
+ENUM
+No
+draft | published | delayed.
+delayed_reason
+ENUM
+Yes
+retest | requiz. Populated when status = delayed.
+delayed_expected_date
+DATE
+Yes
+Optional expected resolution date.
+is_flagged
+BOOLEAN
+No
+Lecturer internal flag.
+flag_note
+TEXT
+Yes
+Required when is_flagged = true.
+ai_anomaly_flag
+BOOLEAN
+No
+Set by AI anomaly detection service. Default false. See Section 14.1.
+updated_at
+TIMESTAMPTZ
+No
+Used for optimistic concurrency checks.
+marks_audit_log
+This table is written exclusively by a PostgreSQL AFTER UPDATE trigger on the marks table. No application code writes to it directly.
+Column
+Type
+Nullable
+Notes
+id
+UUID PK
+No
+mark_id
+UUID FK
+No
+changed_by
+UUID FK
+No
+Acting user ID.
+changed_at
+TIMESTAMPTZ
+No
+UTC timestamp.
+old_raw_score
+DECIMAL(6,2)
+Yes
+new_raw_score
+DECIMAL(6,2)
+Yes
+old_status
+ENUM
+No
+new_status
+ENUM
+No
+11. Key API Endpoint Reference
+All endpoints are prefixed /api/v1. All requests must include a valid JWT Bearer token in the Authorization header. Role requirements are enforced at the FastAPI dependency injection layer before any database interaction. FastAPI’s automatic OpenAPI documentation is available at /docs.
+Authentication
+Method
+Endpoint
+Role
+Description
+POST
+/auth/login
+All
+Returns JWT. Checks force_password_change flag.
+POST
+/auth/change-password
+All
+Required on first login. Clears force_password_change flag.
+POST
+/auth/reset-token
+Lecturer
+Generates OTP for a student and dispatches to their email.
+Courses & Assessments
+Method
+Endpoint
+Role
+Description
+GET
+/courses
+Coord / HOD / Admin
+List all courses. Scoped by department for HOD.
+POST
+/courses
+Coordinator
+Create a new Course Shell.
+GET
+/courses/{id}
+Lecturer / HOD / Admin
+Fetch course detail including assessments. Row-level scoped.
+POST
+/courses/{id}/roster
+Lecturer
+Upload Excel roster to trigger self-seeding.
+POST
+/courses/{id}/assessments
+Lecturer
+Add a new assessment. Validates cumulative weight.
+PATCH
+/assessments/{id}
+Admin
+Edit locked assessment. Triggers audit log + recalculation.
+Marks
+Method
+Endpoint
+Role
+Description
+GET
+/courses/{id}/marks
+Lecturer
+Fetch full grid data for Smart Grid render.
+PUT
+/marks/{id}
+Lecturer
+Update a mark. Requires updated_at for concurrency check.
+POST
+/marks/bulk-import
+Lecturer
+Parse Excel, return preview. Dry-run by default.
+POST
+/marks/bulk-import/confirm
+Lecturer
+Commit a previously validated bulk import.
+POST
+/marks/{id}/delay
+Lecturer
+Set mark to DELAYED status with reason and expected date.
+POST
+/courses/{id}/publish
+Lecturer
+Publish marks. Accepts list of assessment IDs or ‘all’.
+GET
+/courses/{id}/export
+Lecturer
+Export CSV. Blocked if DELAYED marks are unresolved.
+Student
+Method
+Endpoint
+Role
+Description
+GET
+/student/dashboard
+Student
+Returns all published marks and carry mark totals for the student.
+POST
+/marks/{id}/query
+Student
+Raise a mark query on a published assessment cell.
+GET
+/marks/{id}/query
+Student / Lecturer
+View query thread for a specific mark.
+POST
+/marks/{id}/query/resolve
+Lecturer
+Resolve an open mark query with a note.
+AI Endpoints (Section 14)
+Method
+Endpoint
+Role
+Description
+GET
+/ai/courses/{id}/anomalies
+Lecturer / HOD
+Returns list of AI-flagged mark anomalies for a course.
+GET
+/ai/courses/{id}/risk-forecast
+HOD
+Returns failure rate prediction and confidence score.
+POST
+/ai/queries/{id}/suggest-response
+Lecturer
+Returns LLM-generated draft response for a student query.
+GET
+/ai/hod/department-summary
+HOD
+Returns AI-generated natural language department report.
+12. Edge Cases & Business Rules
+12.1 Self-Seeding Edge Cases
+Duplicate email in the same upload file: the second occurrence is skipped. A warning is added to the seeding report.
+Malformed row (missing name or matric number): the row is skipped with an error entry in the seeding report. The upload does not fail entirely.
+Student already enrolled in this specific course: the enrolment record is not duplicated. The existing record is retained and a notice is added to the seeding report.
+Student enrolled in a previous semester of the same course: a new enrolment record is created for the current semester. Historical records are untouched.
+12.2 Assessment Schema Edge Cases
+Lecturer attempts to add an assessment that would push total weight over the maximum: request is rejected with HTTP 422. The remaining allocatable percentage is returned in the Pydantic error body.
+Lecturer deletes an assessment that has no marks: permitted. The assessment record is hard-deleted.
+Lecturer attempts to delete an assessment that has marks: blocked. The assessment can only be removed via Admin override, which also removes all associated marks (fully logged).
+12.3 DELAYED Mark Edge Cases
+Semester end date passes with unresolved DELAYED marks: marks are flagged OVERDUE. Export is blocked. The HOD dashboard shows these as high-priority alerts.
+Lecturer enters a mark on a DELAYED cell: the status transitions to DRAFT. If the assessment was already published for other students, the Lecturer is prompted to publish this mark immediately.
+Student with a DELAYED mark withdraws (drop): the DELAYED record is retained in the database. The enrolment is soft-deleted. The DELAYED mark does not appear in the active grid or export.
+12.4 Bulk Import Edge Cases
+Matric number in file not found in enrolled students: row is skipped. Shown as an error in the preview report.
+Score value exceeds the assessment’s max_score: row is invalid. Shown as an error in the preview report.
+Score is negative: row is invalid.
+Partial import (some rows valid, some invalid): valid rows proceed on confirmation. Invalid rows are listed in the post-import summary.
+File has extra columns beyond the two required: extra columns are ignored silently.
+12.5 Non-UTM Email Addresses
+Students from exchange programmes or collaborative partnerships who do not have a @graduate.utm.my address must be provisioned manually by Admin. The Admin creates the user record with an approved exception flag and sets a temporary email (e.g., a UTM-managed alias). This is a known limitation of the domain restriction policy and is handled outside the self-seeding flow.
+13. Deployment & Environment
+13.1 Docker Compose Services
+Service
+Image
+Role
+frontend
+node:20-alpine
+Next.js application server.
+backend
+python:3.12-slim
+Python FastAPI REST API + AI orchestration service.
+db
+postgres:16
+Primary PostgreSQL database with row-level security enabled.
+nginx
+nginx:alpine
+Reverse proxy, SSL termination, static asset serving.
+13.2 Required Environment Variables
+Variable
+Purpose
+DATABASE_URL
+PostgreSQL connection string.
+JWT_SECRET
+Secret key for JWT signing. Min 256-bit entropy.
+EMAIL_PROVIDER_API_KEY
+API key for transactional email provider.
+EMAIL_PROVIDER_ENDPOINT
+Provider API base URL.
+EMAIL_FROM_ADDRESS
+Sender address (e.g. noreply@cmms.utm.my).
+HOD_FAILURE_THRESHOLD
+Default 40. Configurable failure rate % for HOD alerts.
+BCRYPT_ROUNDS
+BCrypt cost factor via passlib. Recommended: 12.
+AI_PROVIDER_API_KEY
+API key for LLM provider (Anthropic / OpenAI). Required for Section 14 features.
+AI_PROVIDER
+anthropic or openai. Selects LLM SDK used by the AI service.
+AI_ANOMALY_THRESHOLD
+Z-score threshold for mark anomaly detection. Default: 2.0.
+13.3 Data Retention
+Uploaded Excel files (roster and bulk import): destroyed from memory immediately after parsing. Never written to disk or stored in the database.
+Mark audit logs: retained permanently. No application-level deletion permitted.
+Inactive semesters: course data is retained indefinitely. Archival to a separate read-only schema is recommended after 2 years but is not enforced by the application.
+Dropped student records: retained permanently. Accessible to Admin and HOD only.
+13.4 Backup Policy
+The Admin role has access to a Backup & Restore interface that triggers a pg_dump of the PostgreSQL database. Backups are stored in a mounted volume outside the container. A scheduled backup job (cron) running daily is recommended. Restoration requires Admin credentials and Docker access — it is not an in-application operation for regular users.
+14. AI Enhancements (Future Roadmap)
+This section describes planned AI features to be implemented in CMMS v3.0+. All features are built on the Python FastAPI backend using LangChain and the Anthropic / OpenAI SDK, making full use of the AI-native stack.
+The CMMS AI layer is implemented as a dedicated FastAPI router (/api/v1/ai) that communicates with an LLM provider via the Anthropic SDK or OpenAI SDK. All AI features are assistive and advisory — they surface insights to human actors but never modify mark data autonomously. Every AI-generated suggestion is logged alongside the human decision taken.
+14.1 AI Mark Anomaly Detection
+Overview
+The anomaly detection service analyses the marks table for statistically unusual patterns that may indicate data entry errors, assessment calibration issues, or academic integrity concerns. It runs automatically after every bulk import and publication event, and can also be triggered manually by a Lecturer or HOD.
+Detection Method
+The service uses a Z-score approach on normalised marks per assessment. For each assessment, the service computes the mean and standard deviation of all submitted raw scores. Any score deviating beyond the configurable AI_ANOMALY_THRESHOLD (default: 2.0 standard deviations) is flagged. Statistical outliers are surfaced rather than blocked — the Lecturer decides whether to investigate.
+Anomaly Types Detected
+Anomaly Type
+Trigger
+Recommended Action
+Score outlier (high)
+Z-score > threshold
+Verify entry. Could be a transcription error or exceptional performance.
+Score outlier (low)
+Z-score < –threshold
+Verify entry. Could be a missed assessment or data entry mistake.
+Identical scores across all students
+Zero standard deviation
+May indicate copy-paste bulk entry error.
+Sudden performance drop
+Student’s score drops >40% vs. their own assessment average
+Cross-check with attendance or DELAYED records.
+Assessment score distribution skew
+Skewness > 1.5 or < –1.5
+HOD alert: assessment may be miscalibrated.
+Smart Grid Integration
+Flagged cells receive the AI-Flagged (purple) state in the Smart Grid. A Lecturer can hover the cell to view the anomaly reason and the Z-score. The Lecturer can dismiss the flag (with a note) or act on it. Dismissed AI flags are retained in the audit log with the Lecturer’s justification.
+API
+GET /ai/courses/{id}/anomalies — Returns a list of anomaly objects: { mark_id, student_id, assessment_id, anomaly_type, z_score, recommendation }.
+Response is computed on-demand using SQLAlchemy aggregation queries. No LLM call is made for this endpoint — it is purely statistical.
+Implementation Stack
+Python: numpy and scipy.stats for Z-score computation.
+FastAPI background task runs the anomaly scan on POST /courses/{id}/publish.
+Results cached in a Redis layer (TTL: 1 hour) to avoid recomputation on every grid refresh.
+14.5 AI Feature Summary
+Feature
+Actor Benefited
+AI Technique
+LLM Required
+Mark Anomaly Detection
+Lecturer, HOD
+Z-score statistical analysis
+No (pure Python)
+ℹ All AI features that require an LLM API call are gated behind the AI_PROVIDER_API_KEY environment variable. If the variable is absent, those features are disabled gracefully — the system functions fully without them.
+CMMS v3.0 — Carry Mark Management System Specification — Universiti Teknologi Malaysia
