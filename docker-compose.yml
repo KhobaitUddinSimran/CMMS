@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: cmms-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/docker/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - cmms-network
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: cmms-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - cmms-network
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: cmms-backend
+    environment:
+      - DATABASE_URL=postgresql://cmms_user:cmms_password@db:5432/cmms
+      - SECRET_KEY=your-secret-key-here
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - cmms-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: cmms-db
+    environment:
+      - POSTGRES_USER=cmms_user
+      - POSTGRES_PASSWORD=cmms_password
+      - POSTGRES_DB=cmms
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - cmms-network
+
+volumes:
+  postgres_data:
+
+networks:
+  cmms-network:
+    driver: bridge
