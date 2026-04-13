@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["mcp-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+        "GITHUB_REPOSITORY": "utmcsj/cmms"
+      },
+      "timeout": 30000,
+      "disabled": false
+    },
+    "jira": {
+      "command": "npx",
+      "args": ["mcp-jira"],
+      "env": {
+        "JIRA_HOST": "${JIRA_HOST}",
+        "JIRA_EMAIL": "${JIRA_EMAIL}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
+        "JIRA_PROJECT_KEY": "CMMS"
+      },
+      "timeout": 30000,
+      "disabled": false
+    }
+  }
+}
