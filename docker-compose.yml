@@ -1,33 +1,17 @@
 version: '3.9'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: cmms_postgres
-    environment:
-      POSTGRES_USER: cmms_user
-      POSTGRES_PASSWORD: cmms_password_dev_only
-      POSTGRES_DB: cmms_production
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cmms_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - cmms_network
-
   redis:
     image: redis:7-alpine
     container_name: cmms_redis
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - redis_data:/data
     networks:
@@ -36,36 +20,70 @@ services:
   api:
     build:
       context: .
-      dockerfile: infrastructure/docker/Dockerfile.api
+      dockerfile: infra/docker/Dockerfile.api
     container_name: cmms_api
     environment:
-      DATABASE_URL: postgresql+asyncpg://cmms_user:cmms_password_dev_only@postgres:5432/cmms_production
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET_KEY: dev-secret-key-change-in-production
-      ORIGINS: "http://localhost:3000,http://localhost"
+      # Supabase Configuration (using remote Supabase instance)
+      SUPABASE_URL: https://dvrvotajdelswvdxkuyt.supabase.co
+      SUPABASE_KEY: sb_publishable_o0QSAC136pbITUn2R_dPwQ_TWxYfePY
+      
+      # Database URL (Supabase PostgreSQL)
+      DATABASE_URL: postgresql+asyncpg://postgres:khubaibcmms@db.dvrvotajdelswvdxkuyt.supabase.co:5432/postgres
+      
+      # JWT Configuration
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-change-in-production-min-32-chars}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION_HOURS: 24
+      
+      # Application Configuration
       ENVIRONMENT: development
+      DEBUG: false
+      LOG_LEVEL: INFO
+      
+      # CORS Configuration
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost"
+      
+      # Email Configuration
+      EMAIL_PROVIDER: resend
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM_NAME: "CMMS"
+      EMAIL_FROM_ADDRESS: "noreply@cmms.utm.my"
+      
+      # Redis Configuration
+      REDIS_URL: redis://redis:6379
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - /app/__pycache__
     depends_on:
-      postgres:
+      redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - cmms_network
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   web:
     build:
       context: .
-      dockerfile: infrastructure/docker/Dockerfile.web
+      dockerfile: infra/docker/Dockerfile.web
     container_name: cmms_web
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: http://api:8000
+      NEXT_PUBLIC_SUPABASE_URL: https://dvrvotajdelswvdxkuyt.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_o0QSAC136pbITUn2R_dPwQ_TWxYfePY
     ports:
       - "3000:3000"
     volumes:
       - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
     networks:
       - cmms_network
     command: npm run dev
@@ -75,17 +93,22 @@ services:
     container_name: cmms_nginx
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
       - api
       - web
     networks:
       - cmms_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
-  postgres_data:
   redis_data:
 
 networks:

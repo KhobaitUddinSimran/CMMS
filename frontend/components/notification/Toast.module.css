@@ -1,0 +1,36 @@
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  min-width: 300px;
+  margin-bottom: 12px;
+}
+
+.success {
+  background-color: #10b981;
+}
+
+.error {
+  background-color: #ef4444;
+}
+
+.warning {
+  background-color: #f59e0b;
+}
+
+.info {
+  background-color: #3b82f6;
+}
+
+.close {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 18px;
+  margin-left: 12px;
+}

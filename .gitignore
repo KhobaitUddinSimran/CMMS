@@ -83,5 +83,8 @@ dist/
 /uploads/*
 !/uploads/.gitkeep
 
+# Documentation (generated, not tracked in git)
+/documents/
+
 # Development Context (for Copilot, not tracked in git)
 .copilot-context.md
