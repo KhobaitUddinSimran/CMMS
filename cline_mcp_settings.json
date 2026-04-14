@@ -43,9 +43,28 @@
         "add_comment",
         "transition_issue"
       ]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "supabase-mcp-server"],
+      "env": {
+        "SUPABASE_URL": "https://dvrvotajdelswvdxkuyt.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR2cnZvdGFqZGVsc3d2ZHhrdXl0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcwODAwMDAwMCwiZXhwIjo5OTk5OTk5OTk5fQ.mock_token"
+      },
+      "timeout": 30000,
+      "description": "Supabase database and backend management",
+      "features": [
+        "execute_sql",
+        "list_tables",
+        "get_table_schema",
+        "run_migrations",
+        "manage_auth",
+        "list_functions",
+        "deploy_functions"
+      ]
     }
   },
-  "serverOrder": ["github", "jira"],
+  "serverOrder": ["github", "jira", "supabase"],
   "logging": {
     "enabled": true,
     "level": "info",

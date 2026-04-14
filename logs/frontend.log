@@ -1,0 +1,33 @@
+
+> cmms-web@1.0.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3001
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1274ms
+ ✓ Compiled /middleware in 264ms (72 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 1156ms (716 modules)
+ GET / 200 in 1286ms
+ GET / 200 in 26ms
+ ✓ Compiled in 740ms (716 modules)
+ ✓ Compiled in 162ms (325 modules)
+ ✓ Compiled /login in 377ms (722 modules)
+ ✓ Compiled /dashboard in 189ms (772 modules)
+ ✓ Compiled /dashboard/student in 93ms (786 modules)
+ ✓ Compiled /_not-found in 133ms (789 modules)
+ GET /dashboard/my-marks 404 in 63ms
+ GET /login?role=student 200 in 39ms
+ GET /login?role=student 200 in 20ms
+ GET /dashboard/my-courses 404 in 18ms
+ GET /login?role=student 200 in 14ms
+ ✓ Compiled in 267ms (72 modules)
+ ✓ Compiled in 694ms (869 modules)
+ ✓ Compiled in 547ms (365 modules)
+ ✓ Compiled in 583ms (869 modules)
+ ✓ Compiled in 163ms (365 modules)
+[?25h

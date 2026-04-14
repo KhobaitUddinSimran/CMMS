@@ -1,0 +1,9 @@
+.sidebar {
+  width: 256px;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  padding: 24px 0;
+  overflow-y: auto;
+  margin-top: 56px;
+  height: calc(100vh - 56px);
+}
