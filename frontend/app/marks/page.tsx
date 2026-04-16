@@ -14,10 +14,10 @@ export default function MarksPage() {
   ]
 
   const getStatusColor = (percentage: number) => {
-    if (percentage >= 80) return 'success'
-    if (percentage >= 70) return 'info'
-    if (percentage >= 60) return 'warning'
-    return 'error'
+    if (percentage >= 80) return 'published'
+    if (percentage >= 70) return 'published'
+    if (percentage >= 60) return 'delayed'
+    return 'flagged'
   }
 
   const getStatusText = (percentage: number) => {

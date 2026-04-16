@@ -3,49 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/auth-context'
-import { GraduationCap, Briefcase, Users, Crown, Shield, ArrowRight, CheckCircle, BarChart3, Lock, Globe } from 'lucide-react'
-
-type RoleType = 'student' | 'lecturer' | 'coordinator' | 'hod' | 'admin'
-
-interface RoleOption {
-  id: RoleType
-  label: string
-  description: string
-  icon: React.ReactNode
-}
-
-const ROLE_OPTIONS: RoleOption[] = [
-  {
-    id: 'student',
-    label: 'Student',
-    description: 'Track carry marks & grades',
-    icon: <GraduationCap className="w-6 h-6" />,
-  },
-  {
-    id: 'lecturer',
-    label: 'Lecturer',
-    description: 'Manage assessments',
-    icon: <Briefcase className="w-6 h-6" />,
-  },
-  {
-    id: 'coordinator',
-    label: 'Coordinator',
-    description: 'Oversee courses',
-    icon: <Users className="w-6 h-6" />,
-  },
-  {
-    id: 'hod',
-    label: 'Head of Department',
-    description: 'Department analytics',
-    icon: <Crown className="w-6 h-6" />,
-  },
-  {
-    id: 'admin',
-    label: 'Administrator',
-    description: 'System management',
-    icon: <Shield className="w-6 h-6" />,
-  },
-]
+import { ArrowRight, BarChart3, Lock, Globe, CheckCircle } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -80,10 +38,6 @@ export default function Home() {
     }
   }, [router, isAuthenticated])
 
-  const handleRoleSelect = (role: RoleType) => {
-    router.push(`/login?role=${role}`)
-  }
-
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -98,8 +52,10 @@ export default function Home() {
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-gray-600 hover:text-gray-900 text-sm font-medium">Features</a>
-            <a href="#roles" className="text-gray-600 hover:text-gray-900 text-sm font-medium">Roles</a>
-            <button className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+            <button 
+              onClick={() => router.push('/auth/login')}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
               Get Started
             </button>
           </nav>
@@ -118,7 +74,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <button
-                onClick={() => document.getElementById('roles')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => router.push('/auth/login')}
                 className="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
               >
                 Get Started
@@ -170,36 +126,6 @@ export default function Home() {
                 <h4 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h4>
                 <p className="text-gray-600 text-sm">{feature.description}</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Role Selection Section */}
-      <section id="roles" className="py-24 bg-gray-50 scroll-mt-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-16">
-            <p className="text-blue-600 font-semibold text-sm uppercase tracking-wider">Access Your Account</p>
-            <h3 className="text-4xl font-bold text-gray-900 mt-2">Select Your Role</h3>
-            <p className="text-gray-600 mt-4">Choose your role to login and access your personalized dashboard</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {ROLE_OPTIONS.map((role) => (
-              <button
-                key={role.id}
-                onClick={() => handleRoleSelect(role.id)}
-                className="p-6 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all text-left group"
-              >
-                <div className="text-blue-600 mb-4 group-hover:scale-110 transition-transform">
-                  {role.icon}
-                </div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-2">{role.label}</h4>
-                <p className="text-gray-600 text-sm mb-4">{role.description}</p>
-                <div className="inline-flex items-center gap-2 text-blue-600 font-medium text-sm group-hover:gap-3 transition-all">
-                  Login
-                  <ArrowRight size={16} />
-                </div>
-              </button>
             ))}
           </div>
         </div>

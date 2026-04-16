@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
-import { User, Mail, Shield, Calendar } from 'lucide-react'
+import { Mail, Shield, Calendar } from 'lucide-react'
 
 export default function ProfilePage() {
   const { user } = useAuth()

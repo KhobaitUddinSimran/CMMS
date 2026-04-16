@@ -5,9 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
-from backend.routers import auth
-from backend.routers import health
-from backend.routers import user
+from backend.routers import auth, health, user, admin, courses, assessments, enrollments, marks, otp
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,7 +29,15 @@ def create_app() -> FastAPI:
     
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost", "http://localhost:3001"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002",
+            "http://localhost",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:3002",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -40,6 +46,12 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(auth.router)
     app.include_router(user.router)
+    app.include_router(otp.router)
+    app.include_router(courses.router)
+    app.include_router(assessments.router)
+    app.include_router(enrollments.router)
+    app.include_router(marks.router)
+    app.include_router(admin.router)
     
     # Custom exception handler for rate limit errors
     @app.exception_handler(RateLimitExceeded)

@@ -7,14 +7,14 @@ import { Spinner } from '@/components/common/Spinner'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, isLoading } = useAuth()
+  const { user, loading } = useAuth()
 
   useEffect(() => {
     // Only redirect when auth is loaded and user exists
-    if (!isLoading && user?.role) {
+    if (!loading && user?.role) {
       router.push(`/dashboard/${user.role}`)
     }
-  }, [user, isLoading, router])
+  }, [user, loading, router])
 
   // Show loading while auth context is initializing or if not yet redirected
   return (

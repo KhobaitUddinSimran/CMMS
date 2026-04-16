@@ -1,16 +1,23 @@
 """JWT and password security utilities"""
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
-from passlib.context import CryptContext
+import hashlib
+import hmac
 from .config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash password using PBKDF2 (compatible with all systems)"""
+    password_bytes = password.encode('utf-8')
+    salt = settings.JWT_SECRET_KEY.encode('utf-8')[:16]
+    hashed = hashlib.pbkdf2_hmac('sha256', password_bytes, salt, 100000)
+    return hashed.hex()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify password against hash"""
+    try:
+        return hash_password(plain_password) == hashed_password
+    except:
+        return False
 
 def create_access_token(user_id: str, role: str) -> str:
     to_encode = {

@@ -49,6 +49,7 @@ const navByRole: Record<UserRole, NavItem[]> = {
   ],
   admin: [
     { icon: <Home className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
+    { icon: <Users className="w-5 h-5" />, label: 'Pending Approvals', path: '/dashboard/admin/approvals' },
     { icon: <Users className="w-5 h-5" />, label: 'Users', path: '/users' },
     { icon: <Lock className="w-5 h-5" />, label: 'Roles & Permissions', path: '/roles' },
     { icon: <Database className="w-5 h-5" />, label: 'Database', path: '/database' },
