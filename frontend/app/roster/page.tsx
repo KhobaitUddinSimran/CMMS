@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Users, ArrowLeft, AlertCircle } from 'lucide-react'
+import { ArrowLeft, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { RosterUpload } from '@/components/roster/RosterUpload'
 import { RosterPreview } from '@/components/roster/RosterPreview'
@@ -225,7 +225,6 @@ export default function RosterPage() {
           type="error"
           message={errorMessage}
           onClose={() => setShowErrorToast(false)}
-          duration={5000}
         />
       )}
     </div>

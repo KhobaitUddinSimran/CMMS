@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useToast } from '@/lib/contexts/toast-context'
 import { Card } from '@/components/common/Card'
-import { Bell, Lock, Eye, Database, Users } from 'lucide-react'
+import { Bell, Lock, Eye, Database } from 'lucide-react'
 
 export default function SettingsPage() {
   const { showToast } = useToast()

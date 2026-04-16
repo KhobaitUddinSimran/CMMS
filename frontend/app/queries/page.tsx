@@ -1,6 +1,6 @@
 'use client'
 
-import { MessageSquare, ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export default function QueriesPage() {
