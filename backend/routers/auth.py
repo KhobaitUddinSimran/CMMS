@@ -92,28 +92,44 @@ async def login(request: Request, credentials: LoginRequest, db: AsyncSession = 
         # Check mock users first (for testing)
         user = MOCK_USERS.get(credentials.email)
         
-        if user and user["password"] == credentials.password:
-            # Generate JWT token
-            token = create_access_token(
-                user_id=credentials.email,
-                role=user["role"]
-            )
+        if user:
+            # Try hashed password first (for new signups)
+            password_valid = verify_password(credentials.password, user["password"])
             
-            logger.info(f"User {credentials.email} logged in successfully (mock)")
+            # Also try plain text for backward compatibility with test users
+            if not password_valid:
+                password_valid = (user["password"] == credentials.password)
             
-            return LoginResponse(
-                token=token,
-                user={
-                    "id": credentials.email,
-                    "email": credentials.email,
-                    "full_name": user["full_name"],
-                    "role": user["role"],
-                    "is_active": user["is_active"],
-                    "email_verified": user["email_verified"],
-                    "approval_status": user["approval_status"],
-                },
-                approval_status=user["approval_status"],
-            )
+            if password_valid:
+                # Check if user is active (approved)
+                if not user.get("is_active", False):
+                    logger.warning(f"Login attempt for inactive user {credentials.email}")
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Account not approved yet. Please wait for admin approval."
+                    )
+                
+                # Generate JWT token
+                token = create_access_token(
+                    user_id=credentials.email,
+                    role=user["role"]
+                )
+                
+                logger.info(f"User {credentials.email} logged in successfully (mock)")
+                
+                return LoginResponse(
+                    token=token,
+                    user={
+                        "id": credentials.email,
+                        "email": credentials.email,
+                        "full_name": user["full_name"],
+                        "role": user["role"],
+                        "is_active": user["is_active"],
+                        "email_verified": user["email_verified"],
+                        "approval_status": user["approval_status"],
+                    },
+                    approval_status=user["approval_status"],
+                )
         
         # Try database lookup (for real users)
         # This can be implemented later when database is ready
@@ -170,19 +186,32 @@ async def signup(
         # Generate user ID
         user_id = str(uuid.uuid4())
         
-        # For now, add to mock users with pending approval
+        # Add to PENDING_USERS awaiting admin approval
+        # Do NOT add to MOCK_USERS until admin approves
+        PENDING_USERS[signup_data.email] = {
+            "id": user_id,
+            "password": hash_password(signup_data.password),
+            "role": signup_data.role,
+            "full_name": signup_data.full_name,
+            "email_verified": True,  # In production, would verify via OTP
+            "matric_number": signup_data.matric_number,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        
+        # Also temporarily add to MOCK_USERS for approval status checking
+        # but mark as inactive so login fails until approved
         MOCK_USERS[signup_data.email] = {
             "id": user_id,
             "password": hash_password(signup_data.password),
             "role": signup_data.role,
             "full_name": signup_data.full_name,
             "approval_status": "pending",
-            "is_active": False,
-            "email_verified": True,  # In production, would verify via OTP
+            "is_active": False,  # Cannot login until approved
+            "email_verified": True,
             "matric_number": signup_data.matric_number,
         }
         
-        logger.info(f"New signup for {signup_data.email} with role {signup_data.role}")
+        logger.info(f"New signup for {signup_data.email} with role {signup_data.role} - pending admin approval")
         
         return SignupResponse(
             user_id=user_id,

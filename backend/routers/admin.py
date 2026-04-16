@@ -33,20 +33,29 @@ async def approve_user(
     
     pending_user = PENDING_USERS[email]
     
-    # Move to MOCK_USERS as approved
-    MOCK_USERS[email] = {
-        **pending_user,
-        "is_active": True,
-        "approval_status": "approved"
-    }
+    # Update user in MOCK_USERS to mark as active and approved
+    if email in MOCK_USERS:
+        MOCK_USERS[email].update({
+            "is_active": True,
+            "approval_status": "approved",
+            "approved_by": current_user.get('email'),
+        })
+    else:
+        # If not in MOCK_USERS, create entry
+        MOCK_USERS[email] = {
+            **pending_user,
+            "is_active": True,
+            "approval_status": "approved",
+            "approved_by": current_user.get('email'),
+        }
     
     # Remove from pending
     del PENDING_USERS[email]
     
-    logger.info(f"User {email} approved by admin {current_user.get('email')}")
+    logger.info(f"User {email} approved by admin {current_user.get('email')} - User can now login")
     
     return {
-        "message": "User approved successfully",
+        "message": "User approved successfully and can now login",
         "email": email,
         "status": "approved"
     }
