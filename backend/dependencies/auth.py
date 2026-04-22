@@ -49,10 +49,12 @@ async def get_current_active_user(
 ):
     """Check if user is active in database"""
     try:
-        # Query database to check if user is active
+        user_id = user["user_id"]
+        
+        # Query database by UUID (new) or email (fallback for old tokens)
         result = await db.execute(
-            text("SELECT is_active FROM users WHERE email = :email"),
-            {"email": user["user_id"]}
+            text("SELECT is_active FROM users WHERE id = :user_id OR email = :user_id"),
+            {"user_id": user_id}
         )
         db_user = result.fetchone()
         
@@ -62,7 +64,7 @@ async def get_current_active_user(
         
         # If user doesn't exist in DB (mock user - allow anyway for development)
         if not db_user:
-            logger.debug(f"User {user['user_id']} not found in database (mock user)")
+            logger.debug(f"User {user_id} not found in database (mock user)")
             return user
         
         # User exists but is not active

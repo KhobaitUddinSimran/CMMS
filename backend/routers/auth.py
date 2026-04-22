@@ -34,6 +34,7 @@ class LoginResponse(BaseModel):
     token: str
     user: dict
     approval_status: str
+    special_roles: list[str] = []
 
 class SignupRequest(BaseModel):
     email: EmailStr
@@ -109,26 +110,29 @@ async def login(request: Request, credentials: LoginRequest, db: AsyncSession = 
                         detail="Account not approved yet. Please wait for admin approval."
                     )
                 
-                # Generate JWT token
+                # Generate JWT token with UUID (not email)
+                user_uuid = user.get("id", str(uuid.uuid4()))
                 token = create_access_token(
-                    user_id=credentials.email,
+                    user_id=user_uuid,
                     role=user["role"]
                 )
                 
-                logger.info(f"User {credentials.email} logged in successfully (mock)")
+                logger.info(f"User {credentials.email} logged in successfully (mock) - UUID: {user_uuid}")
                 
                 return LoginResponse(
                     token=token,
                     user={
-                        "id": credentials.email,
+                        "id": user_uuid,  # Return UUID, not email
                         "email": credentials.email,
                         "full_name": user["full_name"],
                         "role": user["role"],
                         "is_active": user["is_active"],
                         "email_verified": user["email_verified"],
                         "approval_status": user["approval_status"],
+                        "special_roles": user.get("special_roles", []),
                     },
                     approval_status=user["approval_status"],
+                    special_roles=user.get("special_roles", []),
                 )
         
         # Try database lookup (for real users)
@@ -143,7 +147,7 @@ async def login(request: Request, credentials: LoginRequest, db: AsyncSession = 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Login error: {str(e)}")
+        logger.error(f"Login error for {credentials.email}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Authentication service error"

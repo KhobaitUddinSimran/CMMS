@@ -1,5 +1,7 @@
 // Auth Types
-export type UserRole = 'student' | 'lecturer' | 'coordinator' | 'hod' | 'admin'
+export type UserRole = 'student' | 'lecturer' | 'admin' | 'coordinator' | 'hod'
+export type BaseRole = 'student' | 'lecturer' | 'admin'
+export type SpecialRole = 'coordinator' | 'hod'
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
 
 export interface AuthUser {
@@ -9,6 +11,7 @@ export interface AuthUser {
   name?: string // Alias for full_name (for UI compatibility)
   initials?: string // Computed from full_name
   role: UserRole
+  special_roles?: SpecialRole[] // Special roles assigned to lecturers
   is_active: boolean
   email_verified: boolean
   approval_status: ApprovalStatus
@@ -30,6 +33,7 @@ export interface LoginResponse {
   token: string
   user: AuthUser
   approval_status: ApprovalStatus
+  special_roles?: SpecialRole[]
 }
 
 export interface SignupRequest {

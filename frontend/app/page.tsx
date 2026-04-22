@@ -43,11 +43,11 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <img src="/logos/utm-logo.png" alt="UTM Logo" className="h-12 w-auto" />
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">CMMS</h1>
-              <p className="text-xs text-gray-500">Carry Mark Management System</p>
+            <div className="flex flex-col">
+              <h1 className="text-3xl font-black bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent tracking-tight">CMMS</h1>
+              <p className="text-xs font-semibold text-blue-600">Universiti Teknologi Malaysia</p>
             </div>
           </div>
           <nav className="hidden md:flex items-center gap-8">
@@ -67,7 +67,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="max-w-3xl">
             <h2 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-              Streamline Your Academic Carry Mark Management
+              UTM Carry Mark Management System
             </h2>
             <p className="text-xl text-gray-200 mb-8">
               A unified platform built for UTM. Empower students, faculty, and administrators with real-time grade tracking, secure access control, and comprehensive reporting.

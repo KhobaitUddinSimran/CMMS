@@ -60,8 +60,14 @@ class CourseService:
         if semester:
             query = query.where(Course.semester == semester)
         
-        # Get total count
-        count_result = await db.execute(select(func.count(Course.id)).select_from(Course))
+        # Get total count with same filters
+        count_query = select(func.count(Course.id))
+        if lecturer_id:
+            count_query = count_query.where(Course.lecturer_id == lecturer_id)
+        if semester:
+            count_query = count_query.where(Course.semester == semester)
+        
+        count_result = await db.execute(count_query)
         total = count_result.scalar() or 0
         
         # Get paginated results

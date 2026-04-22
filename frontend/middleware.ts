@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // Public routes that don't require authentication
-const publicRoutes = ['/', '/login', '/password-reset']
+const publicRoutes = ['/', '/auth/login', '/auth/signup', '/auth/password-reset', '/auth/pending-approval', '/password-reset']
 
 // Protected routes that require authentication
 const protectedRoutes = [
@@ -47,11 +47,11 @@ export function middleware(request: NextRequest) {
 
   // If it's protected but no token, redirect to login
   if (isProtected && !token) {
-    return NextResponse.redirect(new URL('/login?role=student', request.url))
+    return NextResponse.redirect(new URL('/auth/login?role=student', request.url))
   }
 
   // If accessing login while authenticated, redirect to dashboard
-  if (pathname.startsWith('/login') && token) {
+  if (pathname.startsWith('/auth/login') && token) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

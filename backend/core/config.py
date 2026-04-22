@@ -2,6 +2,7 @@
 import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
+from supabase import create_client
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,3 +36,6 @@ class Settings(BaseSettings):
         extra = "allow"  # Allow extra fields from .env
 
 settings = Settings()
+
+# Initialize Supabase client
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)

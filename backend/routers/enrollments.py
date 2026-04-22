@@ -20,7 +20,7 @@ async def create_enrollment(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new enrollment - requires lecturer, coordinator, or admin role"""
-    if current_user.role not in ["lecturer", "coordinator", "admin"]:
+    if current_user.get("role") not in ["lecturer", "coordinator", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers, coordinators, and admins can create enrollments"
@@ -42,7 +42,7 @@ async def create_enrollment(
         enrollment = await EnrollmentService.create_enrollment(db, enrollment_data)
         return EnrollmentResponse.model_validate(enrollment)
     except Exception as e:
-        logger.error(f"Error creating enrollment: {str(e)}")
+        logger.error(f"Error creating enrollment for student {enrollment_data.student_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create enrollment"
@@ -81,7 +81,7 @@ async def list_course_enrollments(
         )
     
     # Verify user has access
-    if current_user.role == "lecturer" and course.lecturer_id != current_user.id:
+    if current_user.get("role") == "lecturer" and course.lecturer_id != UUID(current_user.get("user_id")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this course"
@@ -108,7 +108,7 @@ async def get_student_courses(
     db: AsyncSession = Depends(get_db),
 ):
     """Get all courses for a student"""
-    if current_user.role == "student" and current_user.id != student_id:
+    if current_user.get("role") == "student" and current_user.get("user_id") != str(student_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Can only view your own courses"
@@ -128,7 +128,7 @@ async def update_enrollment(
     db: AsyncSession = Depends(get_db),
 ):
     """Update an enrollment - requires lecturer, coordinator, or admin role"""
-    if current_user.role not in ["lecturer", "coordinator", "admin"]:
+    if current_user.get("role") not in ["lecturer", "coordinator", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers, coordinators, and admins can update enrollments"
@@ -145,7 +145,7 @@ async def update_enrollment(
         updated_enrollment = await EnrollmentService.update_enrollment(db, enrollment_id, enrollment_data)
         return EnrollmentResponse.model_validate(updated_enrollment)
     except Exception as e:
-        logger.error(f"Error updating enrollment: {str(e)}")
+        logger.error(f"Error updating enrollment {enrollment_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update enrollment"
@@ -166,7 +166,7 @@ async def withdraw_enrollment(
         )
     
     # Students can withdraw themselves, lecturers/admins can withdraw anyone
-    if current_user.role == "student" and current_user.id != enrollment.student_id:
+    if current_user.get("role") == "student" and current_user.get("user_id") != str(enrollment.student_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Can only withdraw your own enrollment"
@@ -176,7 +176,7 @@ async def withdraw_enrollment(
         updated_enrollment = await EnrollmentService.withdraw_enrollment(db, enrollment_id)
         return EnrollmentResponse.model_validate(updated_enrollment)
     except Exception as e:
-        logger.error(f"Error withdrawing enrollment: {str(e)}")
+        logger.error(f"Error withdrawing enrollment {enrollment_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to withdraw enrollment"

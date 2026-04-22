@@ -1,92 +1,164 @@
 'use client'
 
-import { Mail, ArrowLeft } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { MainLayout } from '@/components/layout/MainLayout'
+import { Button } from '@/components/common/Button'
+import { Card } from '@/components/common/Card'
+import { Spinner } from '@/components/common/Spinner'
+import { useToastStore } from '@/stores/toastStore'
+import { listCourses } from '@/lib/api/courses'
+import { Plus, Settings, Users, BookOpen } from 'lucide-react'
+
+interface Course {
+  id: string
+  code: string
+  section: string
+  year: string
+  semester: string
+  lecturer_id?: string
+  lecturer_name?: string
+}
 
 export default function CoursesPage() {
   const router = useRouter()
+  const { addToast } = useToastStore()
 
-  const courses = [
-    { id: 1, code: 'CS101', name: 'Introduction to Programming', semester: 'Spring 2024', credits: 3, grade: 'A' },
-    { id: 2, code: 'CS201', name: 'Data Structures', semester: 'Spring 2024', credits: 4, grade: 'A-' },
-    { id: 3, code: 'CS301', name: 'Algorithms', semester: 'Fall 2023', credits: 3, grade: 'B+' },
-    { id: 4, code: 'CS401', name: 'Software Engineering', semester: 'Fall 2023', credits: 4, grade: 'A' },
-  ]
+  const [loading, setLoading] = useState(true)
+  const [courses, setCourses] = useState<Course[]>([])
+  const [userRole, setUserRole] = useState<'student' | 'lecturer' | 'admin' | null>(null)
+
+  useEffect(() => {
+    loadCourses()
+    // Get user role from localStorage or auth context
+    const role = localStorage.getItem('userRole') as any
+    setUserRole(role)
+  }, [])
+
+  const loadCourses = async () => {
+    try {
+      setLoading(true)
+      const data = await listCourses()
+      setCourses(data.data || data)
+    } catch (error) {
+      addToast('Failed to load courses', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const canCreateCourses = userRole === 'admin' || userRole === 'lecturer'
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <Spinner />
+        </div>
+      </MainLayout>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
-      <div className="max-w-6xl mx-auto">
+    <MainLayout>
+      <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">My Courses</h1>
-            <p className="text-gray-600">View your enrolled courses and progress</p>
+            <h1 className="text-3xl font-bold text-gray-900">Courses</h1>
+            <p className="text-gray-600 mt-2">
+              {userRole === 'student' ? 'View your enrolled courses' : 'Manage course offerings'}
+            </p>
           </div>
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            Back
-          </button>
+          {canCreateCourses && (
+            <Button
+              variant="primary"
+              icon={<Plus className="w-4 h-4" />}
+              onClick={() => router.push('/courses/create')}
+            >
+              Create Course
+            </Button>
+          )}
         </div>
 
         {/* Courses Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.map((course) => (
-            <div
-              key={course.id}
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden border border-gray-200"
-            >
-              {/* Card Header */}
-              <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 text-white">
-                <p className="text-sm font-semibold text-blue-100">{course.code}</p>
-                <h3 className="text-xl font-bold">{course.name}</h3>
-              </div>
-
-              {/* Card Body */}
-              <div className="p-4">
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500">SEMESTER</label>
-                    <p className="text-gray-900">{course.semester}</p>
-                  </div>
-                  <div className="flex justify-between">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500">CREDITS</label>
-                      <p className="text-gray-900">{course.credits}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500">GRADE</label>
-                      <p className="text-lg font-bold text-green-600">{course.grade}</p>
-                    </div>
-                  </div>
+        {courses.length === 0 ? (
+          <Card className="bg-gray-50 text-center py-12">
+            <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600">No courses available</p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {courses.map((course) => (
+              <Card
+                key={course.id}
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => {
+                  if (userRole === 'student') {
+                    router.push(`/courses/${course.id}`)
+                  }
+                }}
+              >
+                {/* Header */}
+                <div className="pb-4 border-b border-gray-200">
+                  <p className="text-sm font-semibold text-blue-600">{course.code}</p>
+                  <h3 className="font-semibold text-gray-900 mt-1">
+                    {course.code}-{course.section}
+                  </h3>
                 </div>
-              </div>
 
-              {/* Card Footer */}
-              <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
-                <button className="w-full text-center text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors">
-                  View Details →
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+                {/* Details */}
+                <div className="py-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Year:</span>
+                    <span className="font-medium text-gray-900">{course.year}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Semester:</span>
+                    <span className="font-medium text-gray-900">{course.semester}</span>
+                  </div>
+                  {course.lecturer_name && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Lecturer:</span>
+                      <span className="font-medium text-gray-900">{course.lecturer_name}</span>
+                    </div>
+                  )}
+                </div>
 
-        {/* Info Box */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <div className="flex gap-4">
-            <Mail className="text-blue-600 flex-shrink-0" size={24} />
-            <div>
-              <h3 className="font-semibold text-blue-900 mb-1">Need Help?</h3>
-              <p className="text-blue-700 text-sm">
-               Contact your course instructor or visit the help section for more information about your courses.
-              </p>
-            </div>
+                {/* Actions */}
+                {(userRole === 'admin' || userRole === 'lecturer') && (
+                  <div className="pt-4 border-t border-gray-200 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Users className="w-4 h-4" />}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/courses/${course.id}/manage`)
+                      }}
+                      className="flex-1"
+                    >
+                      Manage
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Settings className="w-4 h-4" />}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/courses/${course.id}/edit`)
+                      }}
+                      className="flex-1"
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            ))}
           </div>
-        </div>
+        )}
       </div>
-    </div>
+    </MainLayout>
   )
 }

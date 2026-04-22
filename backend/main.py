@@ -5,9 +5,16 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
-from backend.routers import auth, health, user, admin, courses, assessments, enrollments, marks, otp
+from .routers import auth, health, user, admin, courses, assessments, enrollments, marks, otp
+from .core.config import settings
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging with more detailed format
+logging_format = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+logging.basicConfig(
+    level=logging.INFO,
+    format=logging_format,
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
@@ -60,6 +67,30 @@ def create_app() -> FastAPI:
             status_code=429,
             content={"detail": "Too many login attempts. Please try again in 15 minutes."},
         )
+    
+    # Global exception handler for detailed error logging
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled exception: {type(exc).__name__}: {str(exc)}", exc_info=True)
+        
+        if settings.ENVIRONMENT == "development":
+            # Include full error details in development
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": "Internal server error",
+                    "error": str(exc),
+                    "type": type(exc).__name__,
+                    "path": str(request.url),
+                    "method": request.method,
+                },
+            )
+        else:
+            # Generic error in production
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+            )
     
     @app.get("/health", tags=["Health"])
     async def health_check():

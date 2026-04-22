@@ -12,7 +12,23 @@ export default function DashboardPage() {
   useEffect(() => {
     // Only redirect when auth is loaded and user exists
     if (!loading && user?.role) {
-      router.push(`/dashboard/${user.role}`)
+      // Check if user has special roles
+      const specialRoles = (user as any)?.special_roles || []
+      
+      if (specialRoles.length > 0) {
+        // If lecturer has special roles, prioritize HOD > Coordinator
+        if (specialRoles.includes('hod')) {
+          router.push('/dashboard/hod')
+        } else if (specialRoles.includes('coordinator')) {
+          router.push('/dashboard/coordinator')
+        } else {
+          // Fallback to base role
+          router.push(`/dashboard/${user.role}`)
+        }
+      } else {
+        // No special roles, use base role
+        router.push(`/dashboard/${user.role}`)
+      }
     }
   }, [user, loading, router])
 
