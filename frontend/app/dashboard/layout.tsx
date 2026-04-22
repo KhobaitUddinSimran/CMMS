@@ -1,11 +1,11 @@
 // Dashboard Shell Layout - Header + Sidebar + Content area for all authenticated pages
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useAuth } from '@/lib/contexts/auth-context'
-import { useRouter } from 'next/navigation'
 import '@/styles/dashboard.css'
 
 export default function DashboardLayout({
@@ -16,11 +16,29 @@ export default function DashboardLayout({
   const router = useRouter()
   const { user, isAuthenticated } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
-  // Client-side redirect for authentication check
-  if (typeof window !== 'undefined' && (!isAuthenticated || !user)) {
-    router.push('/')
-    return null
+  // Client-side redirect for authentication check - moved to useEffect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (!isAuthenticated || !user) {
+        router.push('/')
+      } else {
+        setIsCheckingAuth(false)
+      }
+    }
+  }, [isAuthenticated, user, router])
+
+  // Show loading while checking auth
+  if (isCheckingAuth) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

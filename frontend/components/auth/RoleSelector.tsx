@@ -24,18 +24,6 @@ const roles: { value: UserRole; label: string; description: string; gradient: st
     gradient: 'from-green-500 to-green-600',
   },
   {
-    value: 'coordinator',
-    label: 'Coordinator',
-    description: 'Program Management',
-    gradient: 'from-purple-500 to-purple-600',
-  },
-  {
-    value: 'hod',
-    label: 'HOD',
-    description: 'Department Head',
-    gradient: 'from-red-500 to-red-600',
-  },
-  {
     value: 'admin',
     label: 'Admin',
     description: 'System Admin',

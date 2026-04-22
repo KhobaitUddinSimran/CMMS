@@ -1,195 +1,339 @@
-"""Assessment endpoints"""
+"""Assessment endpoints - Supabase HTTP Client"""
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
-from ..db.database import get_db
-from ..schemas.assessment import AssessmentCreate, AssessmentUpdate, AssessmentResponse, AssessmentDetailResponse
-from ..services.assessment_service import AssessmentService
-from ..services.course_service import CourseService
+from pydantic import BaseModel
+from ..core.config import supabase
 from ..dependencies.auth import get_current_user
-from ..models.user import User
+from typing import Optional
 
-router = APIRouter(prefix="/api/assessments", tags=["assessments"])
+# Use prefix to avoid path duplication issues
+router = APIRouter(prefix="/api/courses", tags=["assessments"])
 logger = logging.getLogger(__name__)
 
-@router.post("", response_model=AssessmentResponse, status_code=status.HTTP_201_CREATED)
+# Request models
+class AssessmentCreate(BaseModel):
+    name: str
+    type: str
+    max_score: float
+    weight: float
+
+class AssessmentUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    max_score: Optional[float] = None
+    weight: Optional[float] = None
+
+@router.post("/{course_id}/assessments", status_code=status.HTTP_201_CREATED)
 async def create_assessment(
-    assessment_data: AssessmentCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    course_id: str,
+    data: AssessmentCreate,
+    current_user = Depends(get_current_user),
 ):
     """Create a new assessment - requires lecturer or admin role"""
-    if current_user.role not in ["lecturer", "admin"]:
+    
+    # Validate user info structure
+    if not current_user:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only lecturers and admins can create assessments"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not authenticated"
         )
     
-    # Verify course exists
-    course = await CourseService.get_course(db, assessment_data.course_id)
-    if not course:
+    user_id = current_user.get("user_id")
+    user_role = current_user.get("role")
+    
+    if not user_id or not user_role:
+        logger.error(f"Invalid user structure from get_current_user: {current_user}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user information in token"
         )
     
-    # Verify lecturer is assigned to this course
-    if current_user.role == "lecturer" and course.lecturer_id != current_user.id:
+    logger.info(f"Create assessment request - Course: {course_id}, User ID: {user_id}, Role: {user_role}")
+    
+    if user_role not in ["lecturer", "admin"]:
+        logger.warning(f"Unauthorized assessment creation - Expected lecturer/admin, got: {user_role}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not assigned to this course"
+            detail=f"Only lecturers and admins can create assessments. Your role: {user_role}"
         )
     
     try:
-        assessment = await AssessmentService.create_assessment(db, assessment_data)
-        return AssessmentResponse.model_validate(assessment)
+        # Verify course exists
+        logger.info(f"Checking if course {course_id} exists...")
+        try:
+            course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
+            logger.info(f"Course query response type: {type(course_response)}, has data: {hasattr(course_response, 'data')}")
+            logger.info(f"Course query response: {course_response}")
+        except Exception as e:
+            logger.error(f"Error querying courses table: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
+        
+        if not course_response.data:
+            logger.warning(f"Course {course_id} not found - response.data is empty")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+        
+        course = course_response.data[0]
+        assigned_lecturer_id = course.get("lecturer_id")
+        
+        logger.info(f"Course found - Assigned to lecturer: {assigned_lecturer_id}, Current user: {user_id}")
+        
+        # Verify lecturer is assigned to this course
+        if user_role == "lecturer" and assigned_lecturer_id != user_id:
+            logger.warning(f"Lecturer {user_id} not assigned to course {course_id} (assigned to {assigned_lecturer_id})")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"You are not assigned to this course. Course is assigned to {assigned_lecturer_id}, but you are {user_id}"
+            )
+        
+        # Get existing assessments to calculate total weight
+        logger.info(f"Getting existing assessments for course {course_id}...")
+        try:
+            existing_assessments = supabase.table("assessments").select("weight_percentage").eq("course_id", course_id).execute()
+            logger.info(f"Existing assessments response: {existing_assessments}")
+        except Exception as e:
+            logger.error(f"Error querying assessments table: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
+            
+        existing_weight = sum([a.get("weight_percentage", 0) for a in existing_assessments.data]) if existing_assessments.data else 0
+        logger.info(f"Existing weight: {existing_weight}%, Adding: {data.weight}%")
+        
+        # Check cumulative weight
+        if existing_weight + data.weight > 100:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Total assessment weight would exceed 100%. Current: {existing_weight}%, Adding: {data.weight}%"
+            )
+        
+        # Create assessment
+        new_assessment = {
+            "course_id": course_id,
+            "name": data.name,
+            "type": data.type,
+            "max_score": data.max_score,
+            "weight_percentage": data.weight,
+            "is_locked": False
+        }
+        logger.info(f"Creating assessment with data: {new_assessment}")
+        
+        try:
+            response = supabase.table("assessments").insert(new_assessment).execute()
+            logger.info(f"Insert response type: {type(response)}, has data: {hasattr(response, 'data')}")
+            logger.info(f"Insert response: {response}")
+            logger.info(f"Insert response data: {response.data if response else 'None'}")
+        except Exception as e:
+            logger.error(f"Error inserting assessment: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
+        
+        if not response.data:
+            logger.error("No data returned from insert")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create assessment - insert returned no data"
+            )
+        
+        logger.info(f"Assessment created successfully - ID: {response.data[0].get('id')}")
+        return response.data[0]
+    
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error creating assessment: {str(e)}")
+        error_msg = f"Error creating assessment for course {course_id}: {type(e).__name__}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create assessment"
+            detail=f"Failed to create assessment: {str(e)}"
         )
 
-@router.get("/{assessment_id}", response_model=AssessmentDetailResponse)
-async def get_assessment(
-    assessment_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get a specific assessment"""
-    assessment = await AssessmentService.get_assessment(db, assessment_id)
-    if not assessment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found"
-        )
-    
-    return AssessmentDetailResponse.model_validate(assessment)
-
-@router.get("/course/{course_id}")
+@router.get("/{course_id}/assessments")
 async def list_course_assessments(
-    course_id: UUID,
+    course_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     """List assessments for a course"""
-    course = await CourseService.get_course(db, course_id)
-    if not course:
+    try:
+        # Verify course exists
+        course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
+        if not course_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+        
+        # Get assessments
+        response = supabase.table("assessments").select("*").eq("course_id", course_id).range(skip, skip + limit - 1).execute()
+        assessments = response.data if response.data else []
+        
+        # Get total count
+        count_response = supabase.table("assessments").select("id", count="exact").eq("course_id", course_id).execute()
+        total = count_response.count if hasattr(count_response, "count") else len(assessments)
+        
+        return {
+            "data": assessments,
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching assessments for course {course_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch assessments"
         )
-    
-    assessments, total = await AssessmentService.list_assessments(
-        db,
-        course_id=course_id,
-        skip=skip,
-        limit=limit,
-    )
-    
-    return {
-        "data": [AssessmentResponse.model_validate(a) for a in assessments],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
 
-@router.put("/{assessment_id}", response_model=AssessmentResponse)
+@router.put("/{course_id}/assessments/{assessment_id}")
 async def update_assessment(
-    assessment_id: UUID,
-    assessment_data: AssessmentUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    course_id: str,
+    assessment_id: str,
+    data: AssessmentUpdate,
+    current_user = Depends(get_current_user),
 ):
     """Update an assessment - requires lecturer or admin role"""
-    if current_user.role not in ["lecturer", "admin"]:
+    if current_user.get("role") not in ["lecturer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers and admins can update assessments"
         )
     
-    assessment = await AssessmentService.get_assessment(db, assessment_id)
-    if not assessment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found"
-        )
-    
-    # Verify lecturer is assigned to the course
-    if current_user.role == "lecturer":
-        course = await CourseService.get_course(db, assessment.course_id)
-        if course.lecturer_id != current_user.id:
+    try:
+        # Get assessment
+        assessment_response = supabase.table("assessments").select("*").eq("id", assessment_id).execute()
+        if not assessment_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Assessment not found"
+            )
+        
+        assessment = assessment_response.data[0]
+        
+        # Verify course exists
+        course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
+        if not course_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+        
+        course = course_response.data[0]
+        
+        # Verify lecturer is assigned to the course
+        if current_user.get("role") == "lecturer" and course.get("lecturer_id") != current_user.get("user_id"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are not assigned to this course"
             )
+        
+        # Prepare update data
+        update_data = {}
+        if data.name is not None:
+            update_data["name"] = data.name
+        if data.type is not None:
+            update_data["type"] = data.type
+        if data.max_score is not None:
+            update_data["max_score"] = data.max_score
+        if data.weight is not None:
+            # Check weight constraint
+            existing_assessments = supabase.table("assessments").select("weight_percentage").eq("course_id", course_id).neq("id", assessment_id).execute()
+            existing_weight = sum([a.get("weight_percentage", 0) for a in existing_assessments.data]) if existing_assessments.data else 0
+            
+            if existing_weight + data.weight > 100:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Total assessment weight would exceed 100%. Other assessments: {existing_weight}%, This assessment: {data.weight}%"
+                )
+            
+            update_data["weight_percentage"] = data.weight
+        
+        # Update assessment
+        response = supabase.table("assessments").update(update_data).eq("id", assessment_id).execute()
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update assessment"
+            )
+        
+        return response.data[0]
     
-    try:
-        updated_assessment = await AssessmentService.update_assessment(db, assessment_id, assessment_data)
-        return AssessmentResponse.model_validate(updated_assessment)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error updating assessment: {str(e)}")
+        logger.error(f"Error updating assessment {assessment_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update assessment"
         )
 
-@router.delete("/{assessment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{course_id}/assessments/{assessment_id}")
 async def delete_assessment(
-    assessment_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    course_id: str,
+    assessment_id: str,
+    current_user = Depends(get_current_user),
 ):
-    """Delete an assessment - requires admin role"""
-    if current_user.role != "admin":
+    """Delete an assessment - requires lecturer or admin role"""
+    user_id = current_user.get("user_id")
+    user_role = current_user.get("role")
+    
+    if user_role not in ["lecturer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can delete assessments"
-        )
-    
-    success = await AssessmentService.delete_assessment(db, assessment_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found"
-        )
-
-@router.post("/{assessment_id}/publish", response_model=AssessmentResponse)
-async def publish_assessment(
-    assessment_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Publish an assessment - requires lecturer or admin role"""
-    if current_user.role not in ["lecturer", "admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only lecturers and admins can publish assessments"
-        )
-    
-    assessment = await AssessmentService.get_assessment(db, assessment_id)
-    if not assessment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found"
-        )
-    
-    # Verify weights sum to 100%
-    if not await AssessmentService.validate_weights(db, assessment.course_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Assessment weights do not sum to 100%"
+            detail="Only lecturers and admins can delete assessments"
         )
     
     try:
-        updated_assessment = await AssessmentService.publish_assessment(db, assessment_id)
-        return AssessmentResponse.model_validate(updated_assessment)
+        # Verify course exists and user is assigned
+        course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
+        if not course_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+        
+        course = course_response.data[0]
+        assigned_lecturer_id = course.get("lecturer_id")
+        
+        # Verify lecturer is assigned to this course (if not admin)
+        if user_role == "lecturer" and assigned_lecturer_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not assigned to this course"
+            )
+        
+        # Get assessment to verify it belongs to this course
+        assessment_response = supabase.table("assessments").select("*").eq("id", assessment_id).execute()
+        if not assessment_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Assessment not found"
+            )
+        
+        assessment = assessment_response.data[0]
+        if assessment.get("course_id") != course_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Assessment does not belong to this course"
+            )
+        
+        # Delete assessment
+        logger.info(f"Deleting assessment {assessment_id} from course {course_id} by user {user_id}")
+        response = supabase.table("assessments").delete().eq("id", assessment_id).execute()
+        logger.info(f"Assessment {assessment_id} deleted successfully")
+        
+        return {"message": "Assessment deleted successfully"}
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error publishing assessment: {str(e)}")
+        logger.error(f"Error deleting assessment {assessment_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to publish assessment"
+            detail="Failed to delete assessment"
         )

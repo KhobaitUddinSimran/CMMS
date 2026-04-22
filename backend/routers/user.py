@@ -30,10 +30,10 @@ async def get_current_user_info(
     try:
         user_id = current_user["user_id"]
         
-        # Query database for full user info
+        # Query database for full user info by UUID (new) or email (fallback)
         result = await db.execute(
-            text("SELECT id, email, full_name, role, is_active FROM users WHERE email = :email"),
-            {"email": user_id}
+            text("SELECT id, email, full_name, role, is_active FROM users WHERE id = :user_id OR email = :user_id"),
+            {"user_id": user_id}
         )
         user = result.fetchone()
         
@@ -46,19 +46,20 @@ async def get_current_user_info(
                 "is_active": user[4],
             }
         else:
-            # Fallback for mock users
+            # Fallback for mock users - return minimal info
+            logger.debug(f"User {user_id} not found in database, returning mock user info")
             return {
                 "id": user_id,
-                "email": user_id,
-                "full_name": "",
-                "role": current_user.get("role", ""),
+                "email": "unknown@utm.my",
+                "full_name": "Mock User",
+                "role": current_user.get("role", "student"),
                 "is_active": True,
             }
     except Exception as e:
-        logger.error(f"Error fetching user info: {str(e)}")
+        logger.error(f"Error fetching user info: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch user information"
+            detail=f"Failed to fetch user information: {str(e)}"
         )
 
 @router.put("/me")
@@ -111,7 +112,7 @@ async def update_profile(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error updating profile: {str(e)}")
+        logger.error(f"Error updating profile for user {current_user.get('user_id')}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update profile"
@@ -191,7 +192,7 @@ async def change_password(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error changing password: {str(e)}")
+        logger.error(f"Error changing password for user {current_user.get('user_id')}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to change password"

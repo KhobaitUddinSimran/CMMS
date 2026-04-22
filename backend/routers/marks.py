@@ -28,7 +28,7 @@ async def create_mark(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new mark - requires lecturer or admin role"""
-    if current_user.role not in ["lecturer", "admin"]:
+    if current_user.get("role") not in ["lecturer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers and admins can create marks"
@@ -43,9 +43,9 @@ async def create_mark(
         )
     
     # Verify lecturer is assigned to this course
-    if current_user.role == "lecturer":
+    if current_user.get("role") == "lecturer":
         course = await CourseService.get_course(db, assessment.course_id)
-        if course.lecturer_id != current_user.id:
+        if course.lecturer_id != UUID(current_user.get("user_id")):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are not assigned to this course"
@@ -55,7 +55,7 @@ async def create_mark(
         mark = await MarkService.create_mark(db, mark_data)
         return MarkResponse.model_validate(mark)
     except Exception as e:
-        logger.error(f"Error creating mark: {str(e)}")
+        logger.error(f"Error creating mark for assessment {mark_data.assessment_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create mark"
@@ -76,7 +76,7 @@ async def get_mark(
         )
     
     # Students can only view their own marks
-    if current_user.role == "student" and mark.student_id != current_user.id:
+    if current_user.get("role") == "student" and mark.student_id != UUID(current_user.get("user_id")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot view other student's marks"
@@ -101,14 +101,14 @@ async def list_assessment_marks(
         )
     
     # Verify access
-    if current_user.role == "lecturer":
+    if current_user.get("role") == "lecturer":
         course = await CourseService.get_course(db, assessment.course_id)
-        if course.lecturer_id != current_user.id:
+        if course.lecturer_id != UUID(current_user.get("user_id")):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this assessment"
             )
-    elif current_user.role == "student":
+    elif current_user.get("role") == "student":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Students cannot view all marks for an assessment"
@@ -137,7 +137,7 @@ async def get_student_course_marks(
 ):
     """Get all marks for a student in a course"""
     # Students can only view their own marks
-    if current_user.role == "student" and current_user.id != student_id:
+    if current_user.get("role") == "student" and current_user.get("user_id") != str(student_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot view other student's marks"
@@ -152,7 +152,7 @@ async def get_student_course_marks(
         )
     
     # Lecturers can only view marks for their own courses
-    if current_user.role == "lecturer" and course.lecturer_id != current_user.id:
+    if current_user.get("role") == "lecturer" and course.lecturer_id != UUID(current_user.get("user_id")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this course"
@@ -172,7 +172,7 @@ async def update_mark(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a mark - requires lecturer or admin role"""
-    if current_user.role not in ["lecturer", "admin"]:
+    if current_user.get("role") not in ["lecturer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers and admins can update marks"
@@ -186,16 +186,16 @@ async def update_mark(
         )
     
     # Verify lecturer is assigned to the course
-    if current_user.role == "lecturer":
+    if current_user.get("role") == "lecturer":
         course = await CourseService.get_course(db, mark.course_id)
-        if course.lecturer_id != current_user.id:
+        if course.lecturer_id != UUID(current_user.get("user_id")):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are not assigned to this course"
             )
     
     try:
-        updated_mark = await MarkService.update_mark(db, mark_id, mark_data, current_user.id)
+        updated_mark = await MarkService.update_mark(db, mark_id, mark_data, UUID(current_user.get("user_id")))
         if updated_mark is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -203,7 +203,7 @@ async def update_mark(
             )
         return MarkResponse.model_validate(updated_mark)
     except Exception as e:
-        logger.error(f"Error updating mark: {str(e)}")
+        logger.error(f"Error updating mark {mark_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update mark"
@@ -216,7 +216,7 @@ async def publish_marks(
     db: AsyncSession = Depends(get_db),
 ):
     """Publish multiple marks - requires lecturer or admin role"""
-    if current_user.role not in ["lecturer", "admin"]:
+    if current_user.get("role") not in ["lecturer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers and admins can publish marks"
@@ -229,7 +229,7 @@ async def publish_marks(
             "count": count,
         }
     except Exception as e:
-        logger.error(f"Error publishing marks: {str(e)}")
+        logger.error(f"Error publishing {len(request.mark_ids)} marks: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to publish marks"
@@ -243,7 +243,7 @@ async def flag_mark(
     db: AsyncSession = Depends(get_db),
 ):
     """Flag a mark for review"""
-    if current_user.role not in ["lecturer", "admin"]:
+    if current_user.get("role") not in ["lecturer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers and admins can flag marks"
@@ -260,7 +260,7 @@ async def flag_mark(
         updated_mark = await MarkService.flag_mark(db, mark_id, reason)
         return MarkResponse.model_validate(updated_mark)
     except Exception as e:
-        logger.error(f"Error flagging mark: {str(e)}")
+        logger.error(f"Error flagging mark {mark_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to flag mark"
@@ -275,7 +275,7 @@ async def get_student_course_grade(
 ):
     """Get final grade for a student in a course"""
     # Students can only view their own grades
-    if current_user.role == "student" and current_user.id != student_id:
+    if current_user.get("role") == "student" and current_user.get("user_id") != str(student_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot view other student's grades"
@@ -289,7 +289,7 @@ async def get_student_course_grade(
             "grade": grade,
         }
     except Exception as e:
-        logger.error(f"Error calculating grade: {str(e)}")
+        logger.error(f"Error calculating grade for student {student_id} in course {course_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to calculate grade"

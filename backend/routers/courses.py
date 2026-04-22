@@ -1,158 +1,159 @@
-"""Course endpoints"""
+"""Course endpoints - Supabase Edition"""
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
-from ..db.database import get_db
-from ..schemas.course import CourseCreate, CourseUpdate, CourseResponse, CourseDetailResponse
-from ..services.course_service import CourseService
+from ..core.config import supabase
 from ..dependencies.auth import get_current_user
 from ..models.user import User
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
 logger = logging.getLogger(__name__)
 
-@router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
-async def create_course(
-    course_data: CourseCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Create a new course - requires coordinator or admin role"""
-    if current_user.role not in ["coordinator", "admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only coordinators and admins can create courses"
-        )
-    
-    # Check if course code already exists
-    existing = await CourseService.get_course_by_code(db, course_data.code, course_data.semester)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Course {course_data.code} already exists for semester {course_data.semester}"
-        )
-    
-    try:
-        course = await CourseService.create_course(db, course_data)
-        return CourseResponse.model_validate(course)
-    except Exception as e:
-        logger.error(f"Error creating course: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create course"
-        )
-
-@router.get("/{course_id}", response_model=CourseDetailResponse)
-async def get_course(
-    course_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get a specific course"""
-    course = await CourseService.get_course(db, course_id)
-    if not course:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found"
-        )
-    
-    return CourseDetailResponse.model_validate(course)
 
 @router.get("")
 async def list_courses(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    semester: str = Query(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    """List courses with pagination"""
-    lecturer_id = None
-    if current_user.role == "lecturer":
-        lecturer_id = current_user.id
-    
-    courses, total = await CourseService.list_courses(
-        db,
-        skip=skip,
-        limit=limit,
-        lecturer_id=lecturer_id,
-        semester=semester,
-    )
-    
-    return {
-        "data": [CourseResponse.model_validate(c) for c in courses],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    """List all courses with pagination using Supabase"""
+    try:
+        logger.info(
+            f"Listing courses - user: {current_user.get('user_id')}, "
+            f"role: {current_user.get('role')}, skip: {skip}, limit: {limit}"
+        )
 
-@router.put("/{course_id}", response_model=CourseResponse)
-async def update_course(
-    course_id: UUID,
-    course_data: CourseUpdate,
+        # Query Supabase for courses with pagination
+        response = supabase.table("courses").select("*").range(skip, skip + limit - 1).execute()
+
+        courses = response.data if response.data else []
+
+        # Get total count
+        count_response = supabase.table("courses").select("id", count="exact").execute()
+        total = count_response.count if hasattr(count_response, "count") else 0
+
+        logger.info(f"Successfully retrieved {len(courses)} courses out of {total} total")
+
+        return {
+            "data": courses,
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+        }
+    except Exception as e:
+        logger.error(f"Error listing courses: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list courses: {str(e)}"
+        )
+
+
+@router.get("/{course_id}")
+async def get_course(
+    course_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+):
+    """Get a specific course by ID"""
+    try:
+        response = supabase.table("courses").select("*").eq("id", course_id).execute()
+
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting course {course_id}: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get course"
+        )
+
+
+@router.post("")
+async def create_course(
+    course_data: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new course - requires coordinator or admin role"""
+    if current_user.get("role") not in ["coordinator", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only coordinators and admins can create courses"
+        )
+
+    try:
+        response = supabase.table("courses").insert(course_data).execute()
+
+        if not response.data:
+            raise Exception("Failed to create course")
+
+        logger.info(f"Course created: {response.data[0]['code']} by user {current_user.get('user_id')}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating course: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create course"
+        )
+
+
+@router.put("/{course_id}")
+async def update_course(
+    course_id: str,
+    course_data: dict,
+    current_user: User = Depends(get_current_user),
 ):
     """Update a course - requires coordinator or admin role"""
-    if current_user.role not in ["coordinator", "admin"]:
+    if current_user.get("role") not in ["coordinator", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only coordinators and admins can update courses"
         )
-    
-    course = await CourseService.get_course(db, course_id)
-    if not course:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found"
-        )
-    
+
     try:
-        updated_course = await CourseService.update_course(db, course_id, course_data)
-        return CourseResponse.model_validate(updated_course)
+        response = supabase.table("courses").update(course_data).eq("id", course_id).execute()
+
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found"
+            )
+
+        logger.info(f"Course updated: {course_id}")
+        return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error updating course: {str(e)}")
+        logger.error(f"Error updating course {course_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update course"
         )
 
+
 @router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_course(
-    course_id: UUID,
+    course_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """Delete a course - requires admin role"""
-    if current_user.role != "admin":
+    if current_user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can delete courses"
         )
-    
-    success = await CourseService.delete_course(db, course_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found"
-        )
 
-@router.get("/lecturer/{lecturer_id}")
-async def get_lecturer_courses(
-    lecturer_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get all courses for a lecturer"""
-    if current_user.role == "lecturer" and current_user.id != lecturer_id:
+    try:
+        supabase.table("courses").delete().eq("id", course_id).execute()
+        logger.info(f"Course deleted: {course_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Error deleting course {course_id}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Can only view your own courses"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete course"
         )
-    
-    courses = await CourseService.get_lecturer_courses(db, lecturer_id)
-    return {
-        "data": [CourseResponse.model_validate(c) for c in courses],
-        "count": len(courses),
-    }
