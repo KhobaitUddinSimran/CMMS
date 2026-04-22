@@ -9,33 +9,36 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # Supabase Configuration
-    SUPABASE_URL: str = "https://dvrvotajdelswvdxkuyt.supabase.co"
-    SUPABASE_KEY: str = "sb_publishable_o0QSAC136pbITUn2R_dPwQ_TWxYfePY"
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:khubaibcmms@db.dvrvotajdelswvdxkuyt.supabase.co:5432/postgres"
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
     # JWT Configuration
-    JWT_SECRET_KEY: str = "dev-secret-key-change-in-production"
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     
     # Application Configuration
-    ORIGINS: list = ["http://localhost:3000", "http://localhost:3001", "http://localhost"]
-    ENVIRONMENT: str = "development"
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     
     # Email Configuration
-    RESEND_API_KEY: str = ""
-    EMAIL_FROM_ADDRESS: str = "noreply@cmms.utm.my"
-    EMAIL_FROM_NAME: str = "CMMS"
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+    EMAIL_FROM_ADDRESS: str = os.getenv("EMAIL_FROM_ADDRESS", "noreply@cmms.utm.my")
+    EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "CMMS")
     
     # Redis Configuration
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
     
     class Config:
         env_file = ".env"
         case_sensitive = True
-        extra = "allow"  # Allow extra fields from .env
+        extra = "allow"
 
 settings = Settings()
 
 # Initialize Supabase client
-supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+if settings.SUPABASE_URL and settings.SUPABASE_KEY:
+    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+else:
+    supabase = None
