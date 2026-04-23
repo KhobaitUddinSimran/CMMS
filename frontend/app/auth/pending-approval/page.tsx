@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+export const dynamic = 'force-dynamic'
+
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AuthLayout } from '@/components/auth/AuthLayout'
@@ -8,7 +10,7 @@ import { useAuth } from '@/lib/contexts/auth-context'
 import { useToastStore } from '@/stores/toastStore'
 import type { ApprovalStatus } from '@/types/auth'
 
-export default function PendingApprovalPage() {
+function PendingApprovalContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { checkApprovalStatus, user } = useAuth()
@@ -275,4 +277,12 @@ export default function PendingApprovalPage() {
   }
 
   return null
+}
+
+export default function PendingApprovalPage() {
+  return (
+    <Suspense fallback={null}>
+      <PendingApprovalContent />
+    </Suspense>
+  )
 }

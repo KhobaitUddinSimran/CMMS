@@ -114,7 +114,6 @@ export function AssessmentForm({
 
   const newTotal = totalWeight + formData.weight
   const isWeightValid = newTotal <= 100
-  const weightPercentage = remainingWeight > 0 ? (formData.weight / 100) * 100 : 0
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">

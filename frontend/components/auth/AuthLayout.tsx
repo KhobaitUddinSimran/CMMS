@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { UserRole } from '@/types/auth'
 
@@ -19,7 +19,7 @@ const roleColors: Record<UserRole | 'default', { bg: string; border: string; tex
   default: { bg: 'from-slate-50 to-slate-100', border: 'border-l-4 border-l-slate-600', text: 'text-slate-600' },
 }
 
-export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
+function AuthLayoutContent({ children, title, subtitle }: AuthLayoutProps) {
   const searchParams = useSearchParams()
   const roleParam = (searchParams?.get('role') as UserRole) || 'default'
   const colors = roleColors[roleParam as keyof typeof roleColors] || roleColors.default
@@ -51,6 +51,14 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
         <p>UTM - Carry Mark Management System</p>
       </div>
     </div>
+  )
+}
+
+export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
+  return (
+    <Suspense fallback={null}>
+      <AuthLayoutContent title={title} subtitle={subtitle}>{children}</AuthLayoutContent>
+    </Suspense>
   )
 }
 

@@ -1,18 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
-import { Input } from '@/components/common/Input'
 import { Select } from '@/components/common/Select'
 import { Spinner } from '@/components/common/Spinner'
 import { AssessmentForm, type AssessmentFormData } from '@/components/assessment/AssessmentForm'
 import { useToastStore } from '@/stores/toastStore'
-import { listCourses, getCourse } from '@/lib/api/courses'
+import { listCourses } from '@/lib/api/courses'
 import { listAssessments, createAssessment, deleteAssessment, lockAssessmentSchema } from '@/lib/api/assessments'
-import { Lock, Plus, AlertCircle } from 'lucide-react'
+import { Lock } from 'lucide-react'
 
 interface CourseData {
   id: string
@@ -28,10 +26,9 @@ interface Assessment extends AssessmentFormData {
 }
 
 export default function AssessmentSetupPage() {
-  const router = useRouter()
   const { addToast } = useToastStore()
 
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [courses, setCourses] = useState<CourseData[]>([])
   const [selectedCourseId, setSelectedCourseId] = useState<string>('')
   const [selectedCourse, setSelectedCourse] = useState<CourseData | null>(null)
@@ -53,7 +50,7 @@ export default function AssessmentSetupPage() {
     try {
       setLoading(true)
       const data = await listCourses()
-      setCourses(data.data || data)
+      setCourses((data.data || (data as any)) as CourseData[])
     } catch (error) {
       addToast('Failed to load courses', 'error')
     } finally {

@@ -20,7 +20,7 @@ interface StudentRosterProps {
   onDropStudent: (studentId: string) => Promise<void>
 }
 
-export function StudentRoster({ courseId, students, onAddStudent, onDropStudent }: StudentRosterProps) {
+export function StudentRoster({ students, onAddStudent, onDropStudent }: StudentRosterProps) {
   const [addEmail, setAddEmail] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [addError, setAddError] = useState('')
