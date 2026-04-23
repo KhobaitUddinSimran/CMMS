@@ -8,7 +8,7 @@ import { RoleSelector } from '@/components/auth/RoleSelector'
 import { FormInput } from '@/components/auth/FormInput'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { useToastStore } from '@/stores/toastStore'
-import type { UserRole } from '@/types/auth'
+import type { LoginRole } from '@/types/auth'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,8 +17,8 @@ export default function LoginPage() {
   const { addToast } = useToastStore()
 
   const [step, setStep] = useState<'role' | 'credentials'>('role')
-  const [selectedRole, setSelectedRole] = useState<UserRole | undefined>(
-    (searchParams?.get('role') as UserRole) || undefined
+  const [selectedRole, setSelectedRole] = useState<LoginRole | undefined>(
+    (searchParams?.get('role') as LoginRole) || undefined
   )
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

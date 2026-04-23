@@ -21,14 +21,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         payload = decode_token(token)
         user_id = payload.get("sub")
         role = payload.get("role")
-        
+        special_roles = payload.get("special_roles", []) or []
+
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication token"
             )
-        
-        return {"user_id": user_id, "role": role}
+
+        return {"user_id": user_id, "role": role, "special_roles": special_roles}
         
     except JWTError:
         raise HTTPException(
@@ -89,6 +90,30 @@ def require_role(required_role: str):
             raise HTTPException(status_code=403, detail="Access denied - insufficient permissions")
         return user
     return check_role
+
+
+def has_effective_role(user: dict, *allowed_roles: str) -> bool:
+    """Check if user's base role OR any special role matches any allowed role.
+    E.g., a lecturer with special_roles=['coordinator'] has effective roles {lecturer, coordinator}.
+    """
+    if not user:
+        return False
+    base = user.get("role")
+    special = set(user.get("special_roles", []) or [])
+    effective = special | ({base} if base else set())
+    return any(r in effective for r in allowed_roles)
+
+
+def require_effective_role(*allowed_roles: str):
+    """Require that user's base role OR any special_role is in allowed_roles."""
+    async def check(user = Depends(get_current_user)):
+        if not has_effective_role(user, *allowed_roles):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access denied - requires one of: {', '.join(allowed_roles)}"
+            )
+        return user
+    return check
 
 def require_role_active(required_role: str):
     """Require a specific role and that user is active"""

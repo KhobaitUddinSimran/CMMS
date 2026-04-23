@@ -46,20 +46,8 @@ export function RosterUpload({ courseId, onUploadStart, onUploadComplete, onErro
     onUploadStart()
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await fetch(`/api/courses/${courseId}/roster`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to upload roster file')
-      }
-
-      const data = await response.json()
+      const { previewRosterUpload } = await import('@/lib/api/enrollments')
+      const data = await previewRosterUpload(courseId, file)
       onUploadComplete(data)
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Failed to process file')

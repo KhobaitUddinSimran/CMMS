@@ -114,7 +114,8 @@ async def login(request: Request, credentials: LoginRequest, db: AsyncSession = 
                 user_uuid = user.get("id", str(uuid.uuid4()))
                 token = create_access_token(
                     user_id=user_uuid,
-                    role=user["role"]
+                    role=user["role"],
+                    special_roles=user.get("special_roles", []),
                 )
                 
                 logger.info(f"User {credentials.email} logged in successfully (mock) - UUID: {user_uuid}")
@@ -166,6 +167,14 @@ async def signup(
     Creates a new user account pending admin approval.
     """
     try:
+        # Only student, lecturer, admin can sign up directly
+        # Coordinator and HOD are special roles assigned by admin to lecturers
+        if signup_data.role not in ("student", "lecturer", "admin"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Coordinator and HOD roles are assigned by admin. Please sign up as a lecturer."
+            )
+        
         # Validate email domain
         if not (signup_data.email.endswith("@utm.my") or signup_data.email.endswith("@graduate.utm.my")):
             raise HTTPException(
@@ -250,36 +259,64 @@ async def logout(current_user = Depends(get_current_user)):
         )
 
 # ==================== GET CURRENT USER ====================
-@router.get("/me", response_model=AuthUserResponse)
+@router.get("/me")
 async def get_current_user_info(current_user = Depends(get_current_user)):
-    """Get current authenticated user info"""
+    """Get current authenticated user info (includes special_roles for dynamic sidebar)"""
     try:
-        email = current_user.get("user_id")
+        user_id = current_user.get("user_id")
         role = current_user.get("role")
-        
-        # Check mock users
-        if email in MOCK_USERS:
-            user = MOCK_USERS[email]
-            return AuthUserResponse(
-                id=email,
-                email=email,
-                full_name=user["full_name"],
-                role=user["role"],
-                is_active=user["is_active"],
-                email_verified=user["email_verified"],
-                approval_status=user["approval_status"],
-            )
-        
-        # If not found, return minimal info from token
-        return AuthUserResponse(
-            id=email,
-            email=email,
-            full_name="",
-            role=role,
-            is_active=True,
-            email_verified=False,
-            approval_status="pending",
-        )
+
+        # Try Supabase first (real users have UUID ids)
+        try:
+            from ..core.config import supabase
+            resp = supabase.table("users").select("*").eq("id", user_id).execute()
+            if resp.data:
+                u = resp.data[0]
+                return {
+                    "id": u.get("id"),
+                    "email": u.get("email"),
+                    "full_name": u.get("full_name", ""),
+                    "role": u.get("role"),
+                    "is_active": u.get("is_active", True),
+                    "email_verified": u.get("email_verified", False),
+                    "approval_status": u.get("approval_status", "pending"),
+                    "special_roles": u.get("special_roles") or [],
+                }
+        except Exception as e:
+            logger.warning(f"Supabase /me lookup failed, trying mock: {e}")
+
+        # Mock lookup — find by UUID or by email match
+        matched_email = None
+        matched_user = None
+        for email_key, user_data in MOCK_USERS.items():
+            if user_data.get("id") == user_id or email_key == user_id:
+                matched_email = email_key
+                matched_user = user_data
+                break
+
+        if matched_user:
+            return {
+                "id": matched_user.get("id", matched_email),
+                "email": matched_email,
+                "full_name": matched_user.get("full_name", ""),
+                "role": matched_user.get("role", role),
+                "is_active": matched_user.get("is_active", True),
+                "email_verified": matched_user.get("email_verified", True),
+                "approval_status": matched_user.get("approval_status", "approved"),
+                "special_roles": matched_user.get("special_roles", []),
+            }
+
+        # Fallback: minimal info from token
+        return {
+            "id": user_id,
+            "email": "",
+            "full_name": "",
+            "role": role,
+            "is_active": True,
+            "email_verified": False,
+            "approval_status": "pending",
+            "special_roles": [],
+        }
         
     except Exception as e:
         logger.error(f"Error fetching user info: {str(e)}")

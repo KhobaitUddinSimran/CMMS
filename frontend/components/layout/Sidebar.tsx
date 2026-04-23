@@ -60,7 +60,7 @@ const navByRole: Record<UserRole, NavItem[]> = {
 }
 
 interface SidebarProps {
-  role: UserRole
+  role: UserRole | UserRole[]
   isOpen?: boolean
 }
 
@@ -68,7 +68,24 @@ export function Sidebar({ role, isOpen = true }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { logout, user } = useAuth()
-  const items = navByRole[role]
+
+  // Merge nav items from all applicable roles, deduplicated by path.
+  // Order: base role first, then special roles (coordinator, hod) appended.
+  const roles: UserRole[] = Array.isArray(role) ? role : [role]
+  const seenPaths = new Set<string>()
+  const items: NavItem[] = []
+  for (const r of roles) {
+    const roleItems = navByRole[r] || []
+    for (const item of roleItems) {
+      if (!seenPaths.has(item.path)) {
+        seenPaths.add(item.path)
+        items.push(item)
+      }
+    }
+  }
+
+  // Display label in user card: show all active roles joined
+  const displayRole = roles.join(' + ')
 
   const isActive = (path: string) => {
     if (path === '/dashboard') return pathname === '/dashboard'
@@ -92,7 +109,7 @@ export function Sidebar({ role, isOpen = true }: SidebarProps) {
           </div>
           <div className="min-w-0">
             <p className="text-[14px] font-semibold text-[#111827] truncate">{user?.name}</p>
-            <p className="text-[12px] text-[#6B7280] capitalize">{role}</p>
+            <p className="text-[12px] text-[#6B7280] capitalize">{displayRole}</p>
           </div>
         </div>
       </div>

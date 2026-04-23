@@ -2,7 +2,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from ..core.config import supabase
-from ..dependencies.auth import get_current_user
+from ..dependencies.auth import get_current_user, has_effective_role
 from ..models.user import User
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
@@ -79,26 +79,81 @@ async def create_course(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new course - requires coordinator or admin role"""
-    if current_user.get("role") not in ["coordinator", "admin"]:
+    if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only coordinators and admins can create courses"
         )
 
+    # Normalize payload for Supabase courses schema.
+    # Works with both the original schema (academic_year) and migration 002 (year).
+    payload = dict(course_data)
+
+    # Required: code, name
+    if not payload.get("code"):
+        raise HTTPException(status_code=400, detail="Course code is required")
+    if not payload.get("name"):
+        raise HTTPException(status_code=400, detail="Course name is required")
+
+    # Cast semester to int (DB expects INTEGER)
     try:
-        response = supabase.table("courses").insert(course_data).execute()
+        if payload.get("semester") is not None and payload.get("semester") != "":
+            payload["semester"] = int(payload["semester"])
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Semester must be a number")
 
-        if not response.data:
-            raise Exception("Failed to create course")
+    # Mirror year ↔ academic_year so inserts work regardless of migration state
+    year_val = payload.get("year") or payload.get("academic_year")
+    if year_val:
+        payload["academic_year"] = year_val
+        payload["year"] = year_val
 
-        logger.info(f"Course created: {response.data[0]['code']} by user {current_user.get('user_id')}")
-        return response.data[0]
-    except Exception as e:
-        logger.error(f"Error creating course: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create course"
-        )
+    # Default credits
+    if not payload.get("credits"):
+        payload["credits"] = 3
+
+    # Default section
+    if not payload.get("section"):
+        payload["section"] = "01"
+
+    actor_id = current_user.get("user_id")
+
+    # Remove fields that may not exist in the live schema
+    payload.pop("coordinator_id", None)
+    payload.pop("created_by", None)  # column may not exist pre-migration-002
+
+    logger.info(f"Creating course with normalized payload keys: {list(payload.keys())}")
+
+    # Resilient insert: on "column not found" errors, strip that column and retry.
+    # Handles schemas where migration 002 has not been applied yet.
+    import re
+    last_err = None
+    for _ in range(6):
+        try:
+            response = supabase.table("courses").insert(payload).execute()
+            if not response.data:
+                raise Exception("Insert returned no data")
+            logger.info(f"Course created: {response.data[0].get('code')} by user {actor_id}")
+            return response.data[0]
+        except Exception as e:
+            last_err = e
+            msg = str(e)
+            # Parse missing column name from Supabase PGRST204 error
+            m = re.search(r"Could not find the '([^']+)' column", msg)
+            if m:
+                missing = m.group(1)
+                if missing in payload:
+                    logger.warning(f"Dropping unknown column '{missing}' and retrying")
+                    payload.pop(missing, None)
+                    continue
+            break
+
+    err_msg = str(last_err) if last_err else "Unknown error"
+    logger.error(f"Error creating course after retries: {err_msg}")
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Failed to create course: {err_msg}"
+    )
 
 
 @router.put("/{course_id}")
@@ -108,7 +163,7 @@ async def update_course(
     current_user: User = Depends(get_current_user),
 ):
     """Update a course - requires coordinator or admin role"""
-    if current_user.get("role") not in ["coordinator", "admin"]:
+    if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only coordinators and admins can update courses"
@@ -157,3 +212,50 @@ async def delete_course(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete course"
         )
+
+
+@router.post("/{course_id}/lecturer")
+async def assign_lecturer(
+    course_id: str,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """Assign a lecturer to a course - requires coordinator or admin role"""
+    if not has_effective_role(current_user, "coordinator", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only coordinators and admins can assign lecturers"
+        )
+
+    lecturer_id = data.get("lecturer_id")
+    if not lecturer_id:
+        raise HTTPException(status_code=400, detail="lecturer_id is required")
+
+    try:
+        # Verify course exists
+        course_resp = supabase.table("courses").select("*").eq("id", course_id).execute()
+        if not course_resp.data:
+            raise HTTPException(status_code=404, detail="Course not found")
+
+        # Verify lecturer exists and has lecturer role
+        lecturer_resp = supabase.table("users").select("*").eq("id", lecturer_id).execute()
+        if not lecturer_resp.data:
+            raise HTTPException(status_code=404, detail="Lecturer not found")
+
+        lecturer = lecturer_resp.data[0]
+        if lecturer.get("role") not in ["lecturer", "admin"]:
+            raise HTTPException(status_code=400, detail="User is not a lecturer")
+
+        # Update course
+        resp = supabase.table("courses").update({"lecturer_id": lecturer_id}).eq("id", course_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=500, detail="Failed to assign lecturer")
+
+        logger.info(f"Lecturer {lecturer_id} assigned to course {course_id} by {current_user.get('user_id')}")
+        return resp.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error assigning lecturer to course {course_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to assign lecturer")

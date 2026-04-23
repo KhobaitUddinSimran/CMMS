@@ -8,7 +8,7 @@ import { RoleSelector } from '@/components/auth/RoleSelector'
 import { FormInput } from '@/components/auth/FormInput'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { useToastStore } from '@/stores/toastStore'
-import type { UserRole } from '@/types/auth'
+import type { LoginRole } from '@/types/auth'
 
 type SignupStep = 'role' | 'details' | 'password' | 'success'
 
@@ -19,7 +19,7 @@ export default function SignupPage() {
 
   // Form state
   const [step, setStep] = useState<SignupStep>('role')
-  const [selectedRole, setSelectedRole] = useState<UserRole | undefined>()
+  const [selectedRole, setSelectedRole] = useState<LoginRole | undefined>()
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [matricNumber, setMatricNumber] = useState('')
@@ -136,7 +136,7 @@ export default function SignupPage() {
           <RoleSelector
             selected={selectedRole}
             onChange={setSelectedRole}
-            multiSelect={true}
+            signupMode={true}
           />
           <button
             onClick={handleRoleSelect}

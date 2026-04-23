@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from ..core.config import supabase
-from ..dependencies.auth import get_current_user
+from ..dependencies.auth import get_current_user, has_effective_role
 from typing import Optional
 
 # Use prefix to avoid path duplication issues
@@ -50,11 +50,11 @@ async def create_assessment(
     
     logger.info(f"Create assessment request - Course: {course_id}, User ID: {user_id}, Role: {user_role}")
     
-    if user_role not in ["lecturer", "admin"]:
-        logger.warning(f"Unauthorized assessment creation - Expected lecturer/admin, got: {user_role}")
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+        logger.warning(f"Unauthorized assessment creation - Expected lecturer/coordinator/admin, got: {user_role} + {current_user.get('special_roles')}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Only lecturers and admins can create assessments. Your role: {user_role}"
+            detail=f"Only lecturers, coordinators, and admins can create assessments. Your role: {user_role}"
         )
     
     try:
@@ -198,7 +198,7 @@ async def update_assessment(
     current_user = Depends(get_current_user),
 ):
     """Update an assessment - requires lecturer or admin role"""
-    if current_user.get("role") not in ["lecturer", "admin"]:
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers and admins can update assessments"
@@ -278,11 +278,11 @@ async def delete_assessment(
     assessment_id: str,
     current_user = Depends(get_current_user),
 ):
-    """Delete an assessment - requires lecturer or admin role"""
+    """Delete an assessment - requires lecturer, coordinator, or admin role"""
     user_id = current_user.get("user_id")
     user_role = current_user.get("role")
     
-    if user_role not in ["lecturer", "admin"]:
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only lecturers and admins can delete assessments"
@@ -337,3 +337,53 @@ async def delete_assessment(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete assessment"
         )
+
+
+@router.post("/{course_id}/assessments/lock")
+async def lock_assessment_schema(
+    course_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Lock all assessments for a course - prevents further schema changes.
+    Requires lecturer (assigned) or admin role."""
+    user_role = current_user.get("role")
+    user_id = current_user.get("user_id")
+
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers, coordinators, and admins can lock schemas")
+
+    try:
+        # Verify course
+        course_resp = supabase.table("courses").select("*").eq("id", course_id).execute()
+        if not course_resp.data:
+            raise HTTPException(status_code=404, detail="Course not found")
+
+        course = course_resp.data[0]
+        if user_role == "lecturer" and course.get("lecturer_id") != user_id:
+            raise HTTPException(status_code=403, detail="You are not assigned to this course")
+
+        # Check cumulative weight equals 100%
+        assessments_resp = supabase.table("assessments").select("weight_percentage").eq("course_id", course_id).execute()
+        assessments = assessments_resp.data or []
+        total_weight = sum(a.get("weight_percentage", 0) for a in assessments)
+
+        if not assessments:
+            raise HTTPException(status_code=400, detail="No assessments to lock")
+
+        if total_weight != 100:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Total weight must equal 100% before locking. Current total: {total_weight}%"
+            )
+
+        # Lock all assessments
+        supabase.table("assessments").update({"is_locked": True}).eq("course_id", course_id).execute()
+
+        logger.info(f"Assessment schema locked for course {course_id} by user {user_id}")
+        return {"message": "Assessment schema locked successfully", "total_weight": total_weight}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error locking schema for course {course_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to lock assessment schema")
