@@ -46,13 +46,21 @@ settings = Settings()
 # Prefer service_role key (bypasses RLS) for backend operations; fall back to anon key.
 _effective_key = settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY
 if settings.SUPABASE_URL and _effective_key:
-    supabase = create_client(settings.SUPABASE_URL, _effective_key)
-    if not settings.SUPABASE_SERVICE_KEY:
+    try:
+        supabase = create_client(settings.SUPABASE_URL, _effective_key)
+        if not settings.SUPABASE_SERVICE_KEY:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "SUPABASE_SERVICE_KEY not set — using anon key. "
+                "Writes may fail due to RLS. Set SUPABASE_SERVICE_KEY in backend/.env from "
+                "Supabase Dashboard → Project Settings → API → service_role key."
+            )
+    except Exception as _e:
         import logging as _logging
-        _logging.getLogger(__name__).warning(
-            "SUPABASE_SERVICE_KEY not set — using anon key. "
-            "Writes may fail due to RLS. Set SUPABASE_SERVICE_KEY in backend/.env from "
-            "Supabase Dashboard → Project Settings → API → service_role key."
+        _logging.getLogger(__name__).error(
+            f"Failed to initialise Supabase client: {_e}. "
+            "Check SUPABASE_URL and SUPABASE_KEY environment variables."
         )
+        supabase = None
 else:
     supabase = None
