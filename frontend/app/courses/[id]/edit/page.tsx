@@ -12,8 +12,12 @@ import { useToastStore } from '@/stores/toastStore'
 import { getCourse, updateCourse, listLecturers, assignLecturer } from '@/lib/api/courses'
 import { ArrowLeft } from 'lucide-react'
 
-interface CourseData extends CourseFormData {
+interface CourseData extends Partial<CourseFormData> {
   id: string
+  code: string
+  section: string
+  year: string
+  semester: string
   lecturer_id?: string
 }
 

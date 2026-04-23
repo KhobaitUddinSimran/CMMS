@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MainLayout } from '@/components/layout/MainLayout'
-import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { CourseForm, type CourseFormData } from '@/components/course/CourseForm'
 import { useToastStore } from '@/stores/toastStore'

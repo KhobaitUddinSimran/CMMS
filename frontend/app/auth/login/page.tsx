@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+export const dynamic = 'force-dynamic'
+
+import React, { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AuthLayout } from '@/components/auth/AuthLayout'
@@ -10,7 +12,7 @@ import { useAuth } from '@/lib/contexts/auth-context'
 import { useToastStore } from '@/stores/toastStore'
 import type { LoginRole } from '@/types/auth'
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login, loading, error, isAuthenticated } = useAuth()
@@ -198,5 +200,13 @@ export default function LoginPage() {
         </button>
       </form>
     </AuthLayout>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   )
 }

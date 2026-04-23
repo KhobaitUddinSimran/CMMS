@@ -85,8 +85,9 @@ async def create_course(
             detail="Only coordinators and admins can create courses"
         )
 
-    # Normalize payload for Supabase courses schema.
-    # Works with both the original schema (academic_year) and migration 002 (year).
+    # Build a clean payload matched to the actual Supabase courses schema:
+    # id, code, name, description, credits, lecturer_id, department_id,
+    # semester, academic_year, max_students, created_at, updated_at
     payload = dict(course_data)
 
     # Required: code, name
@@ -95,65 +96,65 @@ async def create_course(
     if not payload.get("name"):
         raise HTTPException(status_code=400, detail="Course name is required")
 
-    # Cast semester to int (DB expects INTEGER)
+    # Cast semester to int
     try:
         if payload.get("semester") is not None and payload.get("semester") != "":
             payload["semester"] = int(payload["semester"])
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Semester must be a number")
 
-    # Mirror year ↔ academic_year so inserts work regardless of migration state
+    # Map year → academic_year ("2025" or "2025/2026" → "2025/2026")
     year_val = payload.get("year") or payload.get("academic_year")
     if year_val:
-        payload["academic_year"] = year_val
-        payload["year"] = year_val
+        y = str(year_val).strip()
+        if "/" not in y:
+            payload["academic_year"] = f"{y}/{int(y)+1}"
+        else:
+            payload["academic_year"] = y
 
     # Default credits
     if not payload.get("credits"):
         payload["credits"] = 3
 
-    # Default section
-    if not payload.get("section"):
-        payload["section"] = "01"
+    # lecturer_id — use provided value or fall back to first lecturer in DB
+    if not payload.get("lecturer_id"):
+        try:
+            lect_resp = supabase.table("users").select("id").eq("role", "lecturer").limit(1).execute()
+            if lect_resp.data:
+                payload["lecturer_id"] = lect_resp.data[0]["id"]
+        except Exception:
+            pass
+
+    # department_id — use provided value or fall back to first department in DB
+    if not payload.get("department_id"):
+        try:
+            dept_resp = supabase.table("courses").select("department_id").limit(1).execute()
+            if dept_resp.data and dept_resp.data[0].get("department_id"):
+                payload["department_id"] = dept_resp.data[0]["department_id"]
+        except Exception:
+            pass
 
     actor_id = current_user.get("user_id")
 
-    # Remove fields that may not exist in the live schema
-    payload.pop("coordinator_id", None)
-    payload.pop("created_by", None)  # column may not exist pre-migration-002
+    # Strip columns that don't exist in the live schema
+    for col in ["coordinator_id", "created_by", "year", "section"]:
+        payload.pop(col, None)
 
-    logger.info(f"Creating course with normalized payload keys: {list(payload.keys())}")
+    logger.info(f"Creating course with payload keys: {list(payload.keys())}")
 
-    # Resilient insert: on "column not found" errors, strip that column and retry.
-    # Handles schemas where migration 002 has not been applied yet.
-    import re
-    last_err = None
-    for _ in range(6):
-        try:
-            response = supabase.table("courses").insert(payload).execute()
-            if not response.data:
-                raise Exception("Insert returned no data")
-            logger.info(f"Course created: {response.data[0].get('code')} by user {actor_id}")
-            return response.data[0]
-        except Exception as e:
-            last_err = e
-            msg = str(e)
-            # Parse missing column name from Supabase PGRST204 error
-            m = re.search(r"Could not find the '([^']+)' column", msg)
-            if m:
-                missing = m.group(1)
-                if missing in payload:
-                    logger.warning(f"Dropping unknown column '{missing}' and retrying")
-                    payload.pop(missing, None)
-                    continue
-            break
-
-    err_msg = str(last_err) if last_err else "Unknown error"
-    logger.error(f"Error creating course after retries: {err_msg}")
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Failed to create course: {err_msg}"
-    )
+    try:
+        response = supabase.table("courses").insert(payload).execute()
+        if not response.data:
+            raise Exception("Insert returned no data")
+        logger.info(f"Course created: {response.data[0].get('code')} by user {actor_id}")
+        return response.data[0]
+    except Exception as e:
+        err_msg = str(e)
+        logger.error(f"Error creating course: {err_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to create course: {err_msg}"
+        )
 
 
 @router.put("/{course_id}")

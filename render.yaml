@@ -1,8 +1,69 @@
 services:
+  # ─────────────────────────────────────────────────
+  # Backend  (FastAPI / Python 3.12)
+  # ─────────────────────────────────────────────────
   - type: web
     name: cmms-backend
-    root_dir: .
     runtime: python
-    pythonVersion: 3.12
+    region: singapore
+    plan: free
+    rootDir: .
+    pythonVersion: "3.12"
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Supabase – fill in from Supabase Dashboard → Project Settings → API
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      # Database
+      - key: DATABASE_URL
+        sync: false
+      # Auth – auto-generated secure secret
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      # Email (Resend – https://resend.com)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM_ADDRESS
+        value: noreply@cmms.utm.my
+      - key: EMAIL_FROM_NAME
+        value: CMMS
+      # App
+      - key: ENVIRONMENT
+        value: production
+      # CORS – set to your Render frontend URL once the frontend is deployed
+      # e.g.  https://cmms-frontend.onrender.com
+      - key: CORS_ORIGINS
+        sync: false
+
+  # ─────────────────────────────────────────────────
+  # Frontend  (Next.js / Node 20)
+  # ─────────────────────────────────────────────────
+  - type: web
+    name: cmms-frontend
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: frontend
+    nodeVersion: "20"
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      # Automatically wired to the backend service URL
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: cmms-backend
+          type: web
+          property: url
+      # Supabase public keys (safe to expose in browser)
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      # App
+      - key: NODE_ENV
+        value: production

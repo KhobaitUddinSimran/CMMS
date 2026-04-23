@@ -152,7 +152,7 @@ async def assign_special_role(
     if special_role not in ["coordinator", "hod"]:
         raise HTTPException(status_code=400, detail="Special role must be 'coordinator' or 'hod'")
 
-    # Try Supabase
+    # Try Supabase — also always sync MOCK_USERS (source of truth when DB column missing)
     try:
         user_resp = supabase.table("users").select("*").eq("email", email).execute()
         if user_resp.data:
@@ -160,10 +160,19 @@ async def assign_special_role(
             if user.get("role") not in ["lecturer", "admin"]:
                 raise HTTPException(status_code=400, detail="Only lecturers can be assigned special roles")
 
-            current_special = user.get("special_roles") or []
+            # Use mock as source of truth for special_roles (DB column may not exist yet)
+            mock_user = MOCK_USERS.get(email, {})
+            current_special = list(user.get("special_roles") or mock_user.get("special_roles", []))
             if special_role not in current_special:
                 current_special.append(special_role)
+            try:
                 supabase.table("users").update({"special_roles": current_special}).eq("id", user["id"]).execute()
+            except Exception:
+                pass  # Column may not exist yet; mock sync below handles it
+
+            # Always keep mock in sync so list_lecturers reflects the change
+            if email in MOCK_USERS:
+                MOCK_USERS[email]["special_roles"] = current_special
 
             AuditService.log("SPECIAL_ROLE_ASSIGNED", current_user.get("user_id"), user["id"], {"role": special_role})
             return {"message": f"Special role '{special_role}' assigned successfully", "email": email, "special_roles": current_special}
@@ -172,7 +181,7 @@ async def assign_special_role(
     except Exception as e:
         logger.warning(f"Supabase assign role failed, trying mock: {e}")
 
-    # Fallback to mock
+    # Fallback to mock only
     if email not in MOCK_USERS:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -200,15 +209,25 @@ async def revoke_special_role(
     if special_role not in ["coordinator", "hod"]:
         raise HTTPException(status_code=400, detail="Special role must be 'coordinator' or 'hod'")
 
-    # Try Supabase
+    # Try Supabase — also always sync MOCK_USERS (source of truth when DB column missing)
     try:
         user_resp = supabase.table("users").select("*").eq("email", email).execute()
         if user_resp.data:
             user = user_resp.data[0]
-            current_special = user.get("special_roles") or []
+
+            # Use mock as source of truth for special_roles (DB column may not exist yet)
+            mock_user = MOCK_USERS.get(email, {})
+            current_special = list(user.get("special_roles") or mock_user.get("special_roles", []))
             if special_role in current_special:
                 current_special.remove(special_role)
+            try:
                 supabase.table("users").update({"special_roles": current_special}).eq("id", user["id"]).execute()
+            except Exception:
+                pass  # Column may not exist yet; mock sync below handles it
+
+            # Always keep mock in sync so list_lecturers reflects the change
+            if email in MOCK_USERS:
+                MOCK_USERS[email]["special_roles"] = current_special
 
             AuditService.log("SPECIAL_ROLE_REVOKED", current_user.get("user_id"), user["id"], {"role": special_role})
             return {"message": f"Special role '{special_role}' revoked successfully", "email": email, "special_roles": current_special}
@@ -217,7 +236,7 @@ async def revoke_special_role(
     except Exception as e:
         logger.warning(f"Supabase revoke role failed, trying mock: {e}")
 
-    # Fallback to mock
+    # Fallback to mock only
     if email not in MOCK_USERS:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -235,17 +254,23 @@ async def list_lecturers(
     """Get list of all lecturers (Admin only)"""
     lecturers = []
 
-    # Try Supabase
+    # Try Supabase — get lecturers list from DB
     try:
         resp = supabase.table("users").select("*").eq("role", "lecturer").execute()
         if resp.data:
             for u in resp.data:
+                email = u.get("email", "")
+                # special_roles column may not exist in DB yet — fall back to in-memory mock
+                db_special = u.get("special_roles") or []
+                mock_special = MOCK_USERS.get(email, {}).get("special_roles", [])
+                # Prefer whichever list is non-empty (DB if it exists, else mock)
+                special_roles = db_special if db_special else mock_special
                 lecturers.append({
                     "id": u.get("id"),
-                    "email": u.get("email"),
+                    "email": email,
                     "full_name": u.get("full_name", ""),
                     "role": "lecturer",
-                    "special_roles": u.get("special_roles") or [],
+                    "special_roles": special_roles,
                     "is_active": u.get("is_active", False),
                 })
             return {"count": len(lecturers), "lecturers": lecturers}
@@ -256,7 +281,7 @@ async def list_lecturers(
     for email, user_data in MOCK_USERS.items():
         if user_data.get("role") == "lecturer":
             lecturers.append({
-                "id": email,
+                "id": user_data.get("id", email),
                 "email": email,
                 "full_name": user_data.get("full_name", ""),
                 "role": "lecturer",
