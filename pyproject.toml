@@ -2,12 +2,6 @@
 requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.poetry]
-name = "cmms"
-version = "1.0.0"
-description = "Carry Mark Management System"
-packages = []
-
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
