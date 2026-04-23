@@ -16,6 +16,37 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = None
 
+
+@router.get("")
+async def list_users(
+    role: str | None = None,
+    current_user=Depends(get_current_user),
+):
+    """List users with optional role filter. Requires authenticated user."""
+    try:
+        from ..core.config import supabase
+        query = supabase.table("users").select("id, email, full_name, role, is_active")
+        if role:
+            query = query.eq("role", role)
+        resp = query.eq("is_active", True).execute()
+        users = resp.data or []
+        # For the getLecturers() frontend call that expects { lecturers: [...] }
+        if role == "lecturer":
+            return {"lecturers": users}
+        return {"users": users, "count": len(users)}
+    except Exception as e:
+        logger.error(f"Error listing users: {e}", exc_info=True)
+        # Fallback to mock
+        from ..db.mock_data import MOCK_USERS
+        users = []
+        for email, data in MOCK_USERS.items():
+            if role and data.get("role") != role:
+                continue
+            users.append({"id": data.get("id", email), "email": email, "full_name": data.get("full_name", ""), "role": data.get("role", "")})
+        if role == "lecturer":
+            return {"lecturers": users}
+        return {"users": users, "count": len(users)}
+
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str

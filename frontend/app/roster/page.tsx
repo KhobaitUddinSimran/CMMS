@@ -1,12 +1,24 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { ArrowLeft, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { RosterUpload } from '@/components/roster/RosterUpload'
 import { RosterPreview } from '@/components/roster/RosterPreview'
 import { RosterConfirmation } from '@/components/roster/RosterConfirmation'
 import { Toast } from '@/components/notification/Toast'
+import { listCourses } from '@/lib/api/courses'
+import { uploadRoster } from '@/lib/api/enrollments'
+
+interface CourseItem {
+  id: string
+  name: string
+  code: string
+  year: string
+  semester: string
+  section: string
+  status: string
+}
 
 export default function RosterPage() {
   const router = useRouter()
@@ -22,11 +34,34 @@ export default function RosterPage() {
   const [confirmationResult, setConfirmationResult] = useState<any>(null)
   const [showConfirmation, setShowConfirmation] = useState(false)
 
-  const courses = [
-    { id: 'cs-2024-1', name: 'Computer Science', year: 2024, students: 120, status: 'Active' },
-    { id: 'it-2024-1', name: 'Information Technology', year: 2024, students: 98, status: 'Active' },
-    { id: 'se-2024-1', name: 'Software Engineering', year: 2024, students: 87, status: 'Active' },
-  ]
+  const [courses, setCourses] = useState<CourseItem[]>([])
+  const [loadingCourses, setLoadingCourses] = useState(true)
+
+  useEffect(() => {
+    loadCourses()
+  }, [])
+
+  const loadCourses = async () => {
+    try {
+      setLoadingCourses(true)
+      const result = await listCourses()
+      setCourses(
+        (result.data || []).map((c: any) => ({
+          id: c.id,
+          name: c.name || c.code,
+          code: c.code,
+          year: c.year || c.academic_year || '',
+          semester: c.semester || '',
+          section: c.section || '',
+          status: 'Active',
+        }))
+      )
+    } catch {
+      setCourses([])
+    } finally {
+      setLoadingCourses(false)
+    }
+  }
 
   const handleError = useCallback((error: string) => {
     setErrorMessage(error)
@@ -49,20 +84,9 @@ export default function RosterPage() {
 
     setIsConfirming(true)
     try {
-      const response = await fetch(`/api/courses/${selectedCourse}/roster/confirm`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(previewData),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to confirm roster import')
-      }
-
-      const result = await response.json()
+      // Re-upload with actual import (not just preview)
+      // The previewData contains the file reference from the preview step
+      const result = await uploadRoster(selectedCourse, previewData._file || previewData)
       setConfirmationResult(result)
       setShowConfirmation(true)
       setShowPreview(false)
@@ -130,13 +154,18 @@ export default function RosterPage() {
         {/* Tab Content */}
         {activeTab === 'list' ? (
           // Courses List
+          loadingCourses ? (
+            <div className="text-center py-12 text-gray-500">Loading courses...</div>
+          ) : courses.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">No courses found</div>
+          ) :
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-100 border-b">
                 <tr>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Course</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Code</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Year</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Students</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Action</th>
                 </tr>
@@ -145,8 +174,8 @@ export default function RosterPage() {
                 {courses.map((course) => (
                   <tr key={course.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm text-gray-900 font-medium">{course.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{course.code}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{course.year}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{course.students}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
                         {course.status}
@@ -170,7 +199,7 @@ export default function RosterPage() {
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Upload Roster for {courses.find(c => c.id === selectedCourse)?.name}
+                Upload Roster for {courses.find(c => c.id === selectedCourse)?.code || courses.find(c => c.id === selectedCourse)?.name}
               </h2>
               <RosterUpload
                 courseId={selectedCourse || ''}

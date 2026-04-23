@@ -1,7 +1,8 @@
 // Auth Types
 export type UserRole = 'student' | 'lecturer' | 'admin' | 'coordinator' | 'hod'
+export type LoginRole = 'student' | 'lecturer' | 'admin' // Only these can login/signup directly
 export type BaseRole = 'student' | 'lecturer' | 'admin'
-export type SpecialRole = 'coordinator' | 'hod'
+export type SpecialRole = 'coordinator' | 'hod' // Assigned to lecturers by admin
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
 
 export interface AuthUser {
@@ -26,7 +27,7 @@ export interface AuthUser {
 export interface LoginRequest {
   email: string
   password: string
-  role: UserRole
+  role: LoginRole
 }
 
 export interface LoginResponse {
@@ -39,7 +40,7 @@ export interface LoginResponse {
 export interface SignupRequest {
   email: string
   full_name: string
-  role: UserRole
+  role: LoginRole // Only student or lecturer can sign up
   password: string
   matric_number: string
 }
@@ -84,8 +85,8 @@ export interface AuthContextType {
   token: string | null
   isAuthenticated: boolean
   
-  login: (email: string, password: string, role: UserRole) => Promise<{ user: AuthUser; approval_status: ApprovalStatus }>
-  signup: (email: string, full_name: string, role: UserRole, password: string, matric_number: string) => Promise<{ user_id: string; approval_status: ApprovalStatus }>
+  login: (email: string, password: string, role: LoginRole) => Promise<{ user: AuthUser; approval_status: ApprovalStatus }>
+  signup: (email: string, full_name: string, role: LoginRole, password: string, matric_number: string) => Promise<{ user_id: string; approval_status: ApprovalStatus }>
   logout: () => Promise<void>
   resetPassword: (email: string) => Promise<PasswordResetResponse>
   checkApprovalStatus: (userId: string) => Promise<ApprovalStatusResponse>

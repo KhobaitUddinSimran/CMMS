@@ -35,12 +35,15 @@ def create_app() -> FastAPI:
     app.state.limiter = auth.limiter
     
     # Parse CORS origins from environment
-    cors_origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS else ["http://localhost:3000"]
+    if settings.ENVIRONMENT == "development":
+        cors_origins = ["*"]
+    else:
+        cors_origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS else ["http://localhost:3000"]
     
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_credentials=True,
+        allow_credentials=True if settings.ENVIRONMENT != "development" else False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -1,16 +1,16 @@
 'use client'
 
 import React from 'react'
-import type { UserRole } from '@/types/auth'
+import type { LoginRole } from '@/types/auth'
 
 interface RoleSelectorProps {
-  selected?: UserRole
-  onChange: (role: UserRole) => void
+  selected?: LoginRole
+  onChange: (role: LoginRole) => void
   disabled?: boolean
-  multiSelect?: boolean
+  signupMode?: boolean // When true, only show student/lecturer (no admin)
 }
 
-const roles: { value: UserRole; label: string; description: string; gradient: string }[] = [
+const roles: { value: LoginRole; label: string; description: string; gradient: string }[] = [
   {
     value: 'student',
     label: 'Student',
@@ -26,18 +26,20 @@ const roles: { value: UserRole; label: string; description: string; gradient: st
   {
     value: 'admin',
     label: 'Admin',
-    description: 'System Admin',
+    description: 'System Administration',
     gradient: 'from-yellow-500 to-yellow-600',
   },
 ]
 
-export function RoleSelector({ selected, onChange, disabled = false, multiSelect = false }: RoleSelectorProps) {
-  const visibleRoles = ['student', 'lecturer'] // Only show these for signup
+export function RoleSelector({ selected, onChange, disabled = false, signupMode = false }: RoleSelectorProps) {
+  // Signup: only student/lecturer. Login: student/lecturer/admin.
+  // Coordinator & HOD are never shown — they are special roles assigned by admin to lecturers.
+  const visibleRoles = signupMode ? ['student', 'lecturer'] : ['student', 'lecturer', 'admin']
 
   return (
     <div className="space-y-3">
       {roles
-        .filter((r) => !multiSelect || visibleRoles.includes(r.value))
+        .filter((r) => visibleRoles.includes(r.value))
         .map((role) => (
           <button
             key={role.value}
@@ -78,11 +80,11 @@ export function RoleSelectDropdown({
   selected,
   onChange,
   disabled = false,
-}: Omit<RoleSelectorProps, 'multiSelect'>) {
+}: Omit<RoleSelectorProps, 'signupMode'>) {
   return (
     <select
       value={selected || ''}
-      onChange={(e) => onChange(e.target.value as UserRole)}
+      onChange={(e) => onChange(e.target.value as LoginRole)}
       disabled={disabled}
       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
     >

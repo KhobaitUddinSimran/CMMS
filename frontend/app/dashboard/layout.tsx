@@ -7,6 +7,26 @@ import { Header } from '@/components/layout/Header'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useAuth } from '@/lib/contexts/auth-context'
 import '@/styles/dashboard.css'
+import type { UserRole } from '@/types/auth'
+
+// Compute effective display role for Header (single, highest-priority role).
+function getEffectiveRole(user: any): UserRole {
+  if (!user) return 'student'
+  const specialRoles: string[] = user.special_roles || []
+  if (specialRoles.includes('hod')) return 'hod'
+  if (specialRoles.includes('coordinator')) return 'coordinator'
+  return user.role || 'student'
+}
+
+// Compute ALL applicable roles for Sidebar merging.
+// A lecturer with both special_roles gets lecturer + coordinator + hod nav combined.
+function getEffectiveRoles(user: any): UserRole[] {
+  if (!user) return ['student']
+  const base: UserRole = user.role || 'student'
+  const specialRoles: UserRole[] = (user.special_roles || []) as UserRole[]
+  // Base role first, then special roles appended (deduplicated downstream)
+  return [base, ...specialRoles]
+}
 
 export default function DashboardLayout({
   children,
@@ -14,9 +34,11 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, getCurrentUser } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const effectiveRole = getEffectiveRole(user)
+  const effectiveRoles = getEffectiveRoles(user)
 
   // Client-side redirect for authentication check - moved to useEffect
   useEffect(() => {
@@ -28,6 +50,15 @@ export default function DashboardLayout({
       }
     }
   }, [isAuthenticated, user, router])
+
+  // Refresh user profile on mount so special_roles from admin changes propagate
+  // without requiring logout/login
+  useEffect(() => {
+    if (isAuthenticated) {
+      getCurrentUser().catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Show loading while checking auth
   if (isCheckingAuth) {
@@ -47,7 +78,7 @@ export default function DashboardLayout({
         title="Dashboard"
         userName={user?.name || 'User'}
         userInitials={user?.initials || 'U'}
-        role={user?.role || 'student'}
+        role={effectiveRole}
         onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
       />
       <div className="dashboard-content">
@@ -61,7 +92,7 @@ export default function DashboardLayout({
         
         {/* Sidebar - hidden on mobile by default */}
         <div className={`fixed md:relative md:flex z-40 ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
-          <Sidebar isOpen={true} role={user?.role || 'student'} />
+          <Sidebar isOpen={true} role={effectiveRoles} />
         </div>
         
         <main className="dashboard-main">{children}</main>

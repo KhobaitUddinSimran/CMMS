@@ -4,13 +4,18 @@ from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 from supabase import create_client
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file (check backend dir and project root)
+from pathlib import Path
+_backend_dir = Path(__file__).resolve().parent.parent
+load_dotenv(_backend_dir / ".env")
+load_dotenv()  # also try cwd
 
 class Settings(BaseSettings):
     # Supabase Configuration
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    # Service role key (bypasses RLS). If set, takes precedence over SUPABASE_KEY for writes.
+    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
     # JWT Configuration
@@ -37,8 +42,17 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Initialize Supabase client
-if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+# Initialize Supabase client.
+# Prefer service_role key (bypasses RLS) for backend operations; fall back to anon key.
+_effective_key = settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY
+if settings.SUPABASE_URL and _effective_key:
+    supabase = create_client(settings.SUPABASE_URL, _effective_key)
+    if not settings.SUPABASE_SERVICE_KEY:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "SUPABASE_SERVICE_KEY not set — using anon key. "
+            "Writes may fail due to RLS. Set SUPABASE_SERVICE_KEY in backend/.env from "
+            "Supabase Dashboard → Project Settings → API → service_role key."
+        )
 else:
     supabase = None

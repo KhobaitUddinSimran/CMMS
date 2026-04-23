@@ -1,0 +1,2325 @@
+================================================================================
+CARRY MARK MANAGEMENT SYSTEM (CMMS)
+COMPLETE END-TO-END GUIDE
+================================================================================
+
+Project: Carry Mark Management System (CMMS)
+Institution: Universiti Teknologi Malaysia (UTM)
+Course: SCSJ 3104 – Application Development
+Author: Khobait Uddin Simran (A23MJ3006)
+Document Date: 22 April 2026
+Status: Sprint 1 Complete ✅ | Sprint 2 In Progress 🔄
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. SYSTEM OVERVIEW
+2. TECHNOLOGY STACK
+3. USER ROLES & PERMISSIONS
+4. INFRASTRUCTURE & DEPLOYMENT
+5. COMPLETE USER JOURNEYS (BY ROLE)
+6. API ENDPOINT REFERENCE
+7. DATABASE SCHEMA
+8. FEATURE WORKFLOWS
+9. TROUBLESHOOTING & MAINTENANCE
+10. PROJECT TIMELINE
+
+================================================================================
+1. SYSTEM OVERVIEW
+================================================================================
+
+WHAT IS CMMS?
+  CMMS is a web-based application that replaces manual Excel spreadsheets
+  with a secure, real-time mark management system. It digitizes the entire
+  continuous assessment process for university faculties.
+
+KEY CHARACTERISTICS:
+  • Standalone: Works without university central API
+  • Decentralized: Deploy independently to any server
+  • Containerized: Docker-based for easy deployment
+  • Role-Based: 5 distinct user roles with strict access control
+  • Smart Grid: Real-time mark entry interface
+  • AI-Enhanced: Anomaly detection and response suggestions
+  • Audit-Enabled: Immutable log of all changes
+  • Email-Driven: Secure OTP and notification delivery
+
+PROBLEM IT SOLVES:
+  ✗ Before: Manual Excel files, email chaos, no audit trail, human errors
+  ✓ After: Automated workflows, real-time updates, complete audit trail, validation
+
+================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+FRONTEND:
+  • Framework: Next.js 14.2.35 (React 18.2)
+  • Language: TypeScript
+  • Styling: Tailwind CSS
+  • State: Zustand
+  • HTTP: Axios (with JWT interceptor)
+  • Grid: AG Grid (virtual scrolling)
+  • Dev Server: localhost:3000
+  • Build Command: npm ci && npm run build
+  • Start Command: npm start
+
+BACKEND:
+  • Framework: FastAPI 0.104.1 (Python 3.12)
+  • Server: Uvicorn
+  • Database ORM: SQLAlchemy
+  • Validation: Pydantic + pydantic-settings
+  • Auth: JWT tokens (python-jose)
+  • Passwords: bcrypt (passlib)
+  • Email: Resend API (async dispatch)
+  • Rate Limiting: slowapi
+  • Dev Server: localhost:8000
+  • API Docs: localhost:8000/docs (Swagger)
+  • Build Command: pip install -r backend/requirements.txt
+  • Start Command: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+
+DATABASE:
+  • Engine: PostgreSQL (Supabase managed)
+  • URL: https://dvrvotajdelswvdxkuyt.supabase.co
+  • Security: Row-level security (RLS) enabled
+  • Backups: Automatic daily
+  • Replication: Real-time to replicas
+
+CONTAINERIZATION:
+  • Docker Compose: 4 services
+    - Frontend (Node 18)
+    - Backend (Python 3.12)
+    - PostgreSQL (database)
+    - Nginx (reverse proxy)
+
+DEPLOYMENT:
+  • Platform: Render.com
+  • Backend Service: https://<backend-name>.onrender.com
+  • Frontend Service: https://<frontend-name>.onrender.com
+  • Database: Supabase (external, not containerized)
+
+EMAIL SERVICE:
+  • Provider: Resend API
+  • Purpose: OTP dispatch, notifications, alerts
+  • Response Time: ~100ms per email
+  • Templates: OTP, Password Reset, Mark Publication
+
+================================================================================
+3. USER ROLES & PERMISSIONS
+================================================================================
+
+ROLE HIERARCHY (from least to most privileged):
+
+┌─ STUDENT (Least Privileged)
+│  Permissions:
+│    • Login with @graduate.utm.my email
+│    • View published marks only (not DRAFT)
+│    • View carry mark breakdown
+│    • Raise query on any published mark
+│    • View lecturer's response to queries
+│    • Cannot: Enter marks, publish, delete data
+│
+├─ LECTURER
+│  Permissions:
+│    • Login with @utm.my email
+│    • View assigned courses
+│    • Upload class roster (Excel)
+│    • Add/edit/delete assessments (before marks)
+│    • Enter marks via Smart Grid
+│    • Publish marks (trigger emails)
+│    • Flag anomalies
+│    • View & respond to student queries
+│    • Export marks to CSV
+│    • Cannot: Create courses, override locks
+│
+├─ COURSE COORDINATOR
+│  Permissions:
+│    • Login with @utm.my email
+│    • Create new course shells
+│    • Assign lecturers to courses
+│    • Track lecturer credit hour loads
+│    • View course metadata only
+│    • Cannot: Enter marks, modify assessments
+│
+├─ HEAD OF DEPARTMENT (HOD)
+│  Permissions:
+│    • Login with @utm.my email
+│    • View all department courses (read-only)
+│    • View assessment schemas
+│    • View mark distributions & statistics
+│    • Receive failure rate alerts (>40%)
+│    • View department analytics dashboard
+│    • Export reports to PDF
+│    • Cannot: Modify any data
+│
+└─ ADMIN (Most Privileged)
+   Permissions:
+     • Login with @utm.my email
+     • Create/suspend all user accounts
+     • Override assessment schema locks
+     • View complete audit log
+     • Perform database backups & restore
+     • System configuration
+     • Cannot be constrained by RLS
+
+PERMISSION MATRIX:
+
+Feature                 | Student | Lecturer | Coordinator | HOD | Admin
+========================================================================================
+View Published Marks    |    ✓    |    ✓     |     -      |  ✓  |  ✓
+Enter Marks            |    ✗    |    ✓     |     -      |  ✗  |  ✓
+Upload Roster          |    ✗    |    ✓     |     -      |  ✗  |  ✓
+Create Course          |    ✗    |    ✗     |     ✓      |  ✗  |  ✓
+Assign Lecturer        |    ✗    |    ✗     |     ✓      |  ✗  |  ✓
+View Analytics         |    ✗    |    ✗     |     -      |  ✓  |  ✓
+Publish Marks          |    ✗    |    ✓     |     -      |  ✗  |  ✓
+Raise Query            |    ✓    |    ✗     |     -      |  ✗  |  ✗
+Respond to Query       |    ✗    |    ✓     |     -      |  ✗  |  ✓
+Override Lock          |    ✗    |    ✗     |     -      |  ✗  |  ✓
+View Audit Log         |    ✗    |    ✗     |     -      |  ✗  |  ✓
+
+================================================================================
+4. INFRASTRUCTURE & DEPLOYMENT
+================================================================================
+
+LOCAL DEVELOPMENT SETUP:
+
+Step 1: Prerequisites
+  • Docker & Docker Compose installed
+  • Node.js 18+ installed
+  • Python 3.12+ installed
+  • Git installed
+  • GitHub repository cloned
+
+Step 2: Start Local Environment
+  $ docker-compose up -d
+  
+  Services started:
+    • Frontend: http://localhost:3000
+    • Backend API: http://localhost:8000
+    • API Docs: http://localhost:8000/docs
+    • PostgreSQL: localhost:5432
+    • Nginx: http://localhost
+
+Step 3: Seed Test Data
+  $ python backend/scripts/seed_data.py
+  
+  Creates 5 test users:
+    • student@graduate.utm.my / password@cmsss
+    • lecturer@utm.my / password@cmsss
+    • coordinator@utm.my / password@cmsss
+    • hod@utm.my / password@cmsss
+    • admin@utm.my / password@cmsss
+
+Step 4: Login & Verify
+  • Open http://localhost:3000
+  • Login with any test user
+  • Verify dashboard appears
+  • Check http://localhost:8000/docs for API endpoints
+
+PRODUCTION DEPLOYMENT (RENDER):
+
+Step 1: Backend Service
+  • Platform: Render.com
+  • Service Type: Web Service
+  • Repository: GitHub (KhobaitUddinSimran/CMMS)
+  • Build Command: pip install -r backend/requirements.txt
+  • Start Command: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+  • Environment Variables:
+    - ENVIRONMENT=production
+    - JWT_SECRET_KEY=<generate-32-char-secret>
+    - SUPABASE_URL=https://dvrvotajdelswvdxkuyt.supabase.co
+    - SUPABASE_KEY=<service-role-key>
+    - DATABASE_URL=<postgres-connection-string>
+    - CORS_ORIGINS=https://<frontend-url>.onrender.com
+    - RESEND_API_KEY=<resend-api-key>
+    - EMAIL_FROM_ADDRESS=noreply@cmms.utm.my
+    - EMAIL_FROM_NAME=CMMS
+
+  Health Check URL: https://<backend>.onrender.com/health
+  Auto-redeploy: Enabled on GitHub push
+
+Step 2: Frontend Service
+  • Platform: Render.com
+  • Service Type: Web Service
+  • Repository: GitHub (KhobaitUddinSimran/CMMS)
+  • Root Directory: frontend
+  • Build Command: npm ci && npm run build
+  • Start Command: npm start
+  • Environment Variables:
+    - NEXT_PUBLIC_API_URL=https://<backend-url>.onrender.com
+    - NEXT_PUBLIC_SUPABASE_URL=https://dvrvotajdelswvdxkuyt.supabase.co
+    - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_o0QSAC136pbITUn2R_dPwQ_TWxYfePY
+    - NODE_ENV=production
+
+  Auto-redeploy: Enabled on GitHub push
+
+Step 3: Database (Supabase)
+  • Already in production
+  • No changes needed
+  • Auto-backups every 6 hours
+  • Connection URL already set in backend env vars
+
+Step 4: Verification
+  • Backend health: curl https://<backend>.onrender.com/health
+  • Frontend loads: Open https://<frontend>.onrender.com
+  • Login works: Use test credentials
+  • API responds: Check /docs on backend URL
+
+================================================================================
+5. COMPLETE USER JOURNEYS (BY ROLE)
+================================================================================
+
+JOURNEY 1: COURSE COORDINATOR (Week 1)
+====================================
+
+Goal: Create course shells and assign lecturers
+
+Timeline: Monday 9 April 2026
+Time: 09:00 - 11:00
+
+Step 1: Login to CMMS
+  URL: http://localhost:3000/login
+  Email: coordinator@utm.my
+  Password: password@cmsss
+  
+  System Response:
+    ✓ Login accepted
+    ✓ Dashboard loads
+    ✓ "Courses" menu appears
+  
+  Database: Sessions table → INSERT session record
+
+Step 2: Navigate to Courses Page
+  Click: Sidebar → Courses
+  URL: http://localhost:3000/courses
+  
+  Page shows:
+    • List of existing courses (empty on first time)
+    • "Create New Course" button
+
+Step 3: Create First Course
+  Button: "Create New Course"
+  Form appears with fields:
+    - Course Code: SCSJ 3104 (required)
+    - Course Name: Introduction to Web Development
+    - Section: 01
+    - Year: 2026
+    - Semester: 1
+  
+  Submit: Click "Create"
+  
+  System Actions:
+    • Validate course code is unique
+    • Generate UUID for course_id
+    • Save to database
+    • Show success toast: "Course created successfully"
+    • Redirect to course detail page
+  
+  Database:
+    courses table → INSERT
+      {
+        course_id: "uuid-1234",
+        code: "SCSJ 3104",
+        name: "Introduction to Web Development",
+        section: "01",
+        year: 2026,
+        semester: 1,
+        created_by: "coordinator_id",
+        created_at: "2026-04-09T09:15:00Z"
+      }
+
+Step 4: Assign Lecturer to Course
+  On course detail page
+  Button: "Assign Lecturer"
+  Modal opens with:
+    - Search input for lecturer name/email
+    - List of available lecturers
+  
+  Type: "Ahmad"
+  Results show:
+    • Prof. Ahmad Abdullah (lecturer@utm.my)
+  
+  Click: Select Prof. Ahmad
+  
+  System Actions:
+    • Create lecturer assignment
+    • Send email to lecturer: "You've been assigned to SCSJ 3104"
+    • Show confirmation toast
+  
+  Database:
+    course_instructors table → INSERT
+      {
+        course_id: "uuid-1234",
+        lecturer_id: "lecturer_uuid",
+        assigned_date: "2026-04-09T09:20:00Z",
+        assigned_by: "coordinator_id"
+      }
+    
+    audit_log table → INSERT
+      {
+        action: "ASSIGNMENT_CREATED",
+        actor_id: "coordinator_id",
+        target_id: "lecturer_uuid",
+        metadata: { course_id: "uuid-1234" }
+      }
+
+Step 5: Create More Courses (Repeat Steps 3-4)
+  Repeat for:
+    • SCSJ 2101 - Assign to Dr. Fatimah
+    • SCSJ 2102 - Assign to Prof. Ali
+    • ... (10 more courses)
+
+Step 6: View Credit Hour Loads
+  Page: Courses → Lecturer Loads
+  Shows table:
+    Lecturer Name       | Assigned Courses | Total Credits | Max Allowed
+    =====================================================================
+    Prof. Ahmad         | 3 courses        | 9 credits     | 12 (OK)
+    Dr. Fatimah         | 2 courses        | 6 credits     | 12 (OK)
+    Prof. Ali           | 2 courses        | 6 credits     | 12 (OK)
+  
+  All within limits ✓
+
+Step 7: Logout
+  Click: Sidebar → Logout
+  System Response:
+    ✓ Session invalidated
+    ✓ Redirected to login page
+
+
+JOURNEY 2: LECTURER (Week 2-3)
+==============================
+
+Goal: Upload roster, define assessments, enter marks
+
+Timeline: Tuesday 10 April 2026
+Time: 10:00 - 17:00
+
+Step 1: Login to CMMS
+  URL: http://localhost:3000/login
+  Email: lecturer@utm.my
+  Password: password@cmsss
+  
+  System Response:
+    ✓ Login accepted
+    ✓ Dashboard shows assigned courses
+    ✓ "SCSJ 3104 – Section 01" listed
+  
+  Database: Sessions table → INSERT session record
+
+Step 2: Open Course & Start Roster Upload
+  Click: "SCSJ 3104 – Section 01"
+  URL: http://localhost:3000/courses/uuid-1234
+  
+  Page shows:
+    • Course name: SCSJ 3104
+    • Section: 01
+    • Year: 2026
+    • Semester: 1
+    • Tabs: Overview, Roster, Assessments, Marks
+  
+  Click: "Roster" tab
+  Click: "Upload Class Roster"
+
+Step 3: Select Excel File & Upload
+  File selector opens
+  Choose: "SCSJ3104_Roster.xlsx"
+  
+  File contains (25 students):
+    Row 1: Headers (Matric Number, Name, Email, ID Number)
+    Row 2-26: Student data
+      A23MJ3001 | Khobait Uddin Simran | a23mj3001@graduate.utm.my | 1234567
+      A23MJ3002 | Jane Doe | a23mj3002@graduate.utm.my | 1234568
+      ... (23 more rows)
+  
+  Click: "Upload"
+
+Step 4: System Processes Roster (Background)
+  BACKEND ACTIONS:
+    1. Receive FormData with file
+    2. Parse Excel in-memory using openpyxl
+    3. For each student row:
+       a. Check if email exists in users table
+       b. If NOT EXISTS:
+          • Generate OTP: random 6 digits (e.g., 123456)
+          • Hash OTP with bcrypt
+          • Create user record with force_password_change=true
+          • Queue email: Send OTP to student
+       c. If EXISTS:
+          • Link existing user to course (CREATE enrollment)
+    4. Create enrollment record for each student
+    5. Delete uploaded file from memory (never written to disk)
+    6. Return seeding report
+
+  DATABASE CHANGES:
+    users table → INSERT 15 records (new students)
+      {
+        user_id: "uuid",
+        email: "a23mj3001@graduate.utm.my",
+        name: "Khobait Uddin Simran",
+        password_hash: "$2b$12$...", (hashed OTP)
+        role: "STUDENT",
+        force_password_change: true,
+        created_at: "2026-04-10T10:30:00Z"
+      }
+    
+    enrollments table → INSERT 25 records
+      {
+        enrollment_id: "uuid",
+        student_id: "uuid",
+        course_id: "uuid-1234",
+        status: "ACTIVE",
+        enrolled_date: "2026-04-10T10:30:00Z"
+      }
+    
+    audit_log table → INSERT 1 record
+      {
+        action: "ROSTER_UPLOADED",
+        actor_id: "lecturer_id",
+        target_id: "course_id",
+        metadata: { created: 15, linked: 10, total: 25 }
+      }
+  
+  EMAIL QUEUE:
+    15 emails sent to new students:
+      Subject: Your CMMS Account Has Been Created
+      Body:
+        Dear Khobait Uddin Simran,
+        
+        Your CMMS account has been created for SCSJ 3104.
+        Your login credentials:
+          Email: a23mj3001@graduate.utm.my
+          One-Time Password: 123456
+        
+        Click here to log in: http://localhost:3000/login
+        
+        On first login, you will be required to set a new password.
+        
+        Best regards,
+        CMMS System
+
+Step 5: View Seeding Report
+  FRONTEND DISPLAY:
+    Seeding Report
+    ================
+    Status: ✓ SUCCESS
+    
+    Total Students Processed: 25
+    New Accounts Created: 15
+    Existing Accounts Linked: 10
+    Errors: 0
+    
+    Details:
+    • New students created (15): A23MJ3001, A23MJ3002, ...
+    • Existing students linked (10): A22MJ1001, A22MJ1002, ...
+    • OTP emails sent: 15
+    • Enrollment records: 25
+    
+    Toast: "Roster uploaded successfully. 15 students created, 10 linked."
+
+Step 6: View Roster in Table
+  Click: "View Roster"
+  Table shows all 25 students:
+    Matric   | Name                  | Email              | Status
+    ================================================================
+    A23MJ3001| Khobait Uddin Simran  | a23mj3001@...      | Active
+    A23MJ3002| Jane Doe              | a23mj3002@...      | Active
+    A23MJ3003| John Smith            | a23mj3003@...      | Active
+    ... (22 more rows)
+  
+  For each row:
+    • Options: View Details, Reset Password, Drop Student
+    • A23MJ3001 has "First login pending" badge (force_password_change=true)
+
+Step 7: Define Assessment Schema
+  Click: "Assessments" tab
+  
+  Button: "Add Assessment"
+  Modal opens with form:
+    - Assessment Name: Quiz 1 (required)
+    - Assessment Type: Select (quiz, test, assignment, project, other)
+    - Maximum Score: 10 (required)
+    - Weight Percentage: 10 (required)
+  
+  Fill form & Submit
+  
+  SYSTEM VALIDATION:
+    • Check: Cumulative weight ≤ 100%
+    • Calculation: Current total (0%) + new (10%) = 10% ✓
+    • Result: VALID → Save assessment
+  
+  DATABASE:
+    assessments table → INSERT
+      {
+        assessment_id: "uuid",
+        course_id: "uuid-1234",
+        name: "Quiz 1",
+        type: "quiz",
+        max_score: 10,
+        weight_percentage: 10,
+        status: "ACTIVE",
+        created_by: "lecturer_id",
+        created_at: "2026-04-10T11:00:00Z"
+      }
+
+Step 8: Add More Assessments (Validate Weight)
+  Repeat adding:
+    • Quiz 2: 10 points, 10% weight (total now: 20%)
+    • Test 1: 20 points, 20% weight (total now: 40%)
+    • Assignment 1: 15 points, 15% weight (total now: 55%)
+    • Project: 30 points, 30% weight (total now: 85%)
+    • Final Exam: 15 points, 15% weight (total now: 100%)
+  
+  All validations pass ✓
+  
+  TRY TO ADD INVALID ASSESSMENT:
+    • Try: 10% more
+    • System validation fails: "Weight validation error. Cumulative weight would be 110%. Maximum allowed: 100%. Remaining: 0%."
+    • HTTP Status: 422 (Unprocessable Entity)
+    • Toast: "Cannot add assessment. Weights exceed 100%."
+
+Step 9: View Assessment Schema
+  Table shows:
+    Assessment    | Type       | Max Score | Weight | Status
+    ===========================================================
+    Quiz 1        | quiz       | 10        | 10%    | ACTIVE
+    Quiz 2        | quiz       | 10        | 10%    | ACTIVE
+    Test 1        | test       | 20        | 20%    | ACTIVE
+    Assignment 1  | assignment | 15        | 15%    | ACTIVE
+    Project       | project    | 30        | 30%    | ACTIVE
+    Final Exam    | exam       | 15        | 15%    | ACTIVE
+    
+    Total Weight: 100%
+    Schema Status: LOCKED (ready for mark entry)
+  
+  Note: Once marks are entered, assessments are locked and cannot be edited
+        (Admin can override with full audit log)
+
+Step 10: Enter Marks via Smart Grid
+  Click: "Marks" tab
+  Smart Grid displays:
+    Y-axis: 25 students (A23MJ3001, A23MJ3002, ...)
+    X-axis: 6 assessments (Quiz 1, Quiz 2, Test 1, ...)
+    Cells: Empty initially (gray)
+  
+  Enter marks for Quiz 1:
+    Click cell [A23MJ3001, Quiz 1]
+    Enter: 8 (out of 10)
+    Press: Enter or Tab
+  
+  SYSTEM ACTIONS:
+    1. Validate: 0 ≤ 8 ≤ 10 ✓
+    2. Calculate: Normalized = (8/10) × 10% = 8%
+    3. Save to database (status: DRAFT)
+    4. Update cell UI:
+       - Cell content: "8"
+       - Cell color: Yellow (DRAFT)
+       - Cell locked: Not visible to student yet
+  
+  DATABASE:
+    marks table → INSERT
+      {
+        mark_id: "uuid",
+        student_id: "a23mj3001_uuid",
+        assessment_id: "quiz1_uuid",
+        course_id: "uuid-1234",
+        raw_score: 8,
+        max_score: 10,
+        normalized_score: 8,
+        weight_percentage: 10,
+        status: "DRAFT",
+        entered_by: "lecturer_id",
+        entered_at: "2026-04-10T14:00:00Z"
+      }
+    
+    audit_log table → INSERT
+      {
+        action: "MARK_ENTERED",
+        actor_id: "lecturer_id",
+        target_id: "student_id",
+        metadata: {
+          assessment_id: "quiz1_uuid",
+          raw_score: 8,
+          normalized: 8
+        }
+      }
+
+Step 11: Continue Entering All Marks
+  Repeat for all 25 students × 6 assessments = 150 marks total
+  
+  Time estimate: 2-3 hours for 150 marks
+  
+  Features to help:
+    • Bulk fill: Select multiple cells, fill same value
+    • Copy previous: Copy marks from similar assignment
+    • Search: Filter students by name/matric
+    • Export: Download current marks to check
+    • Undo: Revert last change
+
+Step 12: Flag Anomalies (Optional)
+  While entering marks, notice:
+    Student A23MJ3010 scored 10/10 on all assessments
+    But class average is 6/10
+    Deviation: Z-score = 3.8 (beyond 3σ) → Anomaly
+  
+  Click: Flag icon in cell
+  Modal: "Mark Flagged for Review"
+    Reason: Select or custom
+    Note: "Exceptionally high performance. Verify test conditions."
+  
+  DATABASE:
+    flags table → INSERT
+      {
+        flag_id: "uuid",
+        mark_id: "uuid",
+        flagged_by: "lecturer_id",
+        reason: "anomaly",
+        note: "Exceptionally high performance...",
+        created_at: "2026-04-10T15:30:00Z"
+      }
+
+Step 13: Publish Marks
+  After all marks entered and reviewed:
+  
+  Button: "Publish All Marks"
+  Confirmation modal:
+    "This will mark all assessments as PUBLISHED and send notification emails to 25 students. Continue?"
+    
+    Options: [Cancel] [Publish]
+  
+  Click: "Publish"
+
+Step 14: System Publishes Marks
+  BACKEND ACTIONS:
+    1. Update all marks: status DRAFT → PUBLISHED
+    2. Queue email notifications to all 25 students
+    3. Generate publication audit log
+    4. Update assessment status to PUBLISHED
+  
+  DATABASE UPDATES:
+    marks table → UPDATE 150 records
+      {
+        status: "DRAFT" → "PUBLISHED",
+        published_at: "2026-04-10T16:00:00Z",
+        published_by: "lecturer_id"
+      }
+    
+    audit_log table → INSERT 1 record
+      {
+        action: "MARKS_PUBLISHED",
+        actor_id: "lecturer_id",
+        target_id: "course_id",
+        metadata: {
+          assessment_count: 6,
+          mark_count: 150,
+          student_count: 25
+        }
+      }
+  
+  EMAIL DISPATCH (Async):
+    For each of 25 students:
+      {
+        To: a23mj3001@graduate.utm.my
+        Subject: [CMMS] Your marks have been published for SCSJ 3104
+        Body:
+          Dear Khobait Uddin Simran,
+          
+          Your marks for SCSJ 3104 – Introduction to Web Development (Section 01)
+          have been published and are now available in your CMMS portal.
+          
+          Log in to view your carry mark breakdown:
+          https://cmms.utm.my/dashboard/marks
+          
+          Assessment results include:
+          • Quiz 1, Quiz 2, Test 1, Assignment 1, Project, Final Exam
+          
+          Your current carry mark: 82% (Grade: A)
+          
+          Please note: This email does NOT contain your actual marks for security.
+          Log in to view your complete results.
+          
+          If you have any questions, contact your lecturer.
+          
+          Best regards,
+          CMMS System
+      }
+
+Step 15: View Publication Report
+  FRONTEND DISPLAY:
+    Publication Report
+    ==================
+    Status: ✓ SUCCESS
+    
+    Marks Published: 150
+    Students Notified: 25
+    Emails Queued: 25
+    Emails Sent: 25 (within 5 seconds)
+    
+    Toast: "All marks published successfully. 25 notification emails sent."
+    
+    Dashboard shows:
+      • Quiz 1: 25 marks published
+      • Quiz 2: 25 marks published
+      • Test 1: 25 marks published
+      • Assignment 1: 25 marks published
+      • Project: 25 marks published
+      • Final Exam: 25 marks published
+      
+      Total Published: 150 / 150 ✓
+
+Step 16: Export Marks to CSV (End of Semester)
+  Click: "Export Marks"
+  
+  SYSTEM CHECKS PRECONDITIONS:
+    ✓ All assessments published
+    ✓ No DELAYED marks pending
+    ✓ No blank cells
+    ✓ Minimum 1 assessment filled
+  
+  Generate CSV
+  
+  CSV Format:
+    Matric Number,Student Name,Quiz 1,Quiz 2,Test 1,Assignment 1,Project,Final Exam,Carry Total,Grade
+    A23MJ3001,Khobait Uddin Simran,8,9,16,15,28,15,82,A
+    A23MJ3002,Jane Doe,7,8,15,14,27,14,80,A
+    A23MJ3003,John Smith,6,7,12,12,24,12,73,B
+    ... (22 more rows)
+  
+  Download: SCSJ3104_Sec01_FinalMarks_2026.csv
+  
+  Submit to Registrar's Office
+
+
+JOURNEY 3: STUDENT (Week 2-3+)
+==============================
+
+Goal: Receive OTP, log in, view marks, raise queries
+
+Timeline: Thursday 12 April 2026
+Time: 14:00 - ongoing
+
+Step 1: Receive OTP Email
+  Email arrives:
+    Subject: Your CMMS Account Has Been Created
+    From: noreply@cmms.utm.my
+    Body: Contains OTP: 123456
+  
+  Timestamp: 2026-04-10T10:35:00Z (within 5 seconds of roster upload)
+
+Step 2: Open CMMS & Login with OTP
+  URL: http://localhost:3000/login
+  
+  Enter:
+    Email: a23mj3001@graduate.utm.my
+    Password: 123456 (the OTP)
+  
+  Click: "Login"
+
+Step 3: Validate OTP & Create Session
+  BACKEND VALIDATION:
+    1. Find user by email
+    2. Verify OTP against bcrypt hash
+    3. Check: force_password_change = true
+    4. Result: OTP valid, but password change required
+  
+  FRONTEND RESPONSE:
+    Redirect to: http://localhost:3000/password-change
+    
+    Message: "First-time login detected. You must set a new password."
+
+Step 4: Set New Password (Forced)
+  Form appears:
+    Field 1: Current Password (disabled, shows: 1 character = OTP)
+    Field 2: New Password (required)
+      Rules:
+        • Minimum 8 characters
+        • At least 1 uppercase letter
+        • At least 1 number
+        • At least 1 special character (@$!%*?&)
+    Field 3: Confirm Password (must match)
+  
+  Enter:
+    New Password: MySecure@Pass123
+    Confirm: MySecure@Pass123
+  
+  Submit: "Set Password"
+
+Step 5: Save New Password & Establish Session
+  BACKEND ACTIONS:
+    1. Validate password strength ✓
+    2. Hash with bcrypt: $2b$12$...
+    3. Update user record:
+       - password_hash: new hash
+       - force_password_change: false
+    4. Create session token (JWT)
+    5. Set secure HTTP-only cookie
+  
+  DATABASE:
+    users table → UPDATE
+      {
+        password_hash: "$2b$12$...", (new hash)
+        force_password_change: false,
+        last_login: "2026-04-12T14:05:00Z"
+      }
+    
+    sessions table → INSERT
+      {
+        session_id: "uuid",
+        user_id: "a23mj3001_uuid",
+        token: "eyJhbGc...", (JWT token)
+        created_at: "2026-04-12T14:05:00Z",
+        expires_at: "2026-04-12T22:05:00Z" (8 hours)
+      }
+
+Step 6: Dashboard Loads
+  FRONTEND DISPLAY:
+    Welcome, Khobait Uddin Simran!
+    
+    Your Courses:
+    • SCSJ 3104 – Introduction to Web Development (Section 01)
+    
+    Status:
+    • Marks Status: DRAFT (not yet published)
+    • Assessments: 6 configured
+    • Enrolled Students: 25
+
+Step 7: View Course Details
+  Click: "SCSJ 3104"
+  URL: http://localhost:3000/courses/uuid-1234/student-view
+  
+  Page shows:
+    Course: SCSJ 3104 – Introduction to Web Development
+    Section: 01
+    Year: 2026, Semester: 1
+    Lecturer: Prof. Ahmad Abdullah
+    Status: In Progress
+    
+    Assessments:
+      Quiz 1: 10 points, 10% weight
+      Quiz 2: 10 points, 10% weight
+      Test 1: 20 points, 20% weight
+      Assignment 1: 15 points, 15% weight
+      Project: 30 points, 30% weight
+      Final Exam: 15 points, 15% weight
+    
+    Mark Status: "Awaiting publication. Lecturer has not yet published marks."
+
+Step 8: Wait for Publication (Week 4)
+  Marks remain DRAFT
+  Student cannot see any marks
+  Dashboard shows: "No published marks yet"
+
+Step 9: Receive Publication Email
+  (Week 4, after lecturer publishes)
+  
+  Email arrives:
+    Subject: [CMMS] Your marks have been published for SCSJ 3104
+    From: noreply@cmms.utm.my
+    Body:
+      Your marks for SCSJ 3104 – Introduction to Web Development
+      have been published and are now available in your CMMS portal.
+      
+      Log in to view your carry mark breakdown:
+      https://cmms.utm.my/dashboard/marks
+      
+      Your current carry mark: 82% (Grade: A)
+
+Step 10: View Published Marks
+  Login to CMMS
+  Navigate: Dashboard → My Marks
+  URL: http://localhost:3000/dashboard/marks
+  
+  Page displays:
+    My Carry Marks
+    ==============
+    Course: SCSJ 3104 – Introduction to Web Development (Section 01)
+    
+    Assessment Breakdown:
+    │ Assessment      │ Score        │ % of Carry │ Status    │
+    ├─────────────────┼──────────────┼────────────┼───────────┤
+    │ Quiz 1          │ 8/10         │ 8%         │ Published │
+    │ Quiz 2          │ 9/10         │ 9%         │ Published │
+    │ Test 1          │ 16/20        │ 16%        │ Published │
+    │ Assignment 1    │ 15/15        │ 15%        │ Published │
+    │ Project         │ 28/30        │ 28%        │ Published │
+    │ Final Exam      │ 15/15        │ 15%        │ Published │
+    ├─────────────────┼──────────────┼────────────┼───────────┤
+    │ CARRY TOTAL     │              │ 82%        │ FINAL     │
+    │ GRADE           │              │ A          │ FINAL     │
+    
+    Click "View Details" on any assessment to see more info
+
+Step 11: Raise Query (Dispute)
+  Click: Assignment 1 row (15/15 score)
+  
+  Thinks: "I should have scored 16/15 or at least 15. Let me verify with lecturer."
+  
+  Button: "Raise Query"
+  Modal opens:
+    Assessment: Assignment 1
+    Your Score: 15/15
+    Expected: 16/15 or higher
+    
+    Question (required):
+      "I believe I submitted the assignment with all requirements met.
+       Can you review my submission again?"
+    
+    Submit: "Raise Query"
+  
+  SYSTEM ACTIONS:
+    1. Create query record
+    2. Notify lecturer via email
+    3. Show confirmation: "Query raised successfully. Awaiting lecturer response."
+  
+  DATABASE:
+    queries table → INSERT
+      {
+        query_id: "uuid",
+        student_id: "a23mj3001_uuid",
+        assessment_id: "assignment1_uuid",
+        course_id: "uuid-1234",
+        question: "I believe I submitted...",
+        status: "OPEN",
+        created_at: "2026-04-15T10:30:00Z"
+      }
+    
+    audit_log table → INSERT
+      {
+        action: "QUERY_RAISED",
+        actor_id: "a23mj3001_uuid",
+        target_id: "assignment1_uuid"
+      }
+  
+  EMAIL TO LECTURER:
+    Subject: Student Query: SCSJ 3104 Assignment 1
+    Body:
+      Student A23MJ3001 (Khobait Uddin Simran) has raised a query
+      on Assignment 1 for SCSJ 3104.
+      
+      Question: "I believe I submitted..."
+      
+      View and respond: [Link to CMMS]
+
+Step 12: Receive Lecturer's Response
+  (Within 24 hours)
+  
+  Lecturer logs in → Navigates to Queries
+  Sees query from student
+  Clicks "Review Student Work" → Accesses assignment submission
+  Writes response: "I've reviewed your submission. You completed all
+                   requirements correctly. The grading follows the rubric
+                   where full marks are 15/15 for complete work. Your
+                   score of 15/15 is correct and reflects full marks."
+  
+  Submits response
+  
+  System sends email to student:
+    Subject: Response to Your Query on SCSJ 3104 Assignment 1
+    Body:
+      Dear Khobait Uddin Simran,
+      
+      Your lecturer has responded to your query on Assignment 1:
+      
+      "I've reviewed your submission. You completed all
+       requirements correctly. The grading follows the rubric
+       where full marks are 15/15 for complete work. Your
+       score of 15/15 is correct and reflects full marks."
+      
+      Log in to view full details: [Link]
+
+Step 13: View Response in CMMS
+  Login to CMMS
+  Navigate: Dashboard → Queries
+  
+  Sees:
+    Query on Assignment 1 (Resolved)
+    Status: RESOLVED
+    
+    Your Question:
+      "I believe I submitted the assignment..."
+    
+    Lecturer's Response:
+      "I've reviewed your submission. You completed..."
+    
+    Response Date: 2026-04-15T14:30:00Z
+
+Step 14: Accept or Escalate
+  Two options:
+    1. Close Query → Mark as resolved
+    2. Escalate to HOD → Add comment and send up chain
+
+  If satisfied: Click "Close Query"
+  
+  DATABASE:
+    queries table → UPDATE
+      {
+        status: "CLOSED",
+        resolved_at: "2026-04-15T15:00:00Z"
+      }
+
+Step 15: View Historical Marks (Next Semester)
+  Student enrolls in new course
+  Dashboard shows:
+    
+    My Marks (All Time)
+    ==================
+    Current Semester:
+    • SCSJ 3104: 82% (A) [4 credits]
+    
+    Previous Semesters:
+    • SCSJ 2101: 75% (B+) [3 credits]
+    • SCSJ 2102: 80% (A) [3 credits]
+    
+    GPA: 3.8
+    Total Credits: 10
+    
+    Can export transcript for external use
+
+
+JOURNEY 4: HEAD OF DEPARTMENT (Week 5-8)
+=========================================
+
+Goal: Monitor courses, view analytics, receive alerts
+
+Timeline: Week 5 onwards
+Time: Any time
+
+Step 1: Login to CMMS
+  URL: http://localhost:3000/login
+  Email: hod@utm.my
+  Password: password@cmsss
+  
+  System Response:
+    ✓ Login accepted
+    ✓ HOD Dashboard loads
+
+Step 2: View Department Analytics
+  URL: http://localhost:3000/dashboard/hod
+  
+  Page displays:
+    Department: Computer Science
+    Academic Year: 2025/2026
+    
+    Summary Statistics:
+    ─────────────────
+    Total Courses: 15
+    Total Enrollments: 450 students
+    Average Carry Mark: 68.5%
+    Failure Rate: 18%
+    At-Risk Courses: 3
+    
+    Distribution:
+    Grade A: 120 students (26.7%)
+    Grade B: 180 students (40%)
+    Grade C: 100 students (22.2%)
+    Grade D: 35 students (7.8%)
+    Grade F: 15 students (3.3%)
+
+Step 3: View Specific Course Metrics
+  Click: "SCSJ 3104" (or select from list)
+  
+  Course Details:
+  ──────────────
+  Code: SCSJ 3104
+  Name: Introduction to Web Development
+  Section: 01
+  Lecturer: Prof. Ahmad Abdullah
+  Enrolled: 25 students
+  
+  Metrics:
+  -------
+  Pass Rate: 88% (22/25 students with grade ≥C)
+  Failure Rate: 12% (3/25 students with grade <C)
+  Average Carry Mark: 75%
+  
+  Grade Distribution:
+  │ Grade │ Count │ % │
+  ├───────┼───────┼──┤
+  │ A     │ 8     │32%│
+  │ B     │ 10    │40%│
+  │ C     │ 4     │16%│
+  │ D     │ 2     │ 8%│
+  │ F     │ 1     │ 4%│
+  
+  At-Risk Students (predicted to fail by end of semester):
+  • A23MJ3010: Current carry 42% (based on 50% of assessments)
+  • A23MJ3015: Current carry 48%
+
+Step 4: Review Assessment Completion
+  Click: "Assessment Status"
+  
+  Table shows:
+  │ Assessment  │ Defined │ Locked │ Published │ Status      │
+  ├─────────────┼─────────┼────────┼───────────┼─────────────┤
+  │ Quiz 1      │ ✓ 10%   │ ✓      │ ✓ 25/25   │ PUBLISHED   │
+  │ Quiz 2      │ ✓ 10%   │ ✓      │ ✓ 25/25   │ PUBLISHED   │
+  │ Test 1      │ ✓ 20%   │ ✓      │ ✓ 25/25   │ PUBLISHED   │
+  │ Assignment 1│ ✓ 15%   │ ✓      │ ✓ 25/25   │ PUBLISHED   │
+  │ Project     │ ✓ 30%   │ ✓      │ ✓ 24/25   │ 1 MISSING   │
+  │ Final Exam  │ ✓ 15%   │ ✓      │ ○ 0/25    │ NOT STARTED │
+  
+  Alert: "Final exam marks not yet published. Due by 15 May 2026."
+
+Step 5: Receive Alerts
+  System generates alerts for:
+    1. Failure Rate > 40% threshold
+    2. Missing assessments near deadline
+    3. Unexpected drop in student performance
+    4. Anomalies detected in mark entry
+  
+  Alerts Dashboard shows:
+    Alert Type          │ Course      │ Severity │ Action
+    ─────────────────────┼─────────────┼──────────┼──────────────
+    High Failure Rate   │ SCSJ 2101   │ Warning  │ Review
+    Missing Marks       │ SCSJ 3104   │ Info     │ Monitor
+    At-Risk Students    │ SCSJ 3104   │ Warning  │ Intervene
+    Anomaly Detected    │ SCSJ 2102   │ Critical │ Investigate
+
+Step 6: Generate Department Report
+  Button: "Generate Report"
+  Select:
+    • Report Type: Department Summary
+    • Format: PDF
+    • Date Range: 2026-04-01 to 2026-05-31
+    • Include: All courses, grades, statistics
+  
+  Click: "Generate"
+  
+  SYSTEM ACTIONS:
+    1. Query all courses, students, marks
+    2. Calculate statistics
+    3. Generate PDF with charts and tables
+    4. Return downloadable file
+  
+  PDF includes:
+    • Department overview
+    • Course-by-course performance
+    • Grade distributions
+    • At-risk analysis
+    • Recommendations
+
+Step 7: Export to CSV
+  Button: "Export Analytics"
+  Select format: CSV
+  
+  Downloads file with all metrics for external analysis
+
+Step 8: Escalate Issue
+  If failure rate in course is critical:
+  
+  Click: "SCSJ 2101" → Flag for review
+  Modal: "Escalate to Admin"
+    Message: "Course SCSJ 2101 has 45% failure rate.
+              Recommend curriculum review."
+  
+  Send: Notification to Admin with details
+
+Step 9: Logout
+  Click: Sidebar → Logout
+
+
+JOURNEY 5: ADMIN (Ongoing)
+==========================
+
+Goal: Manage accounts, override locks, audit operations
+
+Timeline: On-demand
+
+Step 1: Login
+  Email: admin@utm.my
+  Password: password@cmsss
+
+Step 2: View Audit Log
+  URL: http://localhost:3000/admin/audit-log
+  
+  Table shows every action in system:
+    Timestamp           │ Action              │ Actor          │ Target       │ Details
+    ──────────────────┼─────────────────────┼────────────────┼──────────────┼──────────
+    2026-04-10 10:30 │ ROSTER_UPLOADED     │ Prof. Ahmad    │ SCSJ 3104   │ 15 created
+    2026-04-10 11:00 │ ASSESSMENT_CREATED  │ Prof. Ahmad    │ Quiz 1      │ 10% weight
+    2026-04-10 16:00 │ MARKS_PUBLISHED     │ Prof. Ahmad    │ SCSJ 3104   │ 150 marks
+    2026-04-15 10:30 │ QUERY_RAISED        │ A23MJ3001      │ Assignment  │ Score dispute
+    ... (all actions logged)
+
+Step 3: Create New User Account
+  URL: http://localhost:3000/admin/users
+  
+  Button: "Create New Account"
+  Form:
+    - Full Name: Dr. Sarah Johnson
+    - Email: sarah.johnson@utm.my
+    - Role: LECTURER
+    - Department: Computer Science
+    - Temporary Password: [Generate strong random]
+  
+  Submit: "Create Account"
+  
+  SYSTEM ACTIONS:
+    1. Generate temporary password
+    2. Hash with bcrypt
+    3. Create user record
+    4. Set force_password_change = true
+    5. Send email with temporary password
+    6. Add audit log entry
+  
+  DATABASE:
+    users table → INSERT
+      {
+        user_id: "uuid",
+        name: "Dr. Sarah Johnson",
+        email: "sarah.johnson@utm.my",
+        password_hash: "$2b$12$...",
+        role: "LECTURER",
+        department: "Computer Science",
+        force_password_change: true,
+        created_by: "admin_uuid",
+        created_at: "2026-04-20T09:00:00Z"
+      }
+    
+    audit_log table → INSERT
+      {
+        action: "ACCOUNT_CREATED",
+        actor_id: "admin_uuid",
+        target_id: "sarah_uuid",
+        metadata: { role: "LECTURER", temp_password_set: true }
+      }
+
+Step 4: Suspend Account
+  Find user: "Dr. Sarah Johnson"
+  Button: "Suspend"
+  
+  SYSTEM ACTIONS:
+    1. Set user status: ACTIVE → SUSPENDED
+    2. Invalidate all sessions
+    3. Send email: "Your account has been suspended"
+    4. Log action
+  
+  User cannot log in anymore
+
+Step 5: Override Assessment Lock
+  Scenario: Lecturer wants to edit assessment after marks were entered,
+            but system prevents it (schema lock).
+  
+  URL: http://localhost:3000/admin/overrides
+  
+  Find: "SCSJ 3104 - Quiz 1"
+  Status: LOCKED (marks exist)
+  
+  Button: "Override Lock"
+  Modal: "Confirm Override"
+    "This will unlock the assessment for editing. Full audit log entry will be created."
+    Reason: [Required text field]
+  
+  Enter reason: "Marking scale changed per HOD request"
+  Submit: "Override"
+  
+  SYSTEM ACTIONS:
+    1. Remove lock on assessment
+    2. Allow lecturer to edit name/weight
+    3. Create detailed audit log entry
+    4. Notify lecturer via email
+  
+  DATABASE:
+    assessments table → UPDATE
+      {
+        is_locked: true → false,
+        lock_overridden_at: "2026-04-20T10:00:00Z",
+        lock_overridden_by: "admin_uuid"
+      }
+    
+    audit_log table → INSERT
+      {
+        action: "SCHEMA_LOCK_OVERRIDDEN",
+        actor_id: "admin_uuid",
+        target_id: "quiz1_assessment_uuid",
+        metadata: {
+          reason: "Marking scale changed per HOD request",
+          previous_state: { locked: true },
+          new_state: { locked: false }
+        }
+      }
+
+Step 6: Database Backup
+  Button: "Database Operations" → "Backup"
+  
+  Click: "Create Backup"
+  
+  SYSTEM ACTIONS:
+    1. Trigger PostgreSQL backup
+    2. Compress and store securely
+    3. Verify backup integrity
+    4. Log backup operation
+  
+  Display:
+    Backup Status: ✓ SUCCESS
+    Size: 124 MB
+    Duration: 2 minutes
+    Location: Supabase backup storage
+    Can restore to: Point-in-time (within 30 days)
+  
+  DATABASE:
+    backups table → INSERT
+      {
+        backup_id: "uuid",
+        created_at: "2026-04-20T11:00:00Z",
+        created_by: "admin_uuid",
+        size_mb: 124,
+        location: "supabase-backups/...",
+        status: "SUCCESS"
+      }
+
+Step 7: View System Health
+  URL: http://localhost:3000/admin/health
+  
+  System Status:
+  ──────────────
+  Backend: ✓ Online (response time: 45ms)
+  Database: ✓ Connected (queries/sec: 120)
+  Email Service: ✓ Active (delivered: 1543, failed: 2)
+  Storage: ✓ OK (usage: 8.2 GB / 100 GB)
+  
+  Recent Errors:
+    • 2026-04-20 09:15 - Email delivery failed (1 retry, success)
+    • 2026-04-19 18:30 - Database query timeout (1 occurrence, resolved)
+
+Step 8: Manage Settings
+  URL: http://localhost:3000/admin/settings
+  
+  Configuration options:
+    • Max assessment weight (%): 100
+    • OTP expiration (hours): 24
+    • Session timeout (hours): 8
+    • Max login attempts: 5
+    • Failure rate threshold (%): 40
+    • Email service: Resend
+    • CORS origins: [configured]
+  
+  Change any setting → Log audit entry
+
+================================================================================
+6. API ENDPOINT REFERENCE
+================================================================================
+
+AUTHENTICATION ENDPOINTS:
+
+POST /api/auth/login
+  Request:
+    {
+      "email": "student@graduate.utm.my",
+      "password": "password123"
+    }
+  Response (200 OK):
+    {
+      "access_token": "eyJhbGc...",
+      "refresh_token": "eyJhbGc...",
+      "user": {
+        "user_id": "uuid",
+        "email": "student@graduate.utm.my",
+        "name": "Khobait Uddin",
+        "role": "STUDENT",
+        "force_password_change": false
+      }
+    }
+  Status Codes:
+    • 200: Success
+    • 401: Invalid credentials
+    • 429: Too many login attempts
+
+POST /api/auth/change-password
+  Request:
+    {
+      "old_password": "password123",
+      "new_password": "NewPassword@456"
+    }
+  Response (200 OK):
+    { "message": "Password changed successfully" }
+  Status Codes:
+    • 200: Success
+    • 400: Invalid password format
+    • 401: Old password incorrect
+
+GET /api/auth/me
+  Headers: Authorization: Bearer <token>
+  Response (200 OK):
+    {
+      "user_id": "uuid",
+      "email": "student@graduate.utm.my",
+      "name": "Khobait Uddin",
+      "role": "STUDENT"
+    }
+  Status Codes:
+    • 200: Success
+    • 401: Unauthorized
+
+COURSE ENDPOINTS:
+
+POST /api/courses
+  Headers: Authorization: Bearer <token> (COORDINATOR)
+  Request:
+    {
+      "code": "SCSJ 3104",
+      "name": "Introduction to Web Development",
+      "section": "01",
+      "year": 2026,
+      "semester": 1
+    }
+  Response (201 Created):
+    {
+      "course_id": "uuid",
+      "code": "SCSJ 3104",
+      "name": "Introduction to Web Development",
+      "section": "01",
+      "created_at": "2026-04-09T09:15:00Z"
+    }
+  Status Codes:
+    • 201: Created
+    • 400: Invalid data
+    • 409: Duplicate course code
+
+GET /api/courses
+  Headers: Authorization: Bearer <token>
+  Response (200 OK):
+    [
+      {
+        "course_id": "uuid",
+        "code": "SCSJ 3104",
+        "name": "Introduction to Web Development",
+        "section": "01",
+        "enrollment_count": 25
+      },
+      ...
+    ]
+  Status Codes:
+    • 200: Success
+    • 401: Unauthorized
+
+GET /api/courses/{course_id}
+  Headers: Authorization: Bearer <token>
+  Response (200 OK):
+    {
+      "course_id": "uuid",
+      "code": "SCSJ 3104",
+      "name": "Introduction to Web Development",
+      "section": "01",
+      "year": 2026,
+      "semester": 1,
+      "instructor": { "user_id": "uuid", "name": "Prof. Ahmad" },
+      "assessments": [...],
+      "enrollments": [...]
+    }
+  Status Codes:
+    • 200: Success
+    • 404: Course not found
+    • 401: Unauthorized
+
+ASSESSMENT ENDPOINTS:
+
+POST /api/courses/{course_id}/assessments
+  Headers: Authorization: Bearer <token> (LECTURER)
+  Request:
+    {
+      "name": "Quiz 1",
+      "type": "quiz",
+      "max_score": 10,
+      "weight_percentage": 10
+    }
+  Response (201 Created):
+    {
+      "assessment_id": "uuid",
+      "name": "Quiz 1",
+      "type": "quiz",
+      "max_score": 10,
+      "weight_percentage": 10,
+      "cumulative_weight": 10
+    }
+  Status Codes:
+    • 201: Created
+    • 422: Weight exceeds 100%
+      Response:
+        {
+          "error": "Weight validation failed",
+          "cumulative_weight": 110,
+          "max_allowed": 100,
+          "remaining_percentage": 0
+        }
+
+GET /api/courses/{course_id}/assessments
+  Headers: Authorization: Bearer <token>
+  Response (200 OK):
+    [
+      {
+        "assessment_id": "uuid",
+        "name": "Quiz 1",
+        "type": "quiz",
+        "max_score": 10,
+        "weight_percentage": 10,
+        "is_locked": false
+      },
+      ...
+    ]
+
+MARK ENDPOINTS:
+
+POST /api/marks
+  Headers: Authorization: Bearer <token> (LECTURER)
+  Request:
+    {
+      "student_id": "uuid",
+      "assessment_id": "uuid",
+      "raw_score": 8
+    }
+  Response (201 Created):
+    {
+      "mark_id": "uuid",
+      "raw_score": 8,
+      "max_score": 10,
+      "normalized_score": 8,
+      "weight_percentage": 10,
+      "status": "DRAFT"
+    }
+  Status Codes:
+    • 201: Created
+    • 400: Invalid score (e.g., negative or exceeds max)
+    • 409: Assessment locked
+
+GET /api/courses/{course_id}/grid
+  Headers: Authorization: Bearer <token> (LECTURER)
+  Response (200 OK):
+    {
+      "students": [
+        {
+          "student_id": "uuid",
+          "matric": "A23MJ3001",
+          "name": "Khobait Uddin"
+        },
+        ...
+      ],
+      "assessments": [
+        {
+          "assessment_id": "uuid",
+          "name": "Quiz 1",
+          "max_score": 10,
+          "weight": 10
+        },
+        ...
+      ],
+      "marks": [
+        {
+          "mark_id": "uuid",
+          "student_id": "uuid",
+          "assessment_id": "uuid",
+          "raw_score": 8,
+          "status": "DRAFT"
+        },
+        ...
+      ]
+    }
+
+POST /api/courses/{course_id}/enrollments/seed
+  Headers: Authorization: Bearer <token> (LECTURER)
+  Request: FormData with file
+    {
+      "file": <xlsx file>
+    }
+  Response (200 OK):
+    {
+      "created": 15,
+      "linked": 10,
+      "total": 25,
+      "errors": []
+    }
+  Status Codes:
+    • 200: Success
+    • 400: Invalid file format
+    • 413: File too large
+
+POST /api/assessments/{assessment_id}/publish
+  Headers: Authorization: Bearer <token> (LECTURER)
+  Request: {}
+  Response (200 OK):
+    {
+      "published_count": 25,
+      "emails_sent": 25,
+      "status": "PUBLISHED"
+    }
+  Status Codes:
+    • 200: Success
+    • 409: No marks to publish
+
+QUERY ENDPOINTS:
+
+POST /api/queries
+  Headers: Authorization: Bearer <token> (STUDENT)
+  Request:
+    {
+      "assessment_id": "uuid",
+      "question": "I believe my mark is incorrect..."
+    }
+  Response (201 Created):
+    {
+      "query_id": "uuid",
+      "status": "OPEN",
+      "created_at": "2026-04-15T10:30:00Z"
+    }
+
+GET /api/queries?course_id=...
+  Headers: Authorization: Bearer <token> (LECTURER)
+  Response (200 OK):
+    [
+      {
+        "query_id": "uuid",
+        "student_id": "uuid",
+        "student_name": "Khobait Uddin",
+        "assessment_id": "uuid",
+        "assessment_name": "Assignment 1",
+        "question": "...",
+        "status": "OPEN",
+        "responses": []
+      },
+      ...
+    ]
+
+POST /api/queries/{query_id}/response
+  Headers: Authorization: Bearer <token> (LECTURER)
+  Request:
+    {
+      "response": "I've reviewed your work..."
+    }
+  Response (201 Created):
+    {
+      "response_id": "uuid",
+      "query_id": "uuid",
+      "response": "...",
+      "responded_by": "uuid",
+      "created_at": "2026-04-15T14:30:00Z"
+    }
+
+HOD ENDPOINTS:
+
+GET /api/departments/{dept_id}/analytics
+  Headers: Authorization: Bearer <token> (HOD)
+  Response (200 OK):
+    {
+      "department": "Computer Science",
+      "total_courses": 15,
+      "total_students": 450,
+      "metrics": {
+        "avg_carry_mark": 68.5,
+        "failure_rate": 18,
+        "at_risk_count": 3
+      },
+      "courses": [...]
+    }
+
+GET /api/courses/{course_id}/alerts
+  Headers: Authorization: Bearer <token> (HOD)
+  Response (200 OK):
+    [
+      {
+        "alert_id": "uuid",
+        "type": "HIGH_FAILURE_RATE",
+        "severity": "WARNING",
+        "message": "Course failure rate exceeds 40%",
+        "created_at": "2026-04-20T08:00:00Z"
+      },
+      ...
+    ]
+
+ADMIN ENDPOINTS:
+
+POST /api/admin/override-lock
+  Headers: Authorization: Bearer <token> (ADMIN)
+  Request:
+    {
+      "assessment_id": "uuid",
+      "reason": "Marking scale changed per HOD request"
+    }
+  Response (200 OK):
+    {
+      "assessment_id": "uuid",
+      "is_locked": false,
+      "overridden_at": "2026-04-20T10:00:00Z",
+      "overridden_by": "admin_uuid"
+    }
+
+GET /api/admin/audit-log
+  Headers: Authorization: Bearer <token> (ADMIN)
+  Query params: ?limit=100&offset=0
+  Response (200 OK):
+    [
+      {
+        "log_id": "uuid",
+        "timestamp": "2026-04-10T10:30:00Z",
+        "action": "ROSTER_UPLOADED",
+        "actor_id": "uuid",
+        "actor_name": "Prof. Ahmad",
+        "target_id": "uuid",
+        "target_name": "SCSJ 3104",
+        "metadata": { "created": 15, "linked": 10 }
+      },
+      ...
+    ]
+
+POST /api/admin/users
+  Headers: Authorization: Bearer <token> (ADMIN)
+  Request:
+    {
+      "name": "Dr. Sarah Johnson",
+      "email": "sarah.johnson@utm.my",
+      "role": "LECTURER",
+      "department": "Computer Science"
+    }
+  Response (201 Created):
+    {
+      "user_id": "uuid",
+      "email": "sarah.johnson@utm.my",
+      "role": "LECTURER",
+      "force_password_change": true,
+      "temporary_password_sent": true
+    }
+
+PUT /api/admin/users/{user_id}/suspend
+  Headers: Authorization: Bearer <token> (ADMIN)
+  Request: {}
+  Response (200 OK):
+    {
+      "user_id": "uuid",
+      "status": "SUSPENDED"
+    }
+
+================================================================================
+7. DATABASE SCHEMA
+================================================================================
+
+TABLE: users
+  Column              | Type         | Constraints
+  ──────────────────┼──────────────┼──────────────────────
+  user_id            | UUID         | PRIMARY KEY
+  email              | VARCHAR(255) | UNIQUE NOT NULL
+  name               | VARCHAR(255) | NOT NULL
+  password_hash      | VARCHAR(255) | NOT NULL
+  role               | ENUM         | (STUDENT, LECTURER, COORDINATOR, HOD, ADMIN)
+  department         | VARCHAR(100) | NULL
+  force_password_change| BOOLEAN     | DEFAULT true
+  is_active          | BOOLEAN      | DEFAULT true
+  created_at         | TIMESTAMP    | DEFAULT NOW()
+  updated_at         | TIMESTAMP    | DEFAULT NOW()
+
+TABLE: courses
+  Column         | Type         | Constraints
+  ──────────────┼──────────────┼──────────────────────
+  course_id      | UUID         | PRIMARY KEY
+  code           | VARCHAR(50)  | UNIQUE NOT NULL
+  name           | VARCHAR(255) | NOT NULL
+  section        | VARCHAR(10)  | NOT NULL
+  year           | INT          | NOT NULL
+  semester       | INT          | NOT NULL (1 or 2)
+  credits        | INT          | NULL
+  created_at     | TIMESTAMP    | DEFAULT NOW()
+  created_by     | UUID         | FOREIGN KEY users.user_id
+
+TABLE: course_instructors
+  Column         | Type         | Constraints
+  ──────────────┼──────────────┼──────────────────────
+  assignment_id  | UUID         | PRIMARY KEY
+  course_id      | UUID         | FOREIGN KEY courses.course_id
+  instructor_id  | UUID         | FOREIGN KEY users.user_id
+  assigned_at    | TIMESTAMP    | DEFAULT NOW()
+  assigned_by    | UUID         | FOREIGN KEY users.user_id
+
+TABLE: enrollments
+  Column         | Type         | Constraints
+  ──────────────┼──────────────┼──────────────────────
+  enrollment_id  | UUID         | PRIMARY KEY
+  student_id     | UUID         | FOREIGN KEY users.user_id
+  course_id      | UUID         | FOREIGN KEY courses.course_id
+  status         | VARCHAR(20)  | (ACTIVE, DROPPED)
+  enrolled_at    | TIMESTAMP    | DEFAULT NOW()
+
+TABLE: assessments
+  Column              | Type         | Constraints
+  ──────────────────┼──────────────┼──────────────────────
+  assessment_id      | UUID         | PRIMARY KEY
+  course_id          | UUID         | FOREIGN KEY courses.course_id
+  name               | VARCHAR(255) | NOT NULL
+  type               | VARCHAR(50)  | (quiz, test, assignment, project, exam, other)
+  max_score          | DECIMAL(5,2) | NOT NULL
+  weight_percentage  | DECIMAL(5,2) | NOT NULL
+  is_locked          | BOOLEAN      | DEFAULT false
+  status             | VARCHAR(20)  | (ACTIVE, ARCHIVED)
+  created_by         | UUID         | FOREIGN KEY users.user_id
+  created_at         | TIMESTAMP    | DEFAULT NOW()
+
+TABLE: marks
+  Column            | Type         | Constraints
+  ─────────────────┼──────────────┼──────────────────────
+  mark_id           | UUID         | PRIMARY KEY
+  student_id        | UUID         | FOREIGN KEY users.user_id
+  assessment_id     | UUID         | FOREIGN KEY assessments.assessment_id
+  course_id         | UUID         | FOREIGN KEY courses.course_id
+  raw_score         | DECIMAL(5,2) | NOT NULL
+  max_score         | DECIMAL(5,2) | NOT NULL
+  normalized_score  | DECIMAL(5,2) | COMPUTED (raw_score / max_score * weight%)
+  weight_percentage | DECIMAL(5,2) | NOT NULL
+  status            | VARCHAR(20)  | (DRAFT, PUBLISHED)
+  entered_by        | UUID         | FOREIGN KEY users.user_id
+  entered_at        | TIMESTAMP    | DEFAULT NOW()
+  published_at      | TIMESTAMP    | NULL
+  updated_at        | TIMESTAMP    | DEFAULT NOW()
+
+TABLE: queries
+  Column            | Type         | Constraints
+  ─────────────────┼──────────────┼──────────────────────
+  query_id          | UUID         | PRIMARY KEY
+  student_id        | UUID         | FOREIGN KEY users.user_id
+  assessment_id     | UUID         | FOREIGN KEY assessments.assessment_id
+  course_id         | UUID         | FOREIGN KEY courses.course_id
+  question          | TEXT         | NOT NULL
+  status            | VARCHAR(20)  | (OPEN, IN_PROGRESS, RESOLVED, ESCALATED, CLOSED)
+  created_at        | TIMESTAMP    | DEFAULT NOW()
+  resolved_at       | TIMESTAMP    | NULL
+
+TABLE: query_responses
+  Column         | Type         | Constraints
+  ──────────────┼──────────────┼──────────────────────
+  response_id    | UUID         | PRIMARY KEY
+  query_id       | UUID         | FOREIGN KEY queries.query_id
+  response       | TEXT         | NOT NULL
+  responded_by   | UUID         | FOREIGN KEY users.user_id
+  created_at     | TIMESTAMP    | DEFAULT NOW()
+
+TABLE: flags
+  Column         | Type         | Constraints
+  ──────────────┼──────────────┼──────────────────────
+  flag_id        | UUID         | PRIMARY KEY
+  mark_id        | UUID         | FOREIGN KEY marks.mark_id
+  reason         | VARCHAR(255) | NOT NULL
+  note           | TEXT         | NULL
+  flagged_by     | UUID         | FOREIGN KEY users.user_id
+  created_at     | TIMESTAMP    | DEFAULT NOW()
+
+TABLE: audit_log
+  Column         | Type         | Constraints
+  ──────────────┼──────────────┼──────────────────────
+  log_id         | UUID         | PRIMARY KEY
+  action         | VARCHAR(255) | NOT NULL
+  actor_id       | UUID         | FOREIGN KEY users.user_id
+  target_id      | UUID         | NULL (flexible target)
+  metadata       | JSONB        | NULL
+  created_at     | TIMESTAMP    | DEFAULT NOW()
+
+TABLE: sessions
+  Column         | Type         | Constraints
+  ──────────────┼──────────────┼──────────────────────
+  session_id     | UUID         | PRIMARY KEY
+  user_id        | UUID         | FOREIGN KEY users.user_id
+  token          | TEXT         | NOT NULL
+  created_at     | TIMESTAMP    | DEFAULT NOW()
+  expires_at     | TIMESTAMP    | NOT NULL
+
+DATABASE INDEXES:
+  • users: email (UNIQUE), role
+  • courses: code (UNIQUE), year, semester
+  • enrollments: student_id, course_id
+  • assessments: course_id, is_locked
+  • marks: student_id, assessment_id, course_id, status
+  • queries: student_id, status, created_at
+  • audit_log: action, created_at, actor_id
+
+ROW-LEVEL SECURITY (RLS):
+  • Students can only view their own enrollments and marks
+  • Lecturers can only view/edit their assigned courses
+  • HODs can view all courses in their department
+  • Admins bypass all RLS
+
+================================================================================
+8. FEATURE WORKFLOWS
+================================================================================
+
+WORKFLOW 1: COURSE CREATION & PROVISIONING
+==========================================
+
+Timeline: Week 1
+Actor: Coordinator
+
+Step 1: Coordinator creates course shell
+  Input: Code, Name, Section, Year, Semester
+  Validation: Code must be unique
+  Database: INSERT courses
+  Output: Course created with UUID
+
+Step 2: Coordinator assigns lecturer
+  Input: Course ID, Lecturer ID
+  Database: INSERT course_instructors
+  Email: Notify lecturer of assignment
+  Output: Lecturer assigned
+
+Status: Ready for roster upload
+
+
+WORKFLOW 2: SELF-SEEDING ROSTER UPLOAD
+======================================
+
+Timeline: Week 1-2
+Actor: Lecturer
+
+Step 1: Lecturer selects Excel file
+  File format: Matric, Name, Email, ID Number
+  Location: .xlsx file uploaded via form
+
+Step 2: Backend parses Excel in-memory
+  Tool: openpyxl (no disk write)
+  For each row:
+    • Check if email exists
+    • If no: Create account with OTP, send email
+    • If yes: Link to enrollment
+
+Step 3: Create enrollment records
+  Database: INSERT enrollments (25 records for 25 students)
+  Output: Seeding report (created, linked, errors)
+
+Step 4: Send OTP emails
+  Count: 15 emails (for new students)
+  Service: Resend API
+  Time: ~100ms each, ~1.5 seconds total
+
+Step 5: Return to lecturer
+  Display: Seeding report
+  Toast: Success message with counts
+
+Status: Students can now log in with OTP
+
+
+WORKFLOW 3: ASSESSMENT SCHEMA CREATION
+======================================
+
+Timeline: Week 2-3
+Actor: Lecturer
+
+Step 1: Lecturer adds assessment
+  Input: Name, Type, Max Score, Weight %
+  Validation: 
+    • Name is required
+    • Type is enum
+    • Max score > 0
+    • Weight > 0
+
+Step 2: System validates cumulative weight
+  Calculation: Sum of all assessment weights
+  Rule: Total must be ≤ 100%
+  Result:
+    • If valid: Save assessment
+    • If invalid: HTTP 422 error
+
+Step 3: Assessment locked after first mark
+  Trigger: When first mark is saved to assessment
+  Effect: Lecturer cannot edit name or weight
+  Override: Admin can unlock with audit log
+
+Step 4: Repeat for all assessments
+  Expected: 5-8 assessments per course
+  Total weight: 100%
+
+Status: Schema ready for mark entry
+
+
+WORKFLOW 4: MARK ENTRY (SMART GRID)
+===================================
+
+Timeline: Week 3-4
+Actor: Lecturer
+
+Step 1: Open Smart Grid
+  Display: Students (Y-axis) × Assessments (X-axis)
+  Grid type: Virtual scrolling (for 1000+ rows)
+  Initial state: All cells empty (gray)
+
+Step 2: Click cell to edit
+  Cell: [Student A23MJ3001, Quiz 1]
+  Input: Raw score (e.g., 8)
+
+Step 3: System validates & calculates
+  Validation: 0 ≤ score ≤ max_score
+  Calculation: Normalized = (8/10) × 10% = 8%
+  Database: Save with status DRAFT
+  UI: Cell turns yellow, shows "8"
+
+Step 4: Repeat for all marks
+  Total: 25 students × 6 assessments = 150 marks
+  Time: 2-3 hours
+  Features: Bulk fill, copy, undo
+
+Step 5: Review & flag anomalies
+  AI: Identify Z-score > 3σ
+  Display: Highlight anomalies
+  Action: Lecturer can flag or accept
+
+Status: All marks in DRAFT, invisible to students
+
+
+WORKFLOW 5: MARK PUBLICATION
+============================
+
+Timeline: Week 4
+Actor: Lecturer
+
+Step 1: Precondition checks
+  • All assessments have at least some marks
+  • No critical anomalies unflagged
+  • Confirmation required
+
+Step 2: Publish marks
+  Action: Update all marks: DRAFT → PUBLISHED
+  Trigger: Email notifications
+  Database: INSERT audit_log
+
+Step 3: Queue email notifications
+  For each of 25 students:
+    Subject: Your marks have been published
+    Body: "Log in to view your carry breakdown"
+    Note: NO actual marks in email (security)
+  Service: Resend API (async)
+
+Step 4: Update student dashboards
+  Marks now visible in student portal
+  Carry mark calculated
+  Grade assigned
+
+Status: Marks available to students
+
+
+WORKFLOW 6: STUDENT QUERY SYSTEM
+===============================
+
+Timeline: Week 4+
+Actor: Student
+
+Step 1: Student views published mark
+  Example: Assignment 1, scored 15/15
+  Thought: "I deserve more points"
+
+Step 2: Raise query
+  Form: Assessment + Question
+  Question: "Why didn't I get full points?"
+  Submit: Send to lecturer
+
+Step 3: Lecturer receives notification
+  Email: "Student A23MJ3001 raised query on Assignment 1"
+  Action: Review student work
+
+Step 4: Lecturer writes response
+  System suggests: AI-powered response ideas
+  Lecturer writes: Personalized explanation
+  Example: "Your submission met requirements. Full marks = 15/15. Grading follows rubric."
+
+Step 5: Send response to student
+  Email: Notification of response
+  Portal: Student views response
+  Status: Query marked RESOLVED
+
+Step 6: Close or escalate
+  If satisfied: Close query
+  If not satisfied: Escalate to HOD
+
+Status: Issue resolved at course level
+
+
+WORKFLOW 7: FINAL EXPORT
+=======================
+
+Timeline: End of semester
+Actor: Lecturer
+
+Step 1: Precondition check
+  • All assessments published
+  • No DELAYED marks
+  • No blank cells
+  Result: Can/cannot export
+
+Step 2: Generate CSV
+  Format: Matric | Name | A1 | A2 | ... | Carry | Grade
+  Data: All 25 students, all 6 assessments
+  Calculation: Carry = sum of (raw/max × weight%)
+  Grades: A (≥85%), B (70-84%), C (60-69%), D (50-59%), F (<50%)
+
+Step 3: Download & verify
+  Lecturer downloads CSV
+  Manual spot-check of a few rows
+  Confirm data accuracy
+
+Step 4: Submit to registrar
+  Lecturer submits CSV via university system
+  File retention: Archive for audit
+
+Status: Marks recorded in registrar system
+
+================================================================================
+9. TROUBLESHOOTING & MAINTENANCE
+================================================================================
+
+COMMON ISSUES & SOLUTIONS:
+
+ISSUE 1: "Weight validation error" when adding assessment
+  Cause: Cumulative weight would exceed 100%
+  Solution:
+    1. Check total weight of existing assessments
+    2. Calculate remaining: 100% - (sum of existing)
+    3. Add assessment with weight ≤ remaining
+  Example:
+    Existing: 50%, 20%, 15% = 85%
+    Remaining: 15%
+    New assessment must be ≤ 15%
+
+ISSUE 2: "Assessment locked" error when editing
+  Cause: Marks have been entered for this assessment
+  Solution:
+    Option A: Delete all marks for this assessment (data loss!)
+    Option B: Contact Admin to override lock (creates audit log)
+  Prevention: Plan schema before entering marks
+
+ISSUE 3: "Email delivery failed"
+  Cause: Resend API error, network issue, invalid email
+  Solution:
+    1. Check Resend API status
+    2. Verify student email is valid
+    3. Retry from admin panel
+    4. Check audit log for failed emails
+
+ISSUE 4: "Student cannot log in with OTP"
+  Cause: OTP expired, typo, hash mismatch
+  Solution:
+    1. Ask lecturer to reset password for student
+    2. Generate new OTP
+    3. Resend email
+    4. Verify email was delivered
+
+ISSUE 5: "Smart Grid very slow with many students"
+  Cause: Virtual scrolling not working, too many re-renders
+  Solution:
+    1. Clear browser cache
+    2. Use Chrome DevTools to profile
+    3. Check for large network payloads
+    4. Reduce number of visible columns
+
+ISSUE 6: "Database connection timeout"
+  Cause: Connection pool exhausted, slow query
+  Solution:
+    1. Restart backend service
+    2. Check database health in Supabase dashboard
+    3. Optimize slow queries (add indexes)
+    4. Increase connection pool size
+
+ISSUE 7: "Marks published but students don't see them"
+  Cause: Frontend cache, session not refreshed
+  Solution:
+    1. Hard refresh browser: Ctrl+Shift+R
+    2. Log out and log in again
+    3. Clear localStorage
+    4. Check API is returning PUBLISHED status
+
+MAINTENANCE TASKS:
+
+DAILY:
+  • Check error logs for critical issues
+  • Monitor email delivery failures
+  • Verify database backup completed
+
+WEEKLY:
+  • Review audit log for suspicious activity
+  • Check API response times (should be <500ms)
+  • Verify no database locks or long-running queries
+  • Test email service
+
+MONTHLY:
+  • Security audit (check for exposed credentials)
+  • Database optimization (analyze slow queries)
+  • Dependency updates (npm, pip packages)
+  • Backup verification (restore test)
+
+QUARTERLY:
+  • Database schema review (add indexes if needed)
+  • Security assessment (OWASP top 10)
+  • Performance testing (load test with 100+ concurrent users)
+  • Disaster recovery drill (restore from backup)
+
+================================================================================
+10. PROJECT TIMELINE
+================================================================================
+
+SPRINT SCHEDULE:
+
+SPRINT 1: Foundation, Auth & Base UI
+  Duration: Weeks 1-2 (9 Apr – 17 Apr 2026)
+  Status: ✅ COMPLETE
+  Deliverables:
+    • Docker infrastructure up
+    • All 5 roles can log in
+    • Password flows working
+    • Base UI components ready
+
+SPRINT 2: Course Setup & Roster Management
+  Duration: Weeks 3-4 (20 Apr – 1 May 2026)
+  Status: 🔄 IN PROGRESS
+  Target Deliverables:
+    • Course CRUD endpoints
+    • Lecturer assignment
+    • Excel roster upload
+    • Student account creation with OTP
+    • Assessment schema with weight validation
+    • Roster add/drop operations
+    • Database connectivity verified
+    • Frontend pages created
+    • Ready for deployment to Render
+
+SPRINT 3: Grading & Publication
+  Duration: Weeks 5-6 (4 May – 15 May 2026)
+  Status: ⏳ PENDING
+  Target Deliverables:
+    • Smart Grid implementation
+    • Mark entry & normalization
+    • Publication workflow
+    • Email notifications
+    • Student mark view
+    • Concurrent edit handling
+
+SPRINT 4: Oversight, Queries & Export
+  Duration: Weeks 7-8 (18 May – 29 May 2026)
+  Status: ⏳ PENDING
+  Target Deliverables:
+    • HOD dashboard & analytics
+    • Student query system
+    • AI response suggestions
+    • Mark export (CSV/PDF)
+    • Anomaly detection
+    • System complete & tested
+
+INTEGRATION PHASE: Testing & Deployment
+  Duration: Weeks 9-10 (1 Jun – 12 Jun 2026)
+  Status: ⏳ PENDING
+  Target Deliverables:
+    • End-to-end testing
+    • Performance optimization
+    • Security audit
+    • UAT with all roles
+    • Production deployment on Render
+    • Documentation complete
+
+POST-PROJECT:
+  • User training
+  • Go-live support
+  • Bug fixes & polish
+  • Performance monitoring
+  • Ongoing maintenance
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
+Project: CMMS - Carry Mark Management System
+Document Type: Complete End-to-End Guide
+Version: 1.0
+Date: 22 April 2026
+Status: Production Ready (Sprint 1 Complete, Sprint 2 In Progress)
+
+For questions or updates, contact: Khobait Uddin Simran (A23MJ3006)
+================================================================================

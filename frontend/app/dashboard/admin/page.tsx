@@ -1,21 +1,41 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Card } from '@/components/common/Card'
 import { Badge } from '@/components/common/Badge'
-import { Users, Settings, BarChart3, Shield } from 'lucide-react'
+import { Users, Shield, UserCheck, BookOpen, FileText, Lock } from 'lucide-react'
+import { getAdminStats, type AdminStats } from '@/lib/api/admin'
 
 export default function AdminDashboard() {
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getAdminStats()
+        setStats(data)
+      } catch (err) {
+        console.error('Failed to load stats:', err)
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  const quickActions = [
+    { label: 'Pending Approvals', href: '/dashboard/admin/approvals', icon: UserCheck, color: 'bg-orange-100 text-orange-600', badge: stats?.pending_approvals },
+    { label: 'All Users', href: '/users', icon: Users, color: 'bg-blue-100 text-blue-600' },
+    { label: 'Role Management', href: '/dashboard/admin/roles', icon: Lock, color: 'bg-purple-100 text-purple-600' },
+    { label: 'System Logs', href: '/system-logs', icon: FileText, color: 'bg-gray-100 text-gray-600' },
+  ]
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-      {/* Welcome Header */}
       <div className="pt-4">
-        <h1 className="text-[32px] font-bold text-[#111827]">
-          System Administration
-        </h1>
-        <p className="text-[16px] text-[#6B7280] mt-2">
-          Complete system control and user management
-        </p>
+        <h1 className="text-[32px] font-bold text-[#111827]">System Administration</h1>
+        <p className="text-[16px] text-[#6B7280] mt-2">Complete system control and user management</p>
       </div>
 
       {/* Key Stats Grid */}
@@ -24,7 +44,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Total Users</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">2,847</p>
+              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.total_users ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
               <Users className="w-7 h-7 text-[#C90031]" />
@@ -35,8 +55,8 @@ export default function AdminDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">System Status</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">Online</p>
+              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Active Users</p>
+              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.active_users ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
               <Shield className="w-7 h-7 text-[#10B981]" />
@@ -47,11 +67,11 @@ export default function AdminDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">API Usage</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">64%</p>
+              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Pending Approvals</p>
+              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.pending_approvals ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#FEF3C7] flex items-center justify-center flex-shrink-0">
-              <BarChart3 className="w-7 h-7 text-[#F59E0B]" />
+              <UserCheck className="w-7 h-7 text-[#F59E0B]" />
             </div>
           </div>
         </Card>
@@ -59,11 +79,11 @@ export default function AdminDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Active Sessions</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">342</p>
+              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Total Courses</p>
+              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.total_courses ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
-              <Settings className="w-7 h-7 text-[#3B82F6]" />
+              <BookOpen className="w-7 h-7 text-[#3B82F6]" />
             </div>
           </div>
         </Card>
@@ -71,40 +91,37 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-[20px] font-bold text-[#111827]">User Management</h2>
-            <button className="px-4 py-2 bg-[#C90031] text-white rounded-lg text-[14px] font-medium hover:bg-[#A80028] transition-colors">
-              Add User
-            </button>
-          </div>
-          
+          <h2 className="text-[20px] font-bold text-[#111827] mb-6">User Distribution</h2>
           <div className="space-y-3">
             {[
-              { role: 'Students', count: 1248, status: 'good' },
-              { role: 'Lecturers', count: 87, status: 'good' },
-              { role: 'Coordinators', count: 12, status: 'good' },
-              { role: 'HOD', count: 8, status: 'good' },
+              { role: 'Students', count: stats?.students ?? 0 },
+              { role: 'Lecturers', count: stats?.lecturers ?? 0 },
+              { role: 'Coordinators', count: stats?.coordinators ?? 0 },
+              { role: 'HOD', count: stats?.hods ?? 0 },
             ].map((item) => (
               <div key={item.role} className="flex items-center justify-between py-3 px-3 bg-[#F9FAFB] rounded-lg hover:bg-[#F3F4F6] transition-colors">
                 <span className="text-[#111827]">{item.role}</span>
-                <Badge variant="role">{item.count} users</Badge>
+                <Badge variant="role">{loading ? '…' : `${item.count.toLocaleString()} users`}</Badge>
               </div>
             ))}
           </div>
         </Card>
 
         <Card>
-          <h2 className="text-[16px] font-bold text-[#111827] mb-4">System Settings</h2>
-          <div className="space-y-3">
-            {[
-              { setting: 'Database Backup', status: 'good', lastRun: '2 hours ago' },
-              { setting: 'Security Scan', status: 'good', lastRun: '6 hours ago' },
-              { setting: 'Cache Clear', status: 'good', lastRun: '1 day ago' },
-            ].map((item) => (
-              <div key={item.setting} className="py-2 border-b border-[#E5E7EB] last:border-b-0">
-                <p className="text-[#111827] font-medium">{item.setting}</p>
-                <p className="text-[12px] text-[#6B7280]">Last: {item.lastRun}</p>
-              </div>
+          <h2 className="text-[20px] font-bold text-[#111827] mb-6">Quick Actions</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {quickActions.map((action) => (
+              <Link key={action.label} href={action.href} className="relative flex flex-col items-center justify-center p-4 bg-[#F9FAFB] rounded-lg hover:bg-[#F3F4F6] transition-colors">
+                <div className={`w-12 h-12 rounded-lg ${action.color} flex items-center justify-center mb-2`}>
+                  <action.icon className="w-6 h-6" />
+                </div>
+                <span className="text-[14px] font-medium text-[#111827] text-center">{action.label}</span>
+                {action.badge !== undefined && action.badge > 0 && (
+                  <span className="absolute top-2 right-2 bg-red-500 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+                    {action.badge}
+                  </span>
+                )}
+              </Link>
             ))}
           </div>
         </Card>
