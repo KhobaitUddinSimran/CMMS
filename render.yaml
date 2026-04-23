@@ -50,7 +50,7 @@ services:
     plan: free
     rootDir: frontend
     nodeVersion: "20"
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     envVars:
       # Automatically wired to the backend service URL
