@@ -154,7 +154,58 @@ export async function previewMarksImport(courseId: string, file: File): Promise<
 }
 
 /**
- * Publish marks for an assessment
+ * Create a new mark (lecturer entry)
+ */
+export async function createMark(data: {
+  student_id: string
+  course_id: string
+  assessment_id: string
+  score?: number | null
+}): Promise<MarkData> {
+  const response = await apiClient.post('/marks', data)
+  return response.data
+}
+
+/**
+ * Get ALL marks for a course (Smart Grid — all students × all assessments)
+ */
+export async function getCourseAllMarks(courseId: string): Promise<MarkData[]> {
+  const response = await apiClient.get(`/marks/course/${courseId}`)
+  return response.data
+}
+
+/**
+ * Get student marks summary grouped by course (for student marks page)
+ */
+export interface StudentCourseSummary {
+  course_id: string
+  carry_total: number
+  marks: {
+    assessment_name: string
+    assessment_type: string
+    score: number
+    max_score: number
+    weight_percentage: number
+    weighted_contribution: number
+  }[]
+}
+
+export async function getStudentMarksSummary(studentId: string): Promise<StudentCourseSummary[]> {
+  const response = await apiClient.get(`/marks/student/${studentId}/summary`)
+  return response.data
+}
+
+/**
+ * Publish a list of mark IDs (moves them from draft → published)
+ */
+export async function publishMarkIds(markIds: string[]): Promise<{ message: string; count: number }> {
+  const response = await apiClient.post('/marks/publish', { mark_ids: markIds })
+  return response.data
+}
+
+/**
+ * Publish marks for an assessment (legacy alias — wraps publishMarkIds)
+ * @deprecated Use publishMarkIds directly with specific mark IDs
  */
 export async function publishAssessment(assessmentId: string): Promise<{ message: string }> {
   const response = await apiClient.post(`/assessments/${assessmentId}/publish`)

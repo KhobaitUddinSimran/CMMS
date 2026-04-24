@@ -3,6 +3,10 @@ import { apiClient } from './client'
 
 // ==================== Types ====================
 export interface CourseData {
+  name?: string
+  academic_year?: string
+  credits?: number
+  description?: string
   id: string
   code: string
   section: string
