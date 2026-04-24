@@ -1,11 +1,9 @@
 """Authentication endpoints - Simplified for frontend compatibility"""
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from ..db.database import get_db
 from ..core.security import hash_password, verify_password, create_access_token
 from ..models.user import User
 from ..dependencies.auth import get_current_user
@@ -84,7 +82,7 @@ from ..db.mock_data import MOCK_USERS, PENDING_USERS
 # ==================== LOGIN ENDPOINT ====================
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("50/15minutes")
-async def login(request: Request, credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, credentials: LoginRequest):
     """Login endpoint
     
     Accepts email, password, and role. Returns JWT token and user info.
@@ -160,7 +158,6 @@ async def login(request: Request, credentials: LoginRequest, db: AsyncSession = 
 async def signup(
     request: Request,
     signup_data: SignupRequest,
-    db: AsyncSession = Depends(get_db),
 ):
     """User signup endpoint
     
