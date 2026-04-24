@@ -1,6 +1,6 @@
 """Authentication endpoints - Simplified for frontend compatibility"""
 import logging
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter
 from slowapi.util import get_remote_address
