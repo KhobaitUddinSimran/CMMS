@@ -162,21 +162,23 @@ async def add_student_to_course(
         if existing.data:
             raise HTTPException(status_code=400, detail="Student is already enrolled in this course")
 
-        # Create enrollment
+        # Create enrollment — include semester/academic_year to satisfy NOT NULL
+        # constraints that exist in the base schema (pre-sprint2 migration)
         enrollment = {
             "student_id": student["id"],
             "course_id": course_id,
             "status": "active",
-            "source": "manual",
-            "enrollment_date": datetime.utcnow().isoformat(),
+            "semester": course.get("semester") or 1,
+            "academic_year": course.get("academic_year") or str(datetime.utcnow().year),
         }
         resp = supabase.table("enrollments").insert(enrollment).execute()
 
+        enrolled_record = resp.data[0] if resp.data else {}
         return {
             "id": student["id"],
             "email": student["email"],
             "full_name": student.get("full_name", ""),
-            "enrollment_date": enrollment["enrollment_date"],
+            "enrollment_date": enrolled_record.get("enrolled_at") or enrolled_record.get("created_at"),
             "status": "active",
         }
 
@@ -205,7 +207,7 @@ async def drop_student_from_course(
         # Update enrollment status to dropped
         resp = (
             supabase.table("enrollments")
-            .update({"status": "dropped", "withdrawal_date": datetime.utcnow().isoformat()})
+            .update({"status": "dropped"})
             .eq("student_id", student_id)
             .eq("course_id", course_id)
             .eq("status", "active")
@@ -471,8 +473,8 @@ async def upload_roster(
                         "student_id": student_id,
                         "course_id": course_id,
                         "status": "active",
-                        "source": "roster_upload",
-                        "enrollment_date": datetime.utcnow().isoformat(),
+                        "semester": course.get("semester") or 1,
+                        "academic_year": course.get("academic_year") or str(datetime.utcnow().year),
                     }).execute()
 
             except Exception as row_err:

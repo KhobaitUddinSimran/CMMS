@@ -40,10 +40,92 @@ class MarkBulkCreateRequest(BaseModel):
 
 
 # ==================== Helpers ====================
+def _require_supabase():
+    """Raise 503 if Supabase client is not initialised."""
+    if supabase is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable: Supabase not initialised. Check SUPABASE_URL and SUPABASE_SERVICE_KEY.",
+        )
+
+
 def _verify_lecturer_course(course: dict, current_user: dict):
     """Verify lecturer is assigned to this course"""
     if current_user.get("role") == "lecturer" and course.get("lecturer_id") != current_user.get("user_id"):
         raise HTTPException(status_code=403, detail="You are not assigned to this course")
+
+
+# ==================== Get All Marks for a Course (Smart Grid) ====================
+@router.get("/course/{course_id}")
+async def get_all_course_marks(
+    course_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Get all marks for all students in a course — used by the Smart Grid"""
+    _require_supabase()
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    try:
+        resp = supabase.table("marks").select("*").eq("course_id", course_id).execute()
+        return resp.data or []
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting all marks for course {course_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get course marks")
+
+
+# ==================== Student Marks Summary (per-course) ====================
+@router.get("/student/{student_id}/summary")
+async def get_student_marks_summary(
+    student_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Return published marks grouped by course with carry-total for a student."""
+    _require_supabase()
+    if current_user.get("role") == "student" and current_user.get("user_id") != student_id:
+        raise HTTPException(status_code=403, detail="Cannot view other student's marks")
+    try:
+        marks_resp = (
+            supabase.table("marks")
+            .select("*, assessments(name, max_score, weight_percentage, type)")
+            .eq("student_id", student_id)
+            .eq("status", "published")
+            .execute()
+        )
+        marks = marks_resp.data or []
+
+        course_groups: dict = {}
+        for mark in marks:
+            course_id = mark["course_id"]
+            assessment = mark.get("assessments") or {}
+            max_score = float(assessment.get("max_score") or 100)
+            weight = float(assessment.get("weight_percentage") or 0)
+            score = float(mark.get("score") or 0)
+            normalized = (score / max_score * 100) if max_score > 0 else 0
+            weighted = normalized * (weight / 100)
+
+            if course_id not in course_groups:
+                course_groups[course_id] = {"course_id": course_id, "marks": [], "carry_total": 0.0}
+
+            course_groups[course_id]["marks"].append({
+                "assessment_name": assessment.get("name", "Unknown"),
+                "assessment_type": assessment.get("type", ""),
+                "score": score,
+                "max_score": max_score,
+                "weight_percentage": weight,
+                "weighted_contribution": round(weighted, 2),
+            })
+            course_groups[course_id]["carry_total"] = round(
+                course_groups[course_id]["carry_total"] + weighted, 2
+            )
+
+        return list(course_groups.values())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting marks summary for student {student_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get marks summary")
 
 
 # ==================== Create Mark ====================
@@ -53,6 +135,7 @@ async def create_mark(
     current_user=Depends(get_current_user),
 ):
     """Create a new mark - requires lecturer or admin role"""
+    _require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can create marks")
 
@@ -102,6 +185,7 @@ async def get_mark(
     current_user=Depends(get_current_user),
 ):
     """Get a specific mark"""
+    _require_supabase()
     try:
         resp = supabase.table("marks").select("*").eq("id", mark_id).execute()
         if not resp.data:
@@ -131,6 +215,7 @@ async def list_assessment_marks(
     current_user=Depends(get_current_user),
 ):
     """List marks for an assessment"""
+    _require_supabase()
     try:
         # Verify assessment exists
         assessment_resp = supabase.table("assessments").select("*").eq("id", assessment_id).execute()
@@ -170,6 +255,7 @@ async def get_student_course_marks(
     current_user=Depends(get_current_user),
 ):
     """Get all marks for a student in a course"""
+    _require_supabase()
     if current_user.get("role") == "student" and current_user.get("user_id") != student_id:
         raise HTTPException(status_code=403, detail="Cannot view other student's marks")
 
@@ -208,6 +294,7 @@ async def update_mark(
     current_user=Depends(get_current_user),
 ):
     """Update a mark - requires lecturer or admin role"""
+    _require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can update marks")
 
@@ -253,6 +340,7 @@ async def publish_marks(
     current_user=Depends(get_current_user),
 ):
     """Publish multiple marks - requires lecturer or admin role"""
+    _require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can publish marks")
 
@@ -284,6 +372,7 @@ async def flag_mark(
     current_user=Depends(get_current_user),
 ):
     """Flag a mark for review"""
+    _require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can flag marks")
 
@@ -318,6 +407,7 @@ async def get_student_course_grade(
     current_user=Depends(get_current_user),
 ):
     """Get final carry mark total for a student in a course"""
+    _require_supabase()
     if current_user.get("role") == "student" and current_user.get("user_id") != student_id:
         raise HTTPException(status_code=403, detail="Cannot view other student's grades")
 

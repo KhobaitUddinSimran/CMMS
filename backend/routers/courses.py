@@ -9,6 +9,18 @@ router = APIRouter(prefix="/api/courses", tags=["courses"])
 logger = logging.getLogger(__name__)
 
 
+def _require_supabase():
+    """Raise 503 if the Supabase client was not initialised (missing env vars)."""
+    if supabase is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Database service unavailable: Supabase client not initialised. "
+                "Check SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables."
+            ),
+        )
+
+
 @router.get("")
 async def list_courses(
     skip: int = Query(0, ge=0),
@@ -16,6 +28,7 @@ async def list_courses(
     current_user: User = Depends(get_current_user),
 ):
     """List all courses with pagination using Supabase"""
+    _require_supabase()
     try:
         logger.info(
             f"Listing courses - user: {current_user.get('user_id')}, "
@@ -53,6 +66,7 @@ async def get_course(
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific course by ID"""
+    _require_supabase()
     try:
         response = supabase.table("courses").select("*").eq("id", course_id).execute()
 
@@ -79,6 +93,7 @@ async def create_course(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new course - requires coordinator or admin role"""
+    _require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -164,6 +179,7 @@ async def update_course(
     current_user: User = Depends(get_current_user),
 ):
     """Update a course - requires coordinator or admin role"""
+    _require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -197,6 +213,7 @@ async def delete_course(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a course - requires admin role"""
+    _require_supabase()
     if current_user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -222,6 +239,7 @@ async def assign_lecturer(
     current_user: User = Depends(get_current_user),
 ):
     """Assign a lecturer to a course - requires coordinator or admin role"""
+    _require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
