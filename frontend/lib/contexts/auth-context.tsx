@@ -1,9 +1,11 @@
 'use client'
 
-import React, { createContext, useContext, useCallback, ReactNode } from 'react'
-import { useAuthStore } from '@/stores/authStore'
+import React, { createContext, useContext, useCallback, useMemo, ReactNode } from 'react'
+import { useAuthStore, isTokenValid } from '@/stores/authStore'
 import { useToastStore } from '@/stores/toastStore'
 import * as authApi from '@/lib/api/auth'
+import { setCachedToken } from '@/lib/api/client'
+import { getCurrentUser as getUserProfile } from '@/lib/api/users'
 import { transformAuthUser } from '@/lib/auth/utils'
 import type {
   AuthContextType,
@@ -44,7 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Transform user data with computed properties
         const transformedUser = transformAuthUser(response.user)
         
-        // Set token (also saves to localStorage/cookie)
+        // Set token (also saves to localStorage/cookie) + sync in-memory cache
+        setCachedToken(response.token)
         setToken(response.token)
         
         // Set user data
@@ -112,16 +115,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const handleLogout = useCallback(async () => {
     setLoading(true)
-
     try {
       await authApi.logout()
     } catch (err) {
       console.error('Logout error:', err)
     } finally {
-      // Clear state regardless of API response
+      setCachedToken(null)
       clearAuth()
       setLoading(false)
       addToast('Logged out successfully', 'success')
+      window.location.href = '/auth/login'
     }
   }, [clearAuth, setLoading, addToast])
 
@@ -170,33 +173,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Get current authenticated user
    */
   const handleGetCurrentUser = useCallback(async () => {
-    setLoading(true)
-
     try {
-      const user = await authApi.getCurrentUser()
+      const user = await getUserProfile()
       const transformedUser = transformAuthUser(user)
       if (transformedUser) {
         setUser(transformedUser)
-        setApprovalStatus(transformedUser.approval_status)
+        setApprovalStatus(transformedUser.approval_status as any)
       }
     } catch (err: any) {
-      console.error('Error getting current user:', err)
-      // If 401, clear auth
       if (err.response?.status === 401) {
         clearAuth()
       }
-    } finally {
-      setLoading(false)
     }
-  }, [setUser, setLoading, setApprovalStatus, clearAuth])
+  }, [setUser, setApprovalStatus, clearAuth])
 
-  const value: AuthContextType = {
+  const value: AuthContextType = useMemo(() => ({
     user,
     loading,
     error,
     token,
-    isAuthenticated: !!token && !!user,
-    
+    isAuthenticated: !!user && isTokenValid(token),
+
     login: handleLogin,
     signup: handleSignup,
     logout: handleLogout,
@@ -204,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkApprovalStatus: handleCheckApprovalStatus,
     getCurrentUser: handleGetCurrentUser,
     clearError,
-  }
+  }), [user, loading, error, token, handleLogin, handleSignup, handleLogout, handleResetPassword, handleCheckApprovalStatus, handleGetCurrentUser, clearError])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

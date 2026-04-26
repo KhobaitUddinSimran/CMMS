@@ -23,75 +23,73 @@ async def list_users(
     current_user=Depends(get_current_user),
 ):
     """List users with optional role filter. Requires authenticated user."""
+    TEACHING_ROLES = ["lecturer", "coordinator", "hod"]
+    is_teaching_filter = role in ("lecturer", "teaching")
+
+    from ..core.config import supabase
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
-        from ..core.config import supabase
         query = supabase.table("users").select("id, email, full_name, role, is_active")
-        if role:
+        if is_teaching_filter:
+            query = query.in_("role", TEACHING_ROLES)
+        elif role:
             query = query.eq("role", role)
         resp = query.eq("is_active", True).execute()
         users = resp.data or []
-        # For the getLecturers() frontend call that expects { lecturers: [...] }
-        if role == "lecturer":
+        if is_teaching_filter:
             return {"lecturers": users}
         return {"users": users, "count": len(users)}
     except Exception as e:
         logger.error(f"Error listing users: {e}", exc_info=True)
-        # Fallback to mock
-        from ..db.mock_data import MOCK_USERS
-        users = []
-        for email, data in MOCK_USERS.items():
-            if role and data.get("role") != role:
-                continue
-            users.append({"id": data.get("id", email), "email": email, "full_name": data.get("full_name", ""), "role": data.get("role", "")})
-        if role == "lecturer":
-            return {"lecturers": users}
-        return {"users": users, "count": len(users)}
+        raise HTTPException(status_code=500, detail="Failed to list users")
 
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
-    confirm_password: str
+    confirm_password: str | None = None
 
 @router.get("/me")
 async def get_current_user_info(
-    current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get current user information"""
-    try:
-        user_id = current_user["user_id"]
-        
-        # Query database for full user info by UUID (new) or email (fallback)
-        result = await db.execute(
-            text("SELECT id, email, full_name, role, is_active FROM users WHERE id = :user_id OR email = :user_id"),
-            {"user_id": user_id}
-        )
-        user = result.fetchone()
-        
-        if user:
-            return {
-                "id": str(user[0]),
-                "email": user[1],
-                "full_name": user[2],
-                "role": user[3],
-                "is_active": user[4],
-            }
-        else:
-            # Fallback for mock users - return minimal info
-            logger.debug(f"User {user_id} not found in database, returning mock user info")
-            return {
-                "id": user_id,
-                "email": "unknown@utm.my",
-                "full_name": "Mock User",
-                "role": current_user.get("role", "student"),
-                "is_active": True,
-            }
-    except Exception as e:
-        logger.error(f"Error fetching user info: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch user information: {str(e)}"
-        )
+    """Get current user information — tries Supabase REST, then SQLAlchemy, then mock fallback."""
+    user_id = current_user["user_id"]
+    role_from_token = current_user.get("role", "student")
+    special_roles_from_token = current_user.get("special_roles", [])
+
+    # Supabase lookup by canonical UUID
+    from ..core.config import supabase as _sb
+    if _sb:
+        try:
+            resp = _sb.table("users").select(
+                "id, email, full_name, role, is_active, email_verified, approval_status, created_at"
+            ).eq("id", user_id).execute()
+            if resp.data:
+                u = resp.data[0]
+                db_role = u.get("role", role_from_token)
+                db_special = [db_role] if db_role in ("coordinator", "hod") else []
+                return {
+                    "id": u["id"],
+                    "email": u.get("email", ""),
+                    "full_name": u.get("full_name", ""),
+                    "role": db_role,
+                    "is_active": u.get("is_active", True),
+                    "email_verified": u.get("email_verified", False),
+                    "approval_status": u.get("approval_status", "approved"),
+                    "special_roles": db_special or special_roles_from_token,
+                    "created_at": u.get("created_at"),
+                }
+        except Exception as e:
+            logger.warning(f"Supabase /users/me lookup failed: {e}")
+
+    # JWT fallback
+    return {
+        "id": user_id, "email": "", "full_name": "",
+        "role": role_from_token, "is_active": True, "email_verified": True,
+        "approval_status": "approved", "special_roles": special_roles_from_token,
+    }
 
 @router.put("/me")
 async def update_profile(
@@ -178,7 +176,7 @@ async def change_password(
                 detail="Password must be at least 8 characters"
             )
         
-        if request.new_password != request.confirm_password:
+        if request.confirm_password is not None and request.new_password != request.confirm_password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Passwords do not match"

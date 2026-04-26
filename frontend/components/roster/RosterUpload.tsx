@@ -7,7 +7,7 @@ import { Button } from '../common/Button'
 interface RosterUploadProps {
   courseId: string
   onUploadStart: () => void
-  onUploadComplete: (data: any) => void
+  onUploadComplete: (data: any, file: File) => void
   onError: (error: string) => void
 }
 
@@ -48,7 +48,7 @@ export function RosterUpload({ courseId, onUploadStart, onUploadComplete, onErro
     try {
       const { previewRosterUpload } = await import('@/lib/api/enrollments')
       const data = await previewRosterUpload(courseId, file)
-      onUploadComplete(data)
+      onUploadComplete(data, file)
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Failed to process file')
     } finally {

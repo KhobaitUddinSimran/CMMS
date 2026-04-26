@@ -15,14 +15,14 @@ export default function DashboardPage() {
       const specialRoles: string[] = (user as any)?.special_roles || []
       const baseRole = user.role
 
-      // Lecturers with ANY special role → combined lecturer dashboard
-      // (it renders coordinator/hod sections inline based on special_roles)
-      if (baseRole === 'lecturer' && specialRoles.length > 0) {
+      // All teaching staff → unified lecturer dashboard
+      // The lecturer dashboard renders coordinator/hod sections based on special_roles
+      const isTeachingStaff = ['lecturer', 'coordinator', 'hod'].includes(baseRole)
+        || specialRoles.includes('coordinator')
+        || specialRoles.includes('hod')
+
+      if (isTeachingStaff) {
         router.push('/dashboard/lecturer')
-      } else if (baseRole === 'hod' || specialRoles.includes('hod')) {
-        router.push('/dashboard/hod')
-      } else if (baseRole === 'coordinator' || specialRoles.includes('coordinator')) {
-        router.push('/dashboard/coordinator')
       } else {
         router.push(`/dashboard/${baseRole}`)
       }

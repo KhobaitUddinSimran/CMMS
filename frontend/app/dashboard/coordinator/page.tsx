@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
-import { listCourses } from '@/lib/api/courses'
+import { listCourses, listLecturers } from '@/lib/api/courses'
 import {
   BookOpen, Users, Plus, Upload, ClipboardList,
   BarChart3, ChevronRight, Settings
@@ -19,6 +19,7 @@ interface CourseItem {
   year: string
   semester: string
   credits?: number
+  lecturer_id?: string
   lecturer_name?: string
 }
 
@@ -37,12 +38,30 @@ export default function CoordinatorDashboard() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const data = await listCourses({ limit: 500 })
-      const list: CourseItem[] = data.data || (data as any)
-      setCourses(list)
-      setTotalCourses(data.total ?? list.length)
-    } catch {
-      setCourses([])
+      const [data, staffList] = await Promise.allSettled([
+        listCourses({ limit: 500 }),
+        listLecturers(),
+      ])
+
+      // Build id → name map from teaching staff
+      const nameMap: Record<string, string> = {}
+      if (staffList.status === 'fulfilled') {
+        for (const s of staffList.value) {
+          if (s.id) nameMap[s.id] = s.full_name || s.email || s.id
+        }
+      }
+
+      if (data.status === 'fulfilled') {
+        const raw = data.value.data || (data.value as any)
+        const list: CourseItem[] = raw.map((c: any) => ({
+          ...c,
+          lecturer_name: c.lecturer_name || (c.lecturer_id ? nameMap[c.lecturer_id] : undefined),
+        }))
+        setCourses(list)
+        setTotalCourses(data.value.total ?? list.length)
+      } else {
+        setCourses([])
+      }
     } finally {
       setLoading(false)
     }

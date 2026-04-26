@@ -1,5 +1,5 @@
 // Auth API - Authentication API calls
-import axios from 'axios'
+import { authApiClient } from './client'
 import type {
   LoginRequest,
   LoginResponse,
@@ -12,22 +12,6 @@ import type {
   ApprovalStatusResponse,
   AuthUser,
 } from '@/types/auth'
-
-// Use /api prefix so Next.js rewrites proxy to backend (avoids CORS)
-const BASE_URL = '/api'
-
-// Create a dedicated auth client without the /api prefix
-const authApiClient = axios.create({
-  baseURL: BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-})
-
-// Add token to requests
-authApiClient.interceptors.request.use((config: any) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
-})
 
 /**
  * Login with email, password, and role

@@ -55,14 +55,13 @@ export default function LecturerDashboard() {
       const list: CourseItem[] = data.data || (data as any)
       setAllCourses(list)
 
-      const assigned = list.filter(
-        (c) => c.lecturer_id === user?.id || c.lecturer_name === user?.full_name || c.lecturer_name === user?.name
-      )
-      setMyCourses(assigned)
+      // Backend already scopes GET /courses to the current lecturer's assigned
+      // courses, so the full list IS their courses.
+      setMyCourses(list)
 
-      if (assigned.length > 0) {
+      if (list.length > 0) {
         let total = 0
-        for (const course of assigned.slice(0, 5)) {
+        for (const course of list.slice(0, 5)) {
           try {
             const students = await getEnrolledStudents(course.id)
             const active = Array.isArray(students)
@@ -74,7 +73,7 @@ export default function LecturerDashboard() {
             course.student_count = 0
           }
         }
-        setMyCourses([...assigned])
+        setMyCourses([...list])
         setTotalStudents(total)
       } else {
         setTotalStudents(0)
@@ -221,7 +220,7 @@ export default function LecturerDashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => router.push(`/courses/${course.id}/manage`)}
+                    <button onClick={() => router.push(`/roster?course=${course.id}`)}
                       className="px-3 py-1.5 text-xs font-medium text-[#2563EB] border border-[#BFDBFE] rounded-lg hover:bg-blue-50 transition-colors">
                       Roster
                     </button>

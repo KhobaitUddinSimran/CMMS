@@ -8,6 +8,7 @@ from . import marks
 from . import otp
 from . import admin
 from . import health
+from . import queries
 
 __all__ = [
     "auth",
@@ -19,4 +20,5 @@ __all__ = [
     "otp",
     "admin",
     "health",
+    "queries",
 ]

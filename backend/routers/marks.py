@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
+from ..services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/marks", tags=["marks"])
 logger = logging.getLogger(__name__)
@@ -14,19 +15,16 @@ logger = logging.getLogger(__name__)
 # ==================== Request Models ====================
 class MarkCreateRequest(BaseModel):
     student_id: str
-    course_id: str
     assessment_id: str
-    score: Optional[float] = None
-    is_delayed: str = "no"
-    is_flagged: str = "no"
-    flag_reason: Optional[str] = None
+    raw_score: Optional[float] = None
+    is_flagged: bool = False
+    flag_note: Optional[str] = None
 
 
 class MarkUpdateRequest(BaseModel):
-    score: Optional[float] = None
-    is_delayed: Optional[str] = None
-    is_flagged: Optional[str] = None
-    flag_reason: Optional[str] = None
+    raw_score: Optional[float] = None
+    is_flagged: Optional[bool] = None
+    flag_note: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -50,8 +48,10 @@ def _require_supabase():
 
 
 def _verify_lecturer_course(course: dict, current_user: dict):
-    """Verify lecturer is assigned to this course"""
-    if current_user.get("role") == "lecturer" and course.get("lecturer_id") != current_user.get("user_id"):
+    """Verify lecturer is assigned to this course (skip check for elevated roles)"""
+    special = set(current_user.get("special_roles", []) or [])
+    is_elevated = current_user.get("role") in ("coordinator", "hod", "admin") or "coordinator" in special or "hod" in special
+    if not is_elevated and course.get("lecturer_id") != current_user.get("user_id"):
         raise HTTPException(status_code=403, detail="You are not assigned to this course")
 
 
@@ -63,11 +63,27 @@ async def get_all_course_marks(
 ):
     """Get all marks for all students in a course — used by the Smart Grid"""
     _require_supabase()
-    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+    if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     try:
-        resp = supabase.table("marks").select("*").eq("course_id", course_id).execute()
-        return resp.data or []
+        # marks table has no course_id — join via assessments
+        a_resp = supabase.table("assessments").select("id").eq("course_id", course_id).execute()
+        assessment_ids = [a["id"] for a in (a_resp.data or [])]
+        if not assessment_ids:
+            return []
+        resp = (
+            supabase.table("marks")
+            .select("*")
+            .in_("assessment_id", assessment_ids)
+            .range(0, 9999)
+            .execute()
+        )
+        marks = resp.data or []
+        # normalise raw_score → score for frontend compatibility
+        for m in marks:
+            if "score" not in m or m["score"] is None:
+                m["score"] = m.get("raw_score")
+        return marks
     except HTTPException:
         raise
     except Exception as e:
@@ -88,7 +104,7 @@ async def get_student_marks_summary(
     try:
         marks_resp = (
             supabase.table("marks")
-            .select("*, assessments(name, max_score, weight_percentage, type)")
+            .select("*, assessments(id, name, max_score, weight_percentage, type, course_id)")
             .eq("student_id", student_id)
             .eq("status", "published")
             .execute()
@@ -97,11 +113,13 @@ async def get_student_marks_summary(
 
         course_groups: dict = {}
         for mark in marks:
-            course_id = mark["course_id"]
             assessment = mark.get("assessments") or {}
+            course_id = assessment.get("course_id")  # course_id lives on assessment, not mark
+            if not course_id:
+                continue
             max_score = float(assessment.get("max_score") or 100)
             weight = float(assessment.get("weight_percentage") or 0)
-            score = float(mark.get("score") or 0)
+            score = float(mark.get("raw_score") or mark.get("score") or 0)
             normalized = (score / max_score * 100) if max_score > 0 else 0
             weighted = normalized * (weight / 100)
 
@@ -155,27 +173,125 @@ async def create_mark(
 
         new_mark = {
             "student_id": data.student_id,
-            "course_id": data.course_id,
             "assessment_id": data.assessment_id,
-            "score": data.score,
-            "is_delayed": data.is_delayed,
+            "raw_score": data.raw_score,
             "is_flagged": data.is_flagged,
-            "flag_reason": data.flag_reason,
+            "flag_note": data.flag_note,
             "status": "draft",
-            "modified_by": current_user.get("user_id"),
         }
 
         resp = supabase.table("marks").insert(new_mark).execute()
         if not resp.data:
             raise HTTPException(status_code=500, detail="Failed to create mark")
 
-        return resp.data[0]
+        mark = resp.data[0]
+        if mark.get("score") is None:
+            mark["score"] = mark.get("raw_score")
+        return mark
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error creating mark: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create mark")
+
+
+# ==================== Flagged Marks (must be BEFORE /{mark_id}) ====================
+@router.get("/flagged")
+async def get_flagged_marks(
+    course_id: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+):
+    """Return all flagged marks — coordinator / HOD / admin only"""
+    _require_supabase()
+    if not has_effective_role(current_user, "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        q = supabase.table("marks").select("*").eq("is_flagged", True)
+        if course_id:
+            # marks has no course_id — filter via assessment_id
+            a_filter = supabase.table("assessments").select("id").eq("course_id", course_id).execute()
+            aid_list = [a["id"] for a in (a_filter.data or [])]
+            if not aid_list:
+                return {"flagged_marks": [], "count": 0}
+            q = q.in_("assessment_id", aid_list)
+        resp = q.order("updated_at", desc=True).execute()
+        marks_data = resp.data or []
+
+        # Enrich with student names
+        student_ids = list({m.get("student_id") for m in marks_data if m.get("student_id")})
+        student_map: dict = {}
+        if student_ids:
+            s_resp = supabase.table("users").select("id, full_name, email").in_("id", student_ids).execute()
+            for s in (s_resp.data or []):
+                student_map[s["id"]] = {"full_name": s.get("full_name"), "email": s.get("email")}
+        for m in marks_data:
+            m["student"] = student_map.get(m.get("student_id"), {})
+
+        # Enrich with assessment info
+        assessment_ids = list({m.get("assessment_id") for m in marks_data if m.get("assessment_id")})
+        a_map: dict = {}
+        if assessment_ids:
+            a_resp = supabase.table("assessments").select("id, name, type, max_score, weight_percentage").in_("id", assessment_ids).execute()
+            for a in (a_resp.data or []):
+                a_map[a["id"]] = {k: a.get(k) for k in ("name", "type", "max_score", "weight_percentage")}
+
+        # Enrich with course info via assessments.course_id
+        course_ids_all = list({a.get("course_id") for a in a_map.values() if a.get("course_id")})
+        c_map: dict = {}
+        if course_ids_all:
+            c_resp = supabase.table("courses").select("id, code, name").in_("id", course_ids_all).execute()
+            for c in (c_resp.data or []):
+                c_map[c["id"]] = {"code": c.get("code"), "name": c.get("name")}
+
+        for m in marks_data:
+            a_info = a_map.get(m.get("assessment_id"), {})
+            m["assessments"] = {k: a_info.get(k) for k in ("name", "type", "max_score", "weight_percentage")}
+            m["courses"] = c_map.get(a_info.get("course_id"), {})
+
+        return {"flagged_marks": marks_data, "count": len(marks_data)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching flagged marks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch flagged marks")
+
+
+# ==================== Unflag Mark ====================
+@router.post("/{mark_id}/unflag")
+async def unflag_mark(
+    mark_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Clear flag on a mark — coordinator / HOD / admin only"""
+    _require_supabase()
+    if not has_effective_role(current_user, "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        mark_resp = supabase.table("marks").select("id").eq("id", mark_id).execute()
+        if not mark_resp.data:
+            raise HTTPException(status_code=404, detail="Mark not found")
+
+        resp = (
+            supabase.table("marks")
+            .update({"is_flagged": False, "flag_note": None})
+            .eq("id", mark_id)
+            .execute()
+        )
+        if not resp.data:
+            raise HTTPException(status_code=500, detail="Failed to unflag mark")
+
+        AuditService.log("MARK_UNFLAGGED", current_user["user_id"], mark_id)
+        return resp.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unflagging mark {mark_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to unflag mark")
 
 
 # ==================== Get Mark ====================
@@ -268,14 +384,23 @@ async def get_student_course_marks(
         if current_user.get("role") == "lecturer":
             _verify_lecturer_course(course_resp.data[0], current_user)
 
+        # marks has no course_id — filter via assessments
+        a_resp = supabase.table("assessments").select("id").eq("course_id", course_id).execute()
+        assessment_ids = [a["id"] for a in (a_resp.data or [])]
+        if not assessment_ids:
+            return {"data": [], "count": 0}
+
         resp = (
             supabase.table("marks")
             .select("*")
             .eq("student_id", student_id)
-            .eq("course_id", course_id)
+            .in_("assessment_id", assessment_ids)
             .execute()
         )
         marks = resp.data or []
+        for m in marks:
+            if "score" not in m or m["score"] is None:
+                m["score"] = m.get("raw_score")
 
         return {"data": marks, "count": len(marks)}
 
@@ -310,21 +435,31 @@ async def update_mark(
         if mark.get("status") == "published":
             raise HTTPException(status_code=400, detail="Cannot update published marks")
 
-        # Verify course access
+        # Verify course access for lecturers via assessment
         if current_user.get("role") == "lecturer":
-            course_resp = supabase.table("courses").select("*").eq("id", mark["course_id"]).execute()
-            if course_resp.data:
-                _verify_lecturer_course(course_resp.data[0], current_user)
+            a_resp = supabase.table("assessments").select("course_id").eq("id", mark["assessment_id"]).execute()
+            if a_resp.data:
+                cid = a_resp.data[0].get("course_id")
+                course_resp = supabase.table("courses").select("*").eq("id", cid).execute()
+                if course_resp.data:
+                    _verify_lecturer_course(course_resp.data[0], current_user)
 
-        update_data = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
-        update_data["modified_by"] = current_user.get("user_id")
-        update_data["modified_at"] = datetime.utcnow().isoformat()
+        # Use exclude_unset but keep explicit None/0 values (e.g. clearing a score)
+        update_data = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
+        # Remove None-valued keys only for non-score fields to allow score=0
+        update_data = {k: v for k, v in update_data.items() if v is not None or k == "raw_score"}
+        if not update_data:
+            # Nothing to update — return existing mark
+            return mark
 
         resp = supabase.table("marks").update(update_data).eq("id", mark_id).execute()
         if not resp.data:
             raise HTTPException(status_code=500, detail="Failed to update mark")
 
-        return resp.data[0]
+        updated = resp.data[0]
+        if updated.get("score") is None:
+            updated["score"] = updated.get("raw_score")
+        return updated
 
     except HTTPException:
         raise
@@ -349,7 +484,7 @@ async def publish_marks(
         for mark_id in request.mark_ids:
             resp = (
                 supabase.table("marks")
-                .update({"status": "published", "modified_by": current_user.get("user_id"), "modified_at": datetime.utcnow().isoformat()})
+                .update({"status": "published"})
                 .eq("id", mark_id)
                 .eq("status", "draft")
                 .execute()
@@ -362,6 +497,37 @@ async def publish_marks(
     except Exception as e:
         logger.error(f"Error publishing marks: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to publish marks")
+
+
+# ==================== Unpublish Marks (revert to draft) ====================
+@router.post("/unpublish", status_code=status.HTTP_200_OK)
+async def unpublish_marks(
+    request: MarkPublishRequest,
+    current_user=Depends(get_current_user),
+):
+    """Revert published marks back to draft so they can be corrected and re-published."""
+    _require_supabase()
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers and admins can unpublish marks")
+
+    try:
+        count = 0
+        for mark_id in request.mark_ids:
+            resp = (
+                supabase.table("marks")
+                .update({"status": "draft"})
+                .eq("id", mark_id)
+                .eq("status", "published")
+                .execute()
+            )
+            if resp.data:
+                count += 1
+
+        return {"message": f"Reverted {count} mark{'' if count == 1 else 's'} to draft", "count": count}
+
+    except Exception as e:
+        logger.error(f"Error unpublishing marks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to unpublish marks")
 
 
 # ==================== Flag Mark ====================
@@ -383,7 +549,7 @@ async def flag_mark(
 
         resp = (
             supabase.table("marks")
-            .update({"is_flagged": "yes", "flag_reason": reason})
+            .update({"is_flagged": True, "flag_note": reason})
             .eq("id", mark_id)
             .execute()
         )
@@ -412,28 +578,32 @@ async def get_student_course_grade(
         raise HTTPException(status_code=403, detail="Cannot view other student's grades")
 
     try:
-        # Get published marks with assessment info
+        # Scope to this course's assessments only
+        a_resp = supabase.table("assessments").select("id, max_score, weight_percentage").eq("course_id", course_id).execute()
+        course_assessments = {a["id"]: a for a in (a_resp.data or [])}
+        if not course_assessments:
+            return {"student_id": student_id, "course_id": course_id, "grade": None, "marks": []}
+
         marks_resp = (
             supabase.table("marks")
             .select("*")
             .eq("student_id", student_id)
-            .eq("course_id", course_id)
             .eq("status", "published")
+            .in_("assessment_id", list(course_assessments.keys()))
             .execute()
         )
         marks = marks_resp.data or []
 
         if not marks:
-            return {"student_id": student_id, "course_id": course_id, "grade": None}
+            return {"student_id": student_id, "course_id": course_id, "grade": None, "marks": []}
 
         total_grade = 0.0
         for mark in marks:
-            assessment_resp = supabase.table("assessments").select("max_score, weight_percentage").eq("id", mark["assessment_id"]).execute()
-            if assessment_resp.data:
-                a = assessment_resp.data[0]
-                max_score = a.get("max_score", 100)
-                weight = a.get("weight_percentage", 0)
-                score = mark.get("score", 0) or 0
+            a = course_assessments.get(mark["assessment_id"], {})
+            if a:
+                max_score = a.get("max_score", 100) or 100
+                weight = a.get("weight_percentage", 0) or 0
+                score = mark.get("raw_score") or mark.get("score") or 0
                 normalized = (score / max_score) * 100 if max_score > 0 else 0
                 total_grade += normalized * (weight / 100)
 

@@ -19,9 +19,9 @@ export const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
     return (
       <div className="mb-4">
         {label && (
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-[13px] font-semibold text-[#374151] mb-1.5 tracking-tight">
             {label}
-            {props.required && <span className="text-red-500 ml-1">*</span>}
+            {props.required && <span className="text-[#C90031] ml-1">*</span>}
           </label>
         )}
         <div className="relative">
@@ -29,13 +29,13 @@ export const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
           <input
             ref={ref}
             type={inputType}
-            className={`w-full px-4 py-2 border rounded-lg transition-colors ${
+            className={`w-full px-4 py-2.5 border rounded-lg transition-colors text-[14px] text-[#0F172A] placeholder:text-[#94A3B8] ${
               icon ? 'pl-10' : ''
             } ${
               error
-                ? 'border-red-500 focus:ring-red-500 focus:border-red-500'
-                : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-            } focus:outline-none focus:ring-2 ${className}`}
+                ? 'border-[#DC2626] focus:ring-[#DC2626]/20 focus:border-[#DC2626]'
+                : 'border-[#E5E7EB] focus:ring-[#C90031]/15 focus:border-[#C90031]'
+            } focus:outline-none focus:ring-2 bg-white ${className}`}
             {...props}
           />
           {isPassword && (
@@ -57,8 +57,8 @@ export const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
             </button>
           )}
         </div>
-        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-        {helperText && <p className="mt-1 text-sm text-gray-600">{helperText}</p>}
+        {error && <p className="mt-1.5 text-[12px] text-[#DC2626] font-medium">{error}</p>}
+        {helperText && <p className="mt-1.5 text-[12px] text-[#64748B]">{helperText}</p>}
       </div>
     )
   }

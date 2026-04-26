@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { GraduationCap, BookOpen, ShieldCheck, Check } from 'lucide-react'
 import type { LoginRole } from '@/types/auth'
 
 interface RoleSelectorProps {
@@ -10,68 +11,51 @@ interface RoleSelectorProps {
   signupMode?: boolean // When true, only show student/lecturer (no admin)
 }
 
-const roles: { value: LoginRole; label: string; description: string; gradient: string }[] = [
-  {
-    value: 'student',
-    label: 'Student',
-    description: 'Enrollment & Marks',
-    gradient: 'from-blue-500 to-blue-600',
-  },
-  {
-    value: 'lecturer',
-    label: 'Lecturer',
-    description: 'Course Management',
-    gradient: 'from-green-500 to-green-600',
-  },
-  {
-    value: 'admin',
-    label: 'Admin',
-    description: 'System Administration',
-    gradient: 'from-yellow-500 to-yellow-600',
-  },
+const roles: { value: LoginRole; label: string; description: string; Icon: React.ElementType }[] = [
+  { value: 'student',  label: 'Student',  description: 'View enrollments & carry marks', Icon: GraduationCap },
+  { value: 'lecturer', label: 'Lecturer', description: 'Manage courses & grade students',  Icon: BookOpen },
+  { value: 'admin',    label: 'Admin',    description: 'System administration & users',    Icon: ShieldCheck },
 ]
 
 export function RoleSelector({ selected, onChange, disabled = false, signupMode = false }: RoleSelectorProps) {
-  // Signup: only student/lecturer. Login: student/lecturer/admin.
-  // Coordinator & HOD are never shown — they are special roles assigned by admin to lecturers.
   const visibleRoles = signupMode ? ['student', 'lecturer'] : ['student', 'lecturer', 'admin']
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {roles
         .filter((r) => visibleRoles.includes(r.value))
-        .map((role) => (
-          <button
-            key={role.value}
-            onClick={() => onChange(role.value)}
-            disabled={disabled}
-            className={`w-full p-4 rounded-lg border-2 transition-all ${
-              selected === role.value
-                ? `border-${role.value}-600 bg-gradient-to-r ${role.gradient} text-white shadow-lg`
-                : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300'
-            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="text-left">
-                <p className="font-semibold">{role.label}</p>
-                <p className={`text-sm ${selected === role.value ? 'text-blue-100' : 'text-gray-600'}`}>
-                  {role.description}
-                </p>
+        .map((role) => {
+          const active = selected === role.value
+          return (
+            <button
+              key={role.value}
+              onClick={() => onChange(role.value)}
+              disabled={disabled}
+              className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-lg border transition-all text-left
+                ${active
+                  ? 'border-[#C90031] bg-[#FFF5F7] shadow-[0_0_0_1px_#C90031]'
+                  : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB] hover:bg-[#FAFAFA]'
+                }
+                ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors
+                ${active ? 'bg-[#C90031] text-white' : 'bg-[#F4F5F7] text-[#64748B]'}`}>
+                <role.Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
               </div>
-              {selected === role.value && (
-                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-white/20">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+              <div className="flex-1 min-w-0">
+                <p className={`text-[14px] font-semibold leading-tight ${active ? 'text-[#C90031]' : 'text-[#0F172A]'}`}>
+                  {role.label}
+                </p>
+                <p className="text-[12px] text-[#64748B] mt-0.5 leading-tight">{role.description}</p>
+              </div>
+              {active && (
+                <div className="w-5 h-5 rounded-full bg-[#C90031] flex items-center justify-center shrink-0">
+                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
                 </div>
               )}
-            </div>
-          </button>
-        ))}
+            </button>
+          )
+        })}
     </div>
   )
 }

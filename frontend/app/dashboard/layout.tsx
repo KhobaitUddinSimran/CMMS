@@ -2,7 +2,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useAuth } from '@/lib/contexts/auth-context'
@@ -33,23 +32,27 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const router = useRouter()
   const { user, isAuthenticated, getCurrentUser } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [mounted, setMounted] = useState(false)
   const effectiveRole = getEffectiveRole(user)
   const effectiveRoles = getEffectiveRoles(user)
 
-  // Client-side redirect for authentication check - moved to useEffect
+  // Wait for client mount so Zustand can hydrate from localStorage before auth check
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (!isAuthenticated || !user) {
-        router.push('/')
-      } else {
-        setIsCheckingAuth(false)
-      }
+    setMounted(true)
+  }, [])
+
+  // Auth check — only runs after Zustand has hydrated
+  useEffect(() => {
+    if (!mounted) return
+    if (!isAuthenticated || !user) {
+      window.location.href = '/auth/login'
+    } else {
+      setIsCheckingAuth(false)
     }
-  }, [isAuthenticated, user, router])
+  }, [isAuthenticated, user, mounted])
 
   // Refresh user profile on mount so special_roles from admin changes propagate
   // without requiring logout/login
@@ -63,10 +66,10 @@ export default function DashboardLayout({
   // Show loading while checking auth
   if (isCheckingAuth) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-[#F0F2F5]">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <div className="inline-block animate-spin rounded-full h-9 w-9 border-t-2 border-b-2 border-[#C90031]"></div>
+          <p className="mt-3 text-[13.5px] text-[#64748B] font-medium">Loading...</p>
         </div>
       </div>
     )
@@ -91,7 +94,7 @@ export default function DashboardLayout({
         )}
         
         {/* Sidebar - hidden on mobile by default */}
-        <div className={`fixed md:relative md:flex z-40 ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
+        <div className={`fixed md:relative md:flex z-40 h-full ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
           <Sidebar isOpen={true} role={effectiveRoles} />
         </div>
         

@@ -10,6 +10,7 @@ export interface UserData {
   is_active: boolean
   email_verified: boolean
   approval_status: string
+  special_roles?: string[]
   created_at?: string
   updated_at?: string
 }

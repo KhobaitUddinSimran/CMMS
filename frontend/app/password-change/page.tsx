@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Alert } from '@/components/common/Alert'
 import { Lock, Eye, EyeOff } from 'lucide-react'
+import { changePassword } from '@/lib/api/users'
 
 export default function PasswordChangePage() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -73,14 +74,14 @@ export default function PasswordChangePage() {
 
     setIsLoading(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await changePassword(currentPassword, newPassword)
       setSuccess('Password changed successfully!')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-    } catch (err) {
-      setError('Failed to change password. Please try again.')
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to change password. Please try again.'
+      setError(msg)
     } finally {
       setIsLoading(false)
     }

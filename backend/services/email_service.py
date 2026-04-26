@@ -349,3 +349,53 @@ class EmailService:
         except Exception as e:
             logger.error(f"Failed to send rejection email to {email}: {str(e)}")
             return False
+
+    @staticmethod
+    async def send_password_reset(email: str, reset_link: str):
+        """Send password reset link via email"""
+        if not email_config.resend_api_key:
+            logger.warning(f"Email service not configured. Password reset link for {email}: {reset_link}")
+            return False
+
+        try:
+            import resend
+
+            resend.api_key = email_config.resend_api_key
+
+            subject = "Reset Your CMMS Password"
+            html_content = f"""
+            <h2>Password Reset Request</h2>
+            <p>You requested a password reset for your CMMS account.</p>
+            <p>Click the button below to set a new password. This link expires in <strong>30 minutes</strong>.</p>
+            <p style="margin: 24px 0;">
+                <a href="{reset_link}"
+                   style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                          text-decoration:none;font-weight:bold;display:inline-block;">
+                    Reset My Password
+                </a>
+            </p>
+            <p style="font-size:13px;color:#555;">
+                Or copy this link into your browser:<br/>
+                <code style="word-break:break-all;">{reset_link}</code>
+            </p>
+            <p>If you did not request a password reset, please ignore this email.</p>
+            <hr/>
+            <p style="font-size:12px;color:#666;">
+                Carry Mark Management System (CMMS)<br/>
+                Universiti Teknologi Malaysia
+            </p>
+            """
+
+            resend.Emails().send({
+                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
+                "to": email,
+                "subject": subject,
+                "html": html_content,
+            })
+
+            logger.info(f"Password reset email sent to {email}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send password reset email to {email}: {str(e)}")
+            return False

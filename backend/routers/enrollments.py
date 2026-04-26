@@ -30,9 +30,17 @@ def _generate_otp(length: int = 6) -> str:
 
 
 def _verify_course_access(course: dict, current_user: dict):
-    """Verify lecturer/admin has access to the course"""
+    """Verify user has access to the course.
+    Admins, coordinators, and HODs have full access.
+    Lecturers can only access courses they are assigned to.
+    """
     user_role = current_user.get("role")
     user_id = current_user.get("user_id")
+    special = set(current_user.get("special_roles", []) or [])
+    # Full access for elevated roles (check both role and special_roles for JWT compatibility)
+    if user_role in ("admin", "coordinator", "hod") or "coordinator" in special or "hod" in special:
+        return
+    # Lecturers: scope to their own assigned courses only
     if user_role == "lecturer" and course.get("lecturer_id") != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -78,7 +86,7 @@ async def list_enrolled_students(
                 "id": e.get("student_id"),
                 "email": user.get("email", ""),
                 "full_name": user.get("full_name", ""),
-                "enrollment_date": e.get("enrollment_date") or e.get("created_at"),
+                "enrollment_date": e.get("enrolled_at") or e.get("created_at"),
                 "status": e.get("status", "active"),
             })
 
@@ -234,8 +242,8 @@ async def preview_roster_upload(
     current_user=Depends(get_current_user),
 ):
     """Upload Excel roster file for dry-run preview (no DB changes)"""
-    if not has_effective_role(current_user, "lecturer", "admin"):
-        raise HTTPException(status_code=403, detail="Only lecturers and admins can upload rosters")
+    if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers, coordinators, and admins can upload rosters")
 
     try:
         course = _get_course_or_404(course_id)
@@ -287,11 +295,14 @@ async def preview_roster_upload(
 
         for row_idx, row in enumerate(rows[1:], start=2):
             try:
+                # Skip fully empty rows silently
+                if not row or all(cell is None or str(cell).strip() == "" for cell in row):
+                    continue
+
                 email = str(row[col_map["email"]]).strip().lower() if row[col_map.get("email", 0)] else ""
-                
+
+                # Skip rows with empty email silently
                 if not email:
-                    students.append({"student_id": "", "email": "", "first_name": "", "last_name": "", "status": "error", "error": f"Row {row_idx}: Empty email"})
-                    error_count += 1
                     continue
 
                 # Validate email domain
@@ -356,8 +367,8 @@ async def upload_roster(
     - If email exists → link enrollment
     - If email is new → create user with OTP, send email, link enrollment
     """
-    if not has_effective_role(current_user, "lecturer", "admin"):
-        raise HTTPException(status_code=403, detail="Only lecturers and admins can upload rosters")
+    if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers, coordinators, and admins can upload rosters")
 
     try:
         course = _get_course_or_404(course_id)
@@ -405,9 +416,18 @@ async def upload_roster(
 
         for row_idx, row in enumerate(rows[1:], start=2):
             try:
+                # Skip fully empty rows silently
+                if not row or all(cell is None or str(cell).strip() == "" for cell in row):
+                    continue
+
                 email = str(row[col_map["email"]]).strip().lower() if row[col_map.get("email", 0)] else ""
-                if not email or not (email.endswith("@utm.my") or email.endswith("@graduate.utm.my")):
-                    errors.append(f"Row {row_idx}: Invalid or missing email")
+
+                # Skip rows with empty email silently
+                if not email:
+                    continue
+
+                if not (email.endswith("@utm.my") or email.endswith("@graduate.utm.my")):
+                    errors.append(f"Row {row_idx}: Invalid email domain: {email}")
                     continue
 
                 # Get name
