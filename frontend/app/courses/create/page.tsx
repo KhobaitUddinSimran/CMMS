@@ -109,7 +109,7 @@ export default function CreateCoursePage() {
                   Back to Courses
                 </button>
                 <button
-                  onClick={() => router.push(`/courses/${createdCourse.id}/manage`)}
+                  onClick={() => router.push(`/courses/${createdCourse.id}/edit`)}
                   className="flex-1 h-10 bg-[#C90031] hover:bg-[#a8002a] text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
                 >
                   Manage Course

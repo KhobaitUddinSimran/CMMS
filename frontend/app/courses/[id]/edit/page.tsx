@@ -10,7 +10,7 @@ import { CourseForm, type CourseFormData } from '@/components/course/CourseForm'
 import { LecturerSelector } from '@/components/course/LecturerSelector'
 import { useToastStore } from '@/stores/toastStore'
 import { getCourse, updateCourse, listLecturers, assignLecturer } from '@/lib/api/courses'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, CheckCircle, UserCheck } from 'lucide-react'
 
 interface CourseData extends Partial<CourseFormData> {
   id: string
@@ -38,6 +38,7 @@ export default function EditCoursePage() {
   const [lecturers, setLecturers] = useState<Lecturer[]>([])
   const [selectedLecturer, setSelectedLecturer] = useState<string>('')
   const [loadingUpdate, setLoadingUpdate] = useState(false)
+  const [assignSuccess, setAssignSuccess] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -46,16 +47,26 @@ export default function EditCoursePage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [courseData, lecturersData] = await Promise.all([
+      const [courseRes, lecturersRes] = await Promise.allSettled([
         getCourse(courseId),
         listLecturers(),
       ])
+
+      if (courseRes.status === 'rejected') {
+        addToast('Failed to load course data', 'error')
+        router.push('/courses')
+        return
+      }
+
+      const courseData = courseRes.value
       setCourse(courseData)
-      setLecturers(lecturersData)
       setSelectedLecturer(courseData.lecturer_id || '')
-    } catch (error) {
-      addToast('Failed to load course data', 'error')
-      router.push('/courses')
+
+      if (lecturersRes.status === 'fulfilled') {
+        setLecturers(lecturersRes.value)
+      } else {
+        addToast('Could not load lecturer list', 'error')
+      }
     } finally {
       setLoading(false)
     }
@@ -95,6 +106,8 @@ export default function EditCoursePage() {
       // Refresh course data
       const updated = await getCourse(courseId)
       setCourse(updated)
+      setAssignSuccess(true)
+      setTimeout(() => setAssignSuccess(false), 4000)
     } catch (error) {
       addToast(
         error instanceof Error ? error.message : 'Failed to assign lecturer',
@@ -161,20 +174,52 @@ export default function EditCoursePage() {
             <Card>
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-900">Assign Lecturer</h3>
+
+                {/* Currently assigned banner */}
+                {course.lecturer_id && (() => {
+                  const assigned = lecturers.find(l => l.id === course.lecturer_id)
+                  return assigned ? (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                      <UserCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs text-green-700 font-medium">Currently assigned</p>
+                        <p className="text-sm font-semibold text-green-900 truncate">{assigned.full_name || assigned.email}</p>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
                 <LecturerSelector
                   value={selectedLecturer}
-                  onChange={setSelectedLecturer}
+                  onChange={(val) => { setSelectedLecturer(val); setAssignSuccess(false) }}
                   lecturers={lecturers}
                   loading={loadingUpdate}
                 />
+
                 <Button
                   onClick={handleAssignLecturer}
                   loading={loadingUpdate}
                   variant="primary"
                   className="w-full"
                 >
-                  Save Assignment
+                  {assignSuccess ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <CheckCircle className="w-4 h-4" /> Assigned!
+                    </span>
+                  ) : 'Save Assignment'}
                 </Button>
+
+                {assignSuccess && (() => {
+                  const justAssigned = lecturers.find(l => l.id === selectedLecturer)
+                  return justAssigned ? (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg animate-pulse">
+                      <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <p className="text-sm text-green-800">
+                        <span className="font-semibold">{justAssigned.full_name || justAssigned.email}</span> assigned successfully
+                      </p>
+                    </div>
+                  ) : null
+                })()}
               </div>
             </Card>
 

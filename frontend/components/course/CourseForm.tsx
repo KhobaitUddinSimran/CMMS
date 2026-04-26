@@ -43,19 +43,19 @@ export function CourseForm({ onSubmit, loading = false, initialData }: CourseFor
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof CourseFormData, string>> = {}
 
-    if (!formData.code.trim()) {
+    if (!String(formData.code ?? '').trim()) {
       newErrors.code = 'Course code is required'
-    } else if (formData.code.length > 50) {
+    } else if (String(formData.code ?? '').length > 50) {
       newErrors.code = 'Course code must be 50 characters or less'
     }
 
-    if (!formData.name.trim()) {
+    if (!String(formData.name ?? '').trim()) {
       newErrors.name = 'Course name is required'
-    } else if (formData.name.length > 255) {
+    } else if (String(formData.name ?? '').length > 255) {
       newErrors.name = 'Course name must be 255 characters or less'
     }
 
-    if (!formData.section.trim()) {
+    if (!String(formData.section ?? '').trim()) {
       newErrors.section = 'Section is required'
     }
 
@@ -63,11 +63,11 @@ export function CourseForm({ onSubmit, loading = false, initialData }: CourseFor
       newErrors.credits = 'Credits must be between 1 and 10' as any
     }
 
-    if (!formData.year.trim()) {
+    if (!String(formData.year ?? '').trim()) {
       newErrors.year = 'Academic year is required'
     }
 
-    if (!formData.semester.trim()) {
+    if (!String(formData.semester ?? '').trim()) {
       newErrors.semester = 'Semester is required'
     }
 

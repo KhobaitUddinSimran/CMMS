@@ -26,12 +26,19 @@ function LoginPageContent() {
   const [password, setPassword] = useState('')
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
-  // Redirect if already authenticated
+  // Show session-expired message if redirected by middleware
+  useEffect(() => {
+    if (searchParams?.get('expired') === '1') {
+      addToast('Your session has expired. Please log in again.', 'warning')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Redirect if already authenticated (e.g., token persisted from previous session)
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     }
-  }, [isAuthenticated, router])
+  }, [isAuthenticated])
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
@@ -73,8 +80,10 @@ function LoginPageContent() {
         router.push(`/auth/pending-approval?user_id=${response.user.id}`)
       } else if (response.approval_status === 'rejected') {
         addToast(`Your application was rejected. Reason: ${response.user.rejection_reason || 'Not specified'}`, 'error')
-      } else if (response.approval_status === 'approved') {
-        router.push('/dashboard')
+      } else {
+        // Respect ?redirect= param set by middleware, fall back to dashboard
+        const redirectTo = searchParams?.get('redirect') || '/dashboard'
+        window.location.href = redirectTo.startsWith('/') ? redirectTo : '/dashboard'
       }
     } catch (err: any) {
       console.error('Login error:', err)

@@ -25,7 +25,8 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, childr
   const isDisabled = disabled || loading;
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg transition-colors cursor-pointer
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors cursor-pointer
+        focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#C90031]/40
         ${variantClasses[variant]} ${sizeClasses[size]}
         ${isDisabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}
         ${className}`}

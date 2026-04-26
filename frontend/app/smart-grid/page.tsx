@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Select } from '@/components/common/Select'
@@ -9,24 +10,56 @@ import { useToastStore } from '@/stores/toastStore'
 import { listCourses } from '@/lib/api/courses'
 import { listAssessments } from '@/lib/api/assessments'
 import { getEnrolledStudents } from '@/lib/api/enrollments'
-import { getCourseAllMarks, createMark, updateMark, publishMarkIds } from '@/lib/api/marks'
-import { Save, CheckCircle, Grid3x3, Users, ClipboardList, Lock } from 'lucide-react'
+import { getCourseAllMarks, createMark, updateMark, publishMarkIds, unpublishMarkIds } from '@/lib/api/marks'
+import { Save, CheckCircle, Grid3x3, Users, ClipboardList, Lock, LockOpen, TrendingUp, RefreshCw } from 'lucide-react'
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface CourseOption { id: string; label: string }
 interface Student { id: string; email: string; full_name: string }
 interface Assessment { id: string; name: string; max_score: number; weight: number; assessment_type?: string }
 
 interface CellState {
   markId: string | null
-  score: string          // string so input stays controlled
+  score: string
   status: 'draft' | 'published'
   dirty: boolean
 }
 
-type GridState = Record<string, Record<string, CellState>>  // [studentId][assessmentId]
+type GridState = Record<string, Record<string, CellState>>
 
+// ── Per-student carry total (published marks only) ─────────────────────────
+function calcCarry(studentId: string, assessments: Assessment[], grid: GridState): number {
+  let total = 0
+  for (const a of assessments) {
+    const cell = grid[studentId]?.[a.id]
+    if (cell?.status === 'published' && cell.score !== '') {
+      const sc = parseFloat(cell.score)
+      if (!isNaN(sc) && a.max_score > 0) total += (sc / a.max_score) * a.weight
+    }
+  }
+  return total
+}
+
+// ── Column stats (all entered scores, draft + published) ───────────────────
+function colStats(assessmentId: string, students: Student[], grid: GridState) {
+  const scores = students
+    .map((s) => grid[s.id]?.[assessmentId])
+    .filter((c) => c?.score !== '' && c?.score !== undefined)
+    .map((c) => parseFloat(c!.score))
+    .filter((v) => !isNaN(v))
+  if (scores.length === 0) return { avg: '—', hi: '—', lo: '—', count: 0 }
+  return {
+    avg: (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1),
+    hi: String(Math.max(...scores)),
+    lo: String(Math.min(...scores)),
+    count: scores.length,
+  }
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────
 export default function SmartGridPage() {
   const { addToast } = useToastStore()
+  const searchParams = useSearchParams()
 
   const [loadingCourses, setLoadingCourses] = useState(true)
   const [courseOptions, setCourseOptions] = useState<CourseOption[]>([])
@@ -37,10 +70,12 @@ export default function SmartGridPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [grid, setGrid] = useState<GridState>({})
   const [saving, setSaving] = useState(false)
-  const [publishing, setPublishing] = useState<string | null>(null)  // assessmentId being published
+  const [publishing, setPublishing] = useState<string | null>(null)
+  const [unpublishing, setUnpublishing] = useState<string | null>(null)
 
-  // ── Load courses ──────────────────────────────────────────────
+  // ── Load courses ───────────────────────────────────────────────
   useEffect(() => {
+    const preselect = searchParams.get('course')
     listCourses({ limit: 200 })
       .then((res) => {
         const list = res.data || (res as any)
@@ -50,6 +85,7 @@ export default function SmartGridPage() {
             label: `${c.code} – Sec ${c.section} (${c.year ?? c.academic_year}, Sem ${c.semester})`,
           }))
         )
+        if (preselect) setSelectedCourseId(preselect)
       })
       .catch(() => addToast('Failed to load courses', 'error'))
       .finally(() => setLoadingCourses(false))
@@ -63,16 +99,13 @@ export default function SmartGridPage() {
 
   const loadGrid = async (courseId: string) => {
     setLoadingGrid(true)
-    setGrid({})
-    setStudents([])
-    setAssessments([])
+    setGrid({}); setStudents([]); setAssessments([])
     try {
       const [studentsData, assessmentsRes, marksData] = await Promise.all([
         getEnrolledStudents(courseId),
         listAssessments(courseId),
         getCourseAllMarks(courseId),
       ])
-
       const assessmentList: Assessment[] = (
         Array.isArray(assessmentsRes) ? assessmentsRes : (assessmentsRes as any).data || []
       ).map((a: any) => ({
@@ -82,8 +115,6 @@ export default function SmartGridPage() {
         weight: a.weight ?? a.weight_percentage ?? 0,
         assessment_type: a.assessment_type ?? a.type ?? '',
       }))
-
-      // Build grid from existing marks
       const newGrid: GridState = {}
       for (const s of studentsData) {
         newGrid[s.id] = {}
@@ -101,8 +132,7 @@ export default function SmartGridPage() {
           }
         }
       }
-
-      setStudents(studentsData.filter((s) => s.status === 'active' || !s.status))
+      setStudents(studentsData.filter((s: any) => s.status === 'active' || !s.status))
       setAssessments(assessmentList)
       setGrid(newGrid)
     } catch (err: any) {
@@ -132,54 +162,37 @@ export default function SmartGridPage() {
       }
     }
     if (dirtyCells.length === 0) { addToast('No changes to save', 'info'); return }
-
     setSaving(true)
-    let saved = 0
-    let failed = 0
+    let saved = 0, failed = 0
     const updatedGrid = { ...grid }
-
     for (const { studentId, assessmentId, cell } of dirtyCells) {
       const scoreVal = cell.score.trim() === '' ? null : parseFloat(cell.score)
       try {
         if (cell.markId) {
-          const updated = await updateMark(cell.markId, { score: scoreVal as number })
-          updatedGrid[studentId] = {
-            ...updatedGrid[studentId],
-            [assessmentId]: { ...cell, score: updated.score != null ? String(updated.score) : '', dirty: false },
-          }
+          const updated = await updateMark(cell.markId, { raw_score: scoreVal })
+          const sc = updated.score ?? updated.raw_score
+          updatedGrid[studentId] = { ...updatedGrid[studentId], [assessmentId]: { ...cell, score: sc != null ? String(sc) : '', dirty: false } }
         } else {
-          const created = await createMark({
-            student_id: studentId,
-            course_id: selectedCourseId,
-            assessment_id: assessmentId,
-            score: scoreVal,
-          })
-          updatedGrid[studentId] = {
-            ...updatedGrid[studentId],
-            [assessmentId]: { markId: created.id, score: created.score != null ? String(created.score) : '', status: 'draft', dirty: false },
-          }
+          const created = await createMark({ student_id: studentId, assessment_id: assessmentId, score: scoreVal })
+          const sc = created.score ?? (created as any).raw_score
+          updatedGrid[studentId] = { ...updatedGrid[studentId], [assessmentId]: { markId: created.id, score: sc != null ? String(sc) : '', status: 'draft', dirty: false } }
         }
         saved++
-      } catch {
-        failed++
-      }
+      } catch { failed++ }
     }
-
     setGrid(updatedGrid)
     setSaving(false)
     if (failed === 0) addToast(`Saved ${saved} mark${saved !== 1 ? 's' : ''}`, 'success')
     else addToast(`Saved ${saved}, failed ${failed}`, 'error')
   }
 
-  // ── Publish assessment column ─────────────────────────────────
+  // ── Publish column ────────────────────────────────────────────
   const handlePublish = async (assessmentId: string) => {
     const draftIds = students
       .map((s) => grid[s.id]?.[assessmentId])
       .filter((c) => c?.markId && c.status === 'draft')
-      .map((c) => c!.markId!) 
-
+      .map((c) => c!.markId!)
     if (draftIds.length === 0) { addToast('No draft marks to publish for this assessment', 'info'); return }
-
     setPublishing(assessmentId)
     try {
       const res = await publishMarkIds(draftIds)
@@ -187,24 +200,73 @@ export default function SmartGridPage() {
         const next = { ...prev }
         for (const s of students) {
           const cell = next[s.id]?.[assessmentId]
-          if (cell?.markId && draftIds.includes(cell.markId)) {
+          if (cell?.markId && draftIds.includes(cell.markId))
             next[s.id] = { ...next[s.id], [assessmentId]: { ...cell, status: 'published' } }
-          }
         }
         return next
       })
       addToast(res.message || `Published ${draftIds.length} marks`, 'success')
     } catch (err: any) {
       addToast(err?.response?.data?.detail || 'Failed to publish', 'error')
-    } finally {
-      setPublishing(null)
-    }
+    } finally { setPublishing(null) }
   }
 
-  // ── Stats ─────────────────────────────────────────────────────
-  const draftCount = Object.values(grid).flatMap(Object.values).filter((c) => c.markId && c.status === 'draft').length
-  const publishedCount = Object.values(grid).flatMap(Object.values).filter((c) => c.status === 'published').length
-  const dirtyCount = Object.values(grid).flatMap(Object.values).filter((c) => c.dirty).length
+  // ── Unpublish column → revert to draft ───────────────────────
+  const handleUnpublish = async (assessmentId: string) => {
+    const pubIds = students
+      .map((s) => grid[s.id]?.[assessmentId])
+      .filter((c) => c?.markId && c.status === 'published')
+      .map((c) => c!.markId!)
+    if (pubIds.length === 0) { addToast('No published marks to revert', 'info'); return }
+    setUnpublishing(assessmentId)
+    try {
+      const res = await unpublishMarkIds(pubIds)
+      setGrid((prev) => {
+        const next = { ...prev }
+        for (const s of students) {
+          const cell = next[s.id]?.[assessmentId]
+          if (cell?.markId && pubIds.includes(cell.markId))
+            next[s.id] = { ...next[s.id], [assessmentId]: { ...cell, status: 'draft' } }
+        }
+        return next
+      })
+      addToast(res.message || `Reverted ${pubIds.length} marks to draft`, 'success')
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || 'Failed to unpublish', 'error')
+    } finally { setUnpublishing(null) }
+  }
+
+  // ── Publish ALL drafts across every column ────────────────────
+  const handlePublishAll = async () => {
+    const allDraftIds = Object.values(grid)
+      .flatMap(Object.values)
+      .filter((c) => c.markId && c.status === 'draft')
+      .map((c) => c.markId!)
+    if (allDraftIds.length === 0) { addToast('No draft marks to publish', 'info'); return }
+    setPublishing('__all__')
+    try {
+      const res = await publishMarkIds(allDraftIds)
+      setGrid((prev) => {
+        const next = { ...prev }
+        for (const [sid, row] of Object.entries(next)) {
+          for (const [aid, cell] of Object.entries(row)) {
+            if (cell.markId && allDraftIds.includes(cell.markId))
+              next[sid] = { ...next[sid], [aid]: { ...cell, status: 'published' } }
+          }
+        }
+        return next
+      })
+      addToast(res.message || `Published all ${allDraftIds.length} marks`, 'success')
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || 'Failed to publish all', 'error')
+    } finally { setPublishing(null) }
+  }
+
+  // ── Derived stats ─────────────────────────────────────────────
+  const allCells = Object.values(grid).flatMap(Object.values)
+  const draftCount = allCells.filter((c) => c.markId && c.status === 'draft').length
+  const publishedCount = allCells.filter((c) => c.status === 'published').length
+  const dirtyCount = allCells.filter((c) => c.dirty).length
 
   return (
     <MainLayout>
@@ -233,7 +295,6 @@ export default function SmartGridPage() {
           </div>
         </Card>
 
-        {/* No course selected */}
         {!selectedCourseId && !loadingCourses && (
           <Card>
             <div className="text-center py-12">
@@ -243,21 +304,19 @@ export default function SmartGridPage() {
           </Card>
         )}
 
-        {/* Loading grid */}
         {selectedCourseId && loadingGrid && (
           <Card><div className="flex items-center justify-center py-16"><Spinner /></div></Card>
         )}
 
-        {/* Grid */}
         {selectedCourseId && !loadingGrid && (
           <>
-            {/* Stats row */}
+            {/* Stats cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
-                { label: 'Students', value: students.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
+                { label: 'Students',    value: students.length,  icon: Users,         color: 'bg-blue-50 text-blue-600' },
                 { label: 'Assessments', value: assessments.length, icon: ClipboardList, color: 'bg-purple-50 text-purple-600' },
-                { label: 'Draft Marks', value: draftCount, icon: Grid3x3, color: 'bg-amber-50 text-amber-600' },
-                { label: 'Published', value: publishedCount, icon: CheckCircle, color: 'bg-green-50 text-green-600' },
+                { label: 'Draft Marks', value: draftCount,       icon: Grid3x3,       color: 'bg-amber-50 text-amber-600' },
+                { label: 'Published',   value: publishedCount,   icon: CheckCircle,   color: 'bg-green-50 text-green-600' },
               ].map(({ label, value, icon: Icon, color }) => (
                 <Card key={label} className="!p-4">
                   <div className="flex items-center gap-3">
@@ -291,20 +350,42 @@ export default function SmartGridPage() {
             ) : (
               <Card className="overflow-hidden !p-0">
                 {/* Action bar */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E7EB] bg-[#F9FAFB]">
-                  <p className="text-sm text-[#6B7280]">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[#E5E7EB] bg-[#F9FAFB]">
+                  <p className="text-sm">
                     {dirtyCount > 0
                       ? <span className="text-amber-600 font-medium">{dirtyCount} unsaved change{dirtyCount !== 1 ? 's' : ''}</span>
-                      : 'All changes saved'}
+                      : <span className="text-[#6B7280]">All changes saved</span>}
                   </p>
-                  <button
-                    onClick={handleSaveAll}
-                    disabled={saving || dirtyCount === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#C90031] hover:bg-[#a8002a] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
-                  >
-                    {saving ? <Spinner /> : <Save className="w-4 h-4" />}
-                    Save All Changes
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Reload */}
+                    <button
+                      onClick={() => loadGrid(selectedCourseId)}
+                      disabled={loadingGrid}
+                      title="Reload marks from database"
+                      className="flex items-center gap-1.5 px-3 py-2 border border-[#E5E7EB] bg-white hover:bg-[#F9FAFB] text-[#6B7280] rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Reload
+                    </button>
+                    {/* Publish All Drafts */}
+                    <button
+                      onClick={handlePublishAll}
+                      disabled={!!publishing || draftCount === 0}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {publishing === '__all__' ? <Spinner /> : <CheckCircle className="w-4 h-4" />}
+                      Publish All Drafts
+                    </button>
+                    {/* Save */}
+                    <button
+                      onClick={handleSaveAll}
+                      disabled={saving || dirtyCount === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#C90031] hover:bg-[#a8002a] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {saving ? <Spinner /> : <Save className="w-4 h-4" />}
+                      Save All Changes
+                    </button>
+                  </div>
                 </div>
 
                 {/* Scrollable grid */}
@@ -312,87 +393,159 @@ export default function SmartGridPage() {
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                        {/* Student column */}
                         <th className="sticky left-0 z-10 bg-[#F9FAFB] text-left px-4 py-3 font-semibold text-[#374151] min-w-[180px] border-r border-[#E5E7EB]">
                           Student
                         </th>
+
+                        {/* Per-assessment columns */}
                         {assessments.map((a) => {
-                          const allPublished = students.every(
-                            (s) => grid[s.id]?.[a.id]?.status === 'published'
-                          )
-                          const hasDraft = students.some(
-                            (s) => grid[s.id]?.[a.id]?.markId && grid[s.id]?.[a.id]?.status === 'draft'
-                          )
+                          const allPublished = students.every((s) => grid[s.id]?.[a.id]?.status === 'published')
+                          const hasDraft     = students.some((s) => grid[s.id]?.[a.id]?.markId && grid[s.id]?.[a.id]?.status === 'draft')
+                          const hasPublished = students.some((s) => grid[s.id]?.[a.id]?.status === 'published')
+                          const { count }    = colStats(a.id, students, grid)
                           return (
-                            <th key={a.id} className="px-3 py-3 text-center min-w-[140px] border-r border-[#E5E7EB] last:border-r-0">
+                            <th key={a.id} className="px-3 py-3 text-center min-w-[155px] border-r border-[#E5E7EB]">
                               <div className="flex flex-col items-center gap-1">
-                                <span className="font-semibold text-[#374151]">{a.name}</span>
-                                <span className="text-[10px] text-[#9CA3AF]">
-                                  Max {a.max_score} · {a.weight}%
-                                </span>
-                                {allPublished ? (
-                                  <span className="flex items-center gap-1 text-[10px] text-green-600 font-medium">
-                                    <CheckCircle className="w-3 h-3" /> Published
+                                <span className="font-semibold text-[#374151] leading-tight">{a.name}</span>
+                                <span className="text-[10px] text-[#9CA3AF]">Max {a.max_score} · {a.weight}%</span>
+                                <span className="text-[10px] text-[#9CA3AF]">{count}/{students.length} entered</span>
+                                {allPublished && (
+                                  <span className="flex items-center gap-0.5 text-[10px] text-green-600 font-medium">
+                                    <CheckCircle className="w-3 h-3" /> All Published
                                   </span>
-                                ) : (
-                                  <button
-                                    onClick={() => handlePublish(a.id)}
-                                    disabled={!!publishing || !hasDraft}
-                                    className="flex items-center gap-1 px-2 py-0.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-[10px] font-medium transition-colors"
-                                  >
-                                    {publishing === a.id ? <Spinner /> : <Lock className="w-2.5 h-2.5" />}
-                                    Publish
-                                  </button>
                                 )}
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  {/* Publish draft marks */}
+                                  {!allPublished && (
+                                    <button
+                                      onClick={() => handlePublish(a.id)}
+                                      disabled={!!publishing || !hasDraft}
+                                      className="flex items-center gap-0.5 px-2 py-0.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-[10px] font-medium transition-colors"
+                                    >
+                                      {publishing === a.id ? <Spinner /> : <Lock className="w-2.5 h-2.5" />}
+                                      Publish
+                                    </button>
+                                  )}
+                                  {/* Unpublish → revert to draft */}
+                                  {hasPublished && (
+                                    <button
+                                      onClick={() => handleUnpublish(a.id)}
+                                      disabled={!!unpublishing}
+                                      title="Revert published marks to draft so scores can be corrected"
+                                      className="flex items-center gap-0.5 px-2 py-0.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-[10px] font-medium transition-colors"
+                                    >
+                                      {unpublishing === a.id ? <Spinner /> : <LockOpen className="w-2.5 h-2.5" />}
+                                      Unpublish
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </th>
                           )
                         })}
+
+                        {/* Carry % column */}
+                        <th className="px-3 py-3 text-center min-w-[90px] bg-[#F9FAFB]">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <TrendingUp className="w-4 h-4 text-[#C90031]" />
+                            <span className="font-semibold text-[#C90031] text-xs">Carry %</span>
+                            <span className="text-[9px] text-[#9CA3AF]">published</span>
+                          </div>
+                        </th>
                       </tr>
                     </thead>
+
                     <tbody>
-                      {students.map((student, si) => (
-                        <tr
-                          key={student.id}
-                          className={`border-b border-[#E5E7EB] last:border-0 ${si % 2 === 0 ? 'bg-white' : 'bg-[#FAFAFA]'}`}
-                        >
-                          <td className="sticky left-0 z-10 px-4 py-2.5 border-r border-[#E5E7EB] bg-inherit">
-                            <p className="font-medium text-[#111827] truncate max-w-[160px]">
-                              {student.full_name || student.email}
-                            </p>
-                            <p className="text-[10px] text-[#9CA3AF] truncate">{student.email}</p>
+                      {students.map((student, si) => {
+                        const carry = calcCarry(student.id, assessments, grid)
+                        return (
+                          <tr
+                            key={student.id}
+                            className={`border-b border-[#E5E7EB] last:border-0 ${si % 2 === 0 ? 'bg-white' : 'bg-[#FAFAFA]'}`}
+                          >
+                            <td className="sticky left-0 z-10 px-4 py-2.5 border-r border-[#E5E7EB] bg-inherit">
+                              <p className="font-medium text-[#111827] truncate max-w-[160px]">{student.full_name || student.email}</p>
+                              <p className="text-[10px] text-[#9CA3AF] truncate">{student.email}</p>
+                            </td>
+
+                            {assessments.map((a) => {
+                              const cell        = grid[student.id]?.[a.id]
+                              const isPublished = cell?.status === 'published'
+                              const scNum       = cell?.score !== '' ? parseFloat(cell?.score ?? '') : NaN
+                              const isOverMax   = !isNaN(scNum) && scNum > a.max_score
+                              return (
+                                <td key={a.id} className="px-3 py-2 text-center border-r border-[#E5E7EB]">
+                                  {isPublished ? (
+                                    <div className="flex flex-col items-center">
+                                      <span className="font-semibold text-green-700">{cell.score !== '' ? cell.score : '—'}</span>
+                                      <span className="text-[10px] text-green-500">✓ published</span>
+                                    </div>
+                                  ) : (
+                                    <div className="relative inline-block">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={a.max_score}
+                                        step="0.5"
+                                        value={cell?.score ?? ''}
+                                        onChange={(e) => handleCellChange(student.id, a.id, e.target.value)}
+                                        placeholder="—"
+                                        className={`w-20 text-center border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 transition-colors ${
+                                          isOverMax
+                                            ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-400'
+                                            : cell?.dirty
+                                            ? 'border-amber-400 bg-amber-50 focus:ring-[#C90031]'
+                                            : 'border-[#E5E7EB] bg-white focus:ring-[#C90031]'
+                                        }`}
+                                      />
+                                      {isOverMax && (
+                                        <span className="absolute -bottom-4 left-0 right-0 text-center text-[9px] text-red-500 whitespace-nowrap">
+                                          exceeds max {a.max_score}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              )
+                            })}
+
+                            {/* Carry % */}
+                            <td className="px-3 py-2 text-center">
+                              {carry > 0 ? (
+                                <span className={`font-bold text-sm ${
+                                  carry >= 70 ? 'text-green-600' : carry >= 50 ? 'text-amber-600' : 'text-red-500'
+                                }`}>
+                                  {carry.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="text-[#D1D5DB] text-base">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+
+                    {/* Stats footer */}
+                    <tfoot>
+                      {(['avg', 'hi', 'lo'] as const).map((key, i) => (
+                        <tr key={key} className={`border-t border-[#E5E7EB] ${i === 0 ? 'border-t-2' : ''} bg-[#F9FAFB]`}>
+                          <td className="sticky left-0 bg-[#F9FAFB] px-4 py-1.5 border-r border-[#E5E7EB] text-xs font-semibold text-[#6B7280]">
+                            {key === 'avg' ? 'Avg' : key === 'hi' ? 'High' : 'Low'}
                           </td>
                           {assessments.map((a) => {
-                            const cell = grid[student.id]?.[a.id]
-                            const isPublished = cell?.status === 'published'
+                            const stats = colStats(a.id, students, grid)
                             return (
-                              <td key={a.id} className="px-3 py-2 text-center border-r border-[#E5E7EB] last:border-r-0">
-                                {isPublished ? (
-                                  <div className="flex flex-col items-center">
-                                    <span className="font-semibold text-green-700">
-                                      {cell.score !== '' ? cell.score : '—'}
-                                    </span>
-                                    <span className="text-[10px] text-green-500">published</span>
-                                  </div>
-                                ) : (
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={a.max_score}
-                                    step="0.5"
-                                    value={cell?.score ?? ''}
-                                    onChange={(e) => handleCellChange(student.id, a.id, e.target.value)}
-                                    placeholder="—"
-                                    className={`w-20 text-center border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#C90031] ${
-                                      cell?.dirty ? 'border-amber-400 bg-amber-50' : 'border-[#E5E7EB] bg-white'
-                                    }`}
-                                  />
-                                )}
+                              <td key={a.id} className="px-3 py-1.5 text-center text-xs font-medium text-[#6B7280] border-r border-[#E5E7EB]">
+                                {stats[key]}
                               </td>
                             )
                           })}
+                          <td className="px-3 py-1.5 text-center text-xs text-[#D1D5DB]">—</td>
                         </tr>
                       ))}
-                    </tbody>
+                    </tfoot>
                   </table>
                 </div>
               </Card>

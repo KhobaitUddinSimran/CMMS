@@ -151,9 +151,11 @@ export interface UsersListResponse {
 export interface AuditLogEntry {
   id: string
   action: string
-  actor_id: string | null
-  target_id: string | null
-  metadata: Record<string, any>
+  user_id: string | null
+  entity_type: string | null
+  entity_id: string | null
+  old_values: Record<string, any> | null
+  new_values: Record<string, any> | null
   created_at: string
   actor_email?: string
   actor_name?: string
@@ -190,5 +192,19 @@ export async function getAuditLogs(params?: {
   action?: string
 }): Promise<AuditLogsResponse> {
   const { data } = await adminApiClient.get('/api/admin/audit-logs', { params })
+  return data
+}
+
+export interface HodStats {
+  total_students: number
+  total_faculty: number
+  active_courses: number
+  flagged_marks: number
+  avg_performance: number
+  pass_rate: number
+}
+
+export async function getHodStats(): Promise<HodStats> {
+  const { data } = await adminApiClient.get('/api/admin/hod-stats')
   return data
 }

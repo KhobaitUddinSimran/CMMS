@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { ArrowLeft, AlertCircle } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { RosterUpload } from '@/components/roster/RosterUpload'
 import { RosterPreview } from '@/components/roster/RosterPreview'
 import { RosterConfirmation } from '@/components/roster/RosterConfirmation'
@@ -22,6 +22,7 @@ interface CourseItem {
 
 export default function RosterPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<'list' | 'upload'>('list')
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -29,6 +30,7 @@ export default function RosterPage() {
   
   // Upload workflow states
   const [previewData, setPreviewData] = useState<any>(null)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const [confirmationResult, setConfirmationResult] = useState<any>(null)
@@ -45,17 +47,23 @@ export default function RosterPage() {
     try {
       setLoadingCourses(true)
       const result = await listCourses()
-      setCourses(
-        (result.data || []).map((c: any) => ({
-          id: c.id,
-          name: c.name || c.code,
-          code: c.code,
-          year: c.year || c.academic_year || '',
-          semester: c.semester || '',
-          section: c.section || '',
-          status: 'Active',
-        }))
-      )
+      const mapped = (result.data || []).map((c: any) => ({
+        id: c.id,
+        name: c.name || c.code,
+        code: c.code,
+        year: c.year || c.academic_year || '',
+        semester: c.semester || '',
+        section: c.section || '',
+        status: 'Active',
+      }))
+      setCourses(mapped)
+
+      // Auto-select course from ?course= query param
+      const preselect = searchParams.get('course')
+      if (preselect && mapped.some((c: CourseItem) => c.id === preselect)) {
+        setSelectedCourse(preselect)
+        setActiveTab('upload')
+      }
     } catch {
       setCourses([])
     } finally {
@@ -74,29 +82,29 @@ export default function RosterPage() {
     setPreviewData(null)
   }, [])
 
-  const handleUploadComplete = useCallback((data: any) => {
+  const handleUploadComplete = useCallback((data: any, file: File) => {
     setPreviewData(data)
+    setUploadedFile(file)
     setShowPreview(true)
   }, [])
 
   const handleConfirmImport = useCallback(async () => {
-    if (!selectedCourse || !previewData) return
+    if (!selectedCourse || !uploadedFile) return
 
     setIsConfirming(true)
     try {
-      // Re-upload with actual import (not just preview)
-      // The previewData contains the file reference from the preview step
-      const result = await uploadRoster(selectedCourse, previewData._file || previewData)
+      const result = await uploadRoster(selectedCourse, uploadedFile)
       setConfirmationResult(result)
       setShowConfirmation(true)
       setShowPreview(false)
       setPreviewData(null)
+      setUploadedFile(null)
     } catch (error) {
       handleError(error instanceof Error ? error.message : 'Failed to confirm import')
     } finally {
       setIsConfirming(false)
     }
-  }, [selectedCourse, previewData, handleError])
+  }, [selectedCourse, uploadedFile, handleError])
 
   const handleConfirmationClose = useCallback(() => {
     setShowConfirmation(false)

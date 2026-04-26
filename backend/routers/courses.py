@@ -35,13 +35,34 @@ async def list_courses(
             f"role: {current_user.get('role')}, skip: {skip}, limit: {limit}"
         )
 
+        # Lecturers: scope to their own assigned courses only
+        # Coordinators, HODs, admins: see all courses
+        user_id = current_user.get("user_id")
+        user_role = current_user.get("role", "")
+        special = set(current_user.get("special_roles", []) or [])
+        is_elevated = user_role in ("coordinator", "hod", "admin") or "coordinator" in special or "hod" in special
+
+        # Validate UUID format before hitting the DB
+        import re as _re
+        _UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', _re.IGNORECASE)
+        if not is_elevated and not _UUID_RE.match(user_id or ""):
+            logger.warning(f"Invalid UUID in JWT for user_id={user_id!r}. Token is stale — returning empty list.")
+            return {"data": [], "total": 0, "skip": skip, "limit": limit}
+
+        query = supabase.table("courses").select("*")
+        if not is_elevated:
+            query = query.eq("lecturer_id", user_id)
+
         # Query Supabase for courses with pagination
-        response = supabase.table("courses").select("*").range(skip, skip + limit - 1).execute()
+        response = query.range(skip, skip + limit - 1).execute()
 
         courses = response.data if response.data else []
 
         # Get total count
-        count_response = supabase.table("courses").select("id", count="exact").execute()
+        count_query = supabase.table("courses").select("id", count="exact")
+        if not is_elevated:
+            count_query = count_query.eq("lecturer_id", user_id)
+        count_response = count_query.execute()
         total = count_response.count if hasattr(count_response, "count") else 0
 
         logger.info(f"Successfully retrieved {len(courses)} courses out of {total} total")
@@ -131,23 +152,18 @@ async def create_course(
     if not payload.get("credits"):
         payload["credits"] = 3
 
-    # lecturer_id — use provided value or fall back to first lecturer in DB
+    # lecturer_id — use provided value or fall back to first teaching-staff member in DB
     if not payload.get("lecturer_id"):
         try:
-            lect_resp = supabase.table("users").select("id").eq("role", "lecturer").limit(1).execute()
+            lect_resp = supabase.table("users").select("id").in_("role", ["lecturer", "coordinator", "hod"]).limit(1).execute()
             if lect_resp.data:
                 payload["lecturer_id"] = lect_resp.data[0]["id"]
         except Exception:
             pass
 
-    # department_id — use provided value or fall back to first department in DB
+    # department_id — use provided value, else drop it (column should be nullable in DB)
     if not payload.get("department_id"):
-        try:
-            dept_resp = supabase.table("courses").select("department_id").limit(1).execute()
-            if dept_resp.data and dept_resp.data[0].get("department_id"):
-                payload["department_id"] = dept_resp.data[0]["department_id"]
-        except Exception:
-            pass
+        payload.pop("department_id", None)
 
     actor_id = current_user.get("user_id")
 
@@ -262,8 +278,8 @@ async def assign_lecturer(
             raise HTTPException(status_code=404, detail="Lecturer not found")
 
         lecturer = lecturer_resp.data[0]
-        if lecturer.get("role") not in ["lecturer", "admin"]:
-            raise HTTPException(status_code=400, detail="User is not a lecturer")
+        if lecturer.get("role") not in ["lecturer", "coordinator", "hod", "admin"]:
+            raise HTTPException(status_code=400, detail="User is not a teaching staff member")
 
         # Update course
         resp = supabase.table("courses").update({"lecturer_id": lecturer_id}).eq("id", course_id).execute()

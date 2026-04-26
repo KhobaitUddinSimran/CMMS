@@ -11,6 +11,35 @@ from ..core.security import decode_token
 from ..db.database import get_db
 import logging
 
+_supabase = None
+
+def _get_supabase():
+    global _supabase
+    if _supabase is None:
+        try:
+            from ..core.config import supabase
+            _supabase = supabase
+        except Exception:
+            pass
+    return _supabase
+
+def _resolve_current_role(user_id: str, jwt_role: str, jwt_special: list) -> tuple[str, list]:
+    """Always fetch the current role + special_roles from Supabase so changes take effect immediately."""
+    sb = _get_supabase()
+    if sb:
+        try:
+            resp = sb.table("users").select("role, special_roles").eq("id", user_id).limit(1).execute()  # special_roles OK to be absent — caught below
+            if resp.data:
+                db_role = resp.data[0].get("role") or jwt_role
+                db_special = resp.data[0].get("special_roles") or []
+                # Backwards-compat: if special_roles column not yet migrated, derive from role
+                if not db_special and db_role in ("coordinator", "hod"):
+                    db_special = [db_role]
+                return db_role, db_special
+        except Exception:
+            pass
+    return jwt_role, jwt_special
+
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
@@ -19,15 +48,25 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     try:
         token = credentials.credentials
         payload = decode_token(token)
+
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token is invalid or has expired"
+            )
+
         user_id = payload.get("sub")
-        role = payload.get("role")
-        special_roles = payload.get("special_roles", []) or []
+        jwt_role = payload.get("role")
+        jwt_special = payload.get("special_roles", []) or []
 
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication token"
             )
+
+        # Always resolve the current role from DB (not stale JWT)
+        role, special_roles = _resolve_current_role(user_id, jwt_role, jwt_special)
 
         return {"user_id": user_id, "role": role, "special_roles": special_roles}
         

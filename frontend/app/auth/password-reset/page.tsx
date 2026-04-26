@@ -2,18 +2,21 @@
 
 export const dynamic = 'force-dynamic'
 
-import React, { useState, useEffect } from 'react'
+import React, { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { AuthLayout } from '@/components/auth/AuthLayout'
 import { FormInput } from '@/components/auth/FormInput'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { useToastStore } from '@/stores/toastStore'
+import { resetPassword as apiResetPassword } from '@/lib/api/auth'
 
 type ResetStep = 'email' | 'check-email' | 'reset-form' | 'success'
 
-export default function PasswordResetPage() {
+function PasswordResetInner() {
   const { resetPassword, loading, error } = useAuth()
   const { addToast } = useToastStore()
+  const searchParams = useSearchParams()
 
   const [step, setStep] = useState<ResetStep>('email')
   const [email, setEmail] = useState('')
@@ -21,6 +24,19 @@ export default function PasswordResetPage() {
   const [timeLeft, setTimeLeft] = useState(600) // 10 minutes
   const [resendCount, setResendCount] = useState(0)
   const [canResend, setCanResend] = useState(true)
+  const [resetToken, setResetToken] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+
+  // Detect token in URL query params (user arrived via email link)
+  useEffect(() => {
+    const token = searchParams?.get('token')
+    if (token) {
+      setResetToken(token)
+      setStep('reset-form')
+    }
+  }, [searchParams])
 
   // Step 1: Enter Email
   const validateEmail = (): boolean => {
@@ -216,5 +232,96 @@ export default function PasswordResetPage() {
     )
   }
 
+  // Step 3: Reset Form (arrived via email link with ?token=...)
+  if (step === 'reset-form') {
+    const handleResetSubmit = async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (newPassword.length < 8) {
+        addToast('Password must be at least 8 characters', 'error')
+        return
+      }
+      if (newPassword !== confirmNewPassword) {
+        addToast('Passwords do not match', 'error')
+        return
+      }
+      setResetLoading(true)
+      try {
+        await apiResetPassword({ token: resetToken, new_password: newPassword })
+        setStep('success')
+        addToast('Password reset successfully!', 'success')
+      } catch (err: any) {
+        const msg = err?.response?.data?.detail || 'Reset failed. Please request a new link.'
+        addToast(msg, 'error')
+      } finally {
+        setResetLoading(false)
+      }
+    }
+
+    return (
+      <AuthLayout title="Set New Password" subtitle="Enter your new password below">
+        <form onSubmit={handleResetSubmit} className="space-y-4">
+          <FormInput
+            label="New Password"
+            type="password"
+            placeholder="Min 8 chars, 1 uppercase, 1 number"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+          <FormInput
+            label="Confirm New Password"
+            type="password"
+            placeholder="Re-enter your new password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={resetLoading}
+            className="w-full py-2 px-4 bg-[#C90031] text-white font-semibold rounded-lg hover:bg-[#A80028] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            {resetLoading ? 'Resetting...' : 'Reset Password'}
+          </button>
+          <div className="text-center">
+            <Link href="/auth/login" className="text-sm text-blue-600 hover:underline">
+              Back to Login
+            </Link>
+          </div>
+        </form>
+      </AuthLayout>
+    )
+  }
+
+  // Step 4: Success
+  if (step === 'success') {
+    return (
+      <AuthLayout title="Password Reset!" subtitle="Your password has been updated">
+        <div className="text-center space-y-6 py-4">
+          <div className="flex justify-center">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          </div>
+          <p className="text-gray-700">Your password has been reset successfully.</p>
+          <Link
+            href="/auth/login"
+            className="block w-full py-2 px-4 bg-[#C90031] text-white font-semibold rounded-lg hover:bg-[#A80028] transition-colors text-center"
+          >
+            Log In Now
+          </Link>
+        </div>
+      </AuthLayout>
+    )
+  }
+
   return null
+}
+
+export default function PasswordResetPage() {
+  return (
+    <Suspense fallback={null}>
+      <PasswordResetInner />
+    </Suspense>
+  )
 }

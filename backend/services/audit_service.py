@@ -17,19 +17,19 @@ class AuditService:
             action: Action name (e.g. COURSE_CREATED, ROSTER_UPLOADED, USER_APPROVED)
             actor_id: UUID of the user performing the action
             target_id: UUID of the target entity (optional)
-            metadata: Additional JSON metadata (optional)
+            metadata: Additional JSON metadata stored as new_values (optional)
         """
         try:
             entry = {
                 "action": action,
-                "actor_id": actor_id,
+                "user_id": actor_id,
             }
             if target_id:
-                entry["target_id"] = target_id
+                entry["entity_id"] = target_id
             if metadata:
-                entry["metadata"] = metadata
+                entry["new_values"] = metadata
 
-            supabase.table("audit_log").insert(entry).execute()
+            supabase.table("audit_logs").insert(entry).execute()
             logger.debug(f"Audit: {action} by {actor_id}")
         except Exception as e:
             # Never let audit logging break the main flow
