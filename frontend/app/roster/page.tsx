@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, Suspense } from 'react'
 import { ArrowLeft, AlertCircle } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { RosterUpload } from '@/components/roster/RosterUpload'
@@ -20,7 +20,7 @@ interface CourseItem {
   status: string
 }
 
-export default function RosterPage() {
+function RosterPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<'list' | 'upload'>('list')
@@ -265,5 +265,13 @@ export default function RosterPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function RosterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RosterPageInner />
+    </Suspense>
   )
 }
