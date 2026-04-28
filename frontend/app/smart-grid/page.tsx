@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
@@ -57,7 +57,7 @@ function colStats(assessmentId: string, students: Student[], grid: GridState) {
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
-export default function SmartGridPage() {
+function SmartGridInner() {
   const { addToast } = useToastStore()
   const searchParams = useSearchParams()
 
@@ -554,5 +554,13 @@ export default function SmartGridPage() {
         )}
       </div>
     </MainLayout>
+  )
+}
+
+export default function SmartGridPage() {
+  return (
+    <Suspense fallback={null}>
+      <SmartGridInner />
+    </Suspense>
   )
 }
