@@ -59,6 +59,12 @@ services:
           name: cmms-backend
           type: web
           property: url
+      # Server-side alias (used by next.config.js rewrites — not exposed to browser)
+      - key: BACKEND_URL
+        fromService:
+          name: cmms-backend
+          type: web
+          property: url
       # Supabase public keys (safe to expose in browser)
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
