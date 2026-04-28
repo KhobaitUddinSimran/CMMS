@@ -36,11 +36,13 @@ async def list_courses(
         )
 
         # Lecturers: scope to their own assigned courses only
+        # Students: scope to their enrolled courses
         # Coordinators, HODs, admins: see all courses
         user_id = current_user.get("user_id")
         user_role = current_user.get("role", "")
         special = set(current_user.get("special_roles", []) or [])
         is_elevated = user_role in ("coordinator", "hod", "admin") or "coordinator" in special or "hod" in special
+        is_student = user_role == "student"
 
         # Validate UUID format before hitting the DB
         import re as _re
@@ -49,21 +51,41 @@ async def list_courses(
             logger.warning(f"Invalid UUID in JWT for user_id={user_id!r}. Token is stale — returning empty list.")
             return {"data": [], "total": 0, "skip": skip, "limit": limit}
 
-        query = supabase.table("courses").select("*")
-        if not is_elevated:
-            query = query.eq("lecturer_id", user_id)
+        if is_student:
+            # Fetch enrolled course IDs for this student
+            enroll_resp = (
+                supabase.table("enrollments")
+                .select("course_id")
+                .eq("student_id", user_id)
+                .eq("status", "active")
+                .execute()
+            )
+            enrolled_ids = [e["course_id"] for e in (enroll_resp.data or [])]
+            if not enrolled_ids:
+                return {"data": [], "total": 0, "skip": skip, "limit": limit}
+            courses = (
+                supabase.table("courses")
+                .select("*")
+                .in_("id", enrolled_ids)
+                .range(skip, skip + limit - 1)
+                .execute()
+            ).data or []
+            total = len(enrolled_ids)
+        else:
+            query = supabase.table("courses").select("*")
+            if not is_elevated:
+                query = query.eq("lecturer_id", user_id)
 
-        # Query Supabase for courses with pagination
-        response = query.range(skip, skip + limit - 1).execute()
+            # Query Supabase for courses with pagination
+            response = query.range(skip, skip + limit - 1).execute()
+            courses = response.data if response.data else []
 
-        courses = response.data if response.data else []
-
-        # Get total count
-        count_query = supabase.table("courses").select("id", count="exact")
-        if not is_elevated:
-            count_query = count_query.eq("lecturer_id", user_id)
-        count_response = count_query.execute()
-        total = count_response.count if hasattr(count_response, "count") else 0
+            # Get total count
+            count_query = supabase.table("courses").select("id", count="exact")
+            if not is_elevated:
+                count_query = count_query.eq("lecturer_id", user_id)
+            count_response = count_query.execute()
+            total = count_response.count if hasattr(count_response, "count") else 0
 
         logger.info(f"Successfully retrieved {len(courses)} courses out of {total} total")
 
