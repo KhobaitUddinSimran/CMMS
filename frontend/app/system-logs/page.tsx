@@ -129,9 +129,9 @@ export default function SystemLogsPage() {
                         <div className="text-xs text-gray-500">{log.actor_email || '—'}</div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {log.metadata && Object.keys(log.metadata).length > 0 ? (
+                        {log.new_values && Object.keys(log.new_values).length > 0 ? (
                           <pre className="text-xs bg-gray-50 p-2 rounded max-w-md overflow-x-auto">
-                            {JSON.stringify(log.metadata, null, 2)}
+                            {JSON.stringify(log.new_values, null, 2)}
                           </pre>
                         ) : (
                           <span className="text-gray-400">—</span>
