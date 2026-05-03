@@ -4,7 +4,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/auth-context'
 import {
   Home, BookOpen, BarChart3, MessageSquare, User, Table, Settings,
-  Users, Building2, Download, FileText, Lock, Database, LogOut, Flag
+  Users, Building2, Download, FileText, Lock, Database, LogOut, Flag, CalendarDays
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -29,6 +29,7 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { icon: <Table className="w-5 h-5" />, label: 'Smart Grid', path: '/smart-grid' },
     { icon: <Settings className="w-5 h-5" />, label: 'Assessment Setup', path: '/assessment-setup' },
     { icon: <MessageSquare className="w-5 h-5" />, label: 'Queries', path: '/queries' },
+    { icon: <MessageSquare className="w-5 h-5" />, label: 'Messages', path: '/messages' },
     { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
   ],
   coordinator: [
@@ -36,6 +37,8 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { icon: <BookOpen className="w-5 h-5" />, label: 'Courses', path: '/courses' },
     { icon: <Users className="w-5 h-5" />, label: 'Roster Management', path: '/roster' },
     { icon: <Settings className="w-5 h-5" />, label: 'Assessment Config', path: '/assessment-config' },
+    { icon: <CalendarDays className="w-5 h-5" />, label: 'Semester Timeline', path: '/semester-timeline' },
+    { icon: <MessageSquare className="w-5 h-5" />, label: 'Messages', path: '/messages' },
     { icon: <Flag className="w-5 h-5" />, label: 'Flagged Marks', path: '/flagged-marks' },
     { icon: <BarChart3 className="w-5 h-5" />, label: 'Reports', path: '/reports' },
     { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
