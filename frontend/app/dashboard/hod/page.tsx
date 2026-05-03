@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
 import { Badge } from '@/components/common/Badge'
-import { Users, TrendingUp, BarChart3, AlertCircle, BookOpen, GraduationCap } from 'lucide-react'
+import { Users, AlertCircle, BookOpen, GraduationCap } from 'lucide-react'
 import { getHodStats, type HodStats } from '@/lib/api/admin'
 
 export default function HODDashboard() {
@@ -20,7 +20,6 @@ export default function HODDashboard() {
   }, [])
 
   const fmt = (n?: number) => loading ? '…' : (n ?? 0).toLocaleString()
-  const fmtPct = (n?: number) => loading ? '…' : `${n ?? 0}%`
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -75,30 +74,6 @@ export default function HODDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Avg Performance</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">{fmtPct(stats?.avg_performance)}</p>
-            </div>
-            <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-7 h-7 text-[#10B981]" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Pass Rate</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">{fmtPct(stats?.pass_rate)}</p>
-            </div>
-            <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
-              <BarChart3 className="w-7 h-7 text-[#10B981]" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
               <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Flagged Marks</p>
               <p className="text-[32px] font-bold text-[#111827] mt-2">{fmt(stats?.flagged_marks)}</p>
             </div>
@@ -119,8 +94,6 @@ export default function HODDashboard() {
             { metric: 'Total Students', value: fmt(stats?.total_students) },
             { metric: 'Faculty Members', value: fmt(stats?.total_faculty) },
             { metric: 'Active Courses', value: fmt(stats?.active_courses) },
-            { metric: 'Avg Performance', value: fmtPct(stats?.avg_performance) },
-            { metric: 'Pass Rate', value: fmtPct(stats?.pass_rate) },
             { metric: 'Flagged Marks', value: fmt(stats?.flagged_marks) },
           ].map((item, idx) => (
             <div key={idx} className="flex items-center justify-between py-3 px-2 border-b border-[#E5E7EB] last:border-0">

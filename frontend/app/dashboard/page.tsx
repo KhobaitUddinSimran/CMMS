@@ -10,18 +10,17 @@ export default function DashboardPage() {
   const { user, loading } = useAuth()
 
   useEffect(() => {
-    // Only redirect when auth is loaded and user exists
     if (!loading && user?.role) {
-      const specialRoles: string[] = (user as any)?.special_roles || []
+      const specialRoles: string[] = user?.special_roles || []
       const baseRole = user.role
 
-      // All teaching staff → unified lecturer dashboard
-      // The lecturer dashboard renders coordinator/hod sections based on special_roles
-      const isTeachingStaff = ['lecturer', 'coordinator', 'hod'].includes(baseRole)
-        || specialRoles.includes('coordinator')
-        || specialRoles.includes('hod')
-
-      if (isTeachingStaff) {
+      // Route by highest-priority effective role: hod > coordinator > lecturer
+      // Each dashboard pulls its own real data (no more hardcoded "—" placeholders)
+      if (baseRole === 'hod' || specialRoles.includes('hod')) {
+        router.push('/dashboard/hod')
+      } else if (baseRole === 'coordinator' || specialRoles.includes('coordinator')) {
+        router.push('/dashboard/coordinator')
+      } else if (baseRole === 'lecturer') {
         router.push('/dashboard/lecturer')
       } else {
         router.push(`/dashboard/${baseRole}`)

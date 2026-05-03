@@ -6,7 +6,7 @@ import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses } from '@/lib/api/courses'
 import { getStudentMarksSummary, type StudentCourseSummary } from '@/lib/api/marks'
-import { BookOpen, TrendingUp, CheckCircle, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react'
+import { BookOpen, CheckCircle, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react'
 
 interface CourseInfo { id: string; code: string; name?: string; section: string }
 
@@ -48,10 +48,6 @@ export default function MarksPage() {
     load()
   }, [user?.id])
 
-  const avgCarry = summary.length
-    ? summary.reduce((acc, s) => acc + s.carry_total, 0) / summary.length
-    : null
-
   const toggleExpand = (courseId: string) =>
     setExpanded((prev) => ({ ...prev, [courseId]: !prev[courseId] }))
 
@@ -64,7 +60,7 @@ export default function MarksPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Card>
           <div className="flex items-center justify-between">
             <div>
@@ -75,20 +71,6 @@ export default function MarksPage() {
             </div>
             <div className="w-12 h-12 rounded-lg bg-[#FEE2E2] flex items-center justify-center">
               <BookOpen className="w-6 h-6 text-[#C90031]" />
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Average Carry</p>
-              <p className="text-3xl font-bold text-[#111827] mt-2">
-                {loading ? <Spinner /> : avgCarry != null ? `${avgCarry.toFixed(1)}%` : '—'}
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-lg bg-[#ECFDF5] flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-[#10B981]" />
             </div>
           </div>
         </Card>
