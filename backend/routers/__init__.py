@@ -9,6 +9,8 @@ from . import otp
 from . import admin
 from . import health
 from . import queries
+from . import semester
+from . import messages
 
 __all__ = [
     "auth",
@@ -21,4 +23,6 @@ __all__ = [
     "admin",
     "health",
     "queries",
+    "semester",
+    "messages",
 ]
