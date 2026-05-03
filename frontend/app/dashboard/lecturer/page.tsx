@@ -7,10 +7,11 @@ import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses } from '@/lib/api/courses'
 import { getEnrolledStudents } from '@/lib/api/enrollments'
+import { listMessages } from '@/lib/api/messages'
 import {
   BookOpen, Users, Grid3x3, ClipboardList, Upload,
   ChevronRight, ArrowRight, Plus, BarChart3, Settings,
-  TrendingUp, AlertCircle, Download, Shield
+  TrendingUp, AlertCircle, Download, Shield, Mail
 } from 'lucide-react'
 
 interface CourseItem {
@@ -35,7 +36,7 @@ const ROLE_BADGE: Record<string, { label: string; color: string }> = {
 export default function LecturerDashboard() {
   const { user } = useAuth()
   const router = useRouter()
-  const specialRoles: string[] = (user as any)?.special_roles || []
+  const specialRoles: string[] = user?.special_roles || []
   const isCoordinator = specialRoles.includes('coordinator')
   const isHOD = specialRoles.includes('hod')
 
@@ -43,6 +44,7 @@ export default function LecturerDashboard() {
   const [myCourses, setMyCourses] = useState<CourseItem[]>([])
   const [allCourses, setAllCourses] = useState<CourseItem[]>([])
   const [totalStudents, setTotalStudents] = useState<number | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     loadData()
@@ -51,6 +53,7 @@ export default function LecturerDashboard() {
   const loadData = async () => {
     try {
       setLoading(true)
+      listMessages().then(d => setUnreadCount((d as any).unread_count || 0)).catch(() => {})
       const data = await listCourses({ limit: 500 })
       const list: CourseItem[] = data.data || (data as any)
       setAllCourses(list)
@@ -90,6 +93,20 @@ export default function LecturerDashboard() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
+
+      {/* Unread Messages Banner */}
+      {unreadCount > 0 && (
+        <div
+          className="flex items-center gap-3 px-4 py-3 bg-[#FFF0F3] border border-[#FECDD3] rounded-xl cursor-pointer hover:bg-[#FFE4E6] transition-colors"
+          onClick={() => router.push('/messages')}
+        >
+          <Mail className="w-5 h-5 text-[#C90031] shrink-0" />
+          <p className="text-[14px] font-medium text-[#C90031]">
+            You have <span className="font-bold">{unreadCount}</span> unread {unreadCount === 1 ? 'message' : 'messages'}
+          </p>
+          <ChevronRight className="w-4 h-4 text-[#C90031] ml-auto" />
+        </div>
+      )}
 
       {/* Welcome + Role Badges */}
       <div className="pt-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">

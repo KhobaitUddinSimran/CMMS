@@ -146,7 +146,7 @@ async def create_assessment(
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create assessment: {str(e)}"
+            detail="Failed to create assessment"
         )
 
 @router.get("/{course_id}/assessments")

@@ -3,15 +3,23 @@ from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+import time
 from ..core.config import settings
 from ..core.exceptions import InvalidTokenException
 from ..core.security import decode_token
-from ..db.database import get_db
 import logging
 
 _supabase = None
+
+# Role cache: {user_id: (role, special_roles, expires_at_timestamp)}
+_role_cache: dict[str, tuple[str, list, float]] = {}
+ROLE_CACHE_TTL = 60  # seconds
+
+
+def invalidate_role_cache(user_id: str) -> None:
+    """Call this after changing a user's role or active status so the change takes effect immediately."""
+    _role_cache.pop(user_id, None)
+
 
 def _get_supabase():
     global _supabase
@@ -23,19 +31,35 @@ def _get_supabase():
             pass
     return _supabase
 
+
 def _resolve_current_role(user_id: str, jwt_role: str, jwt_special: list) -> tuple[str, list]:
-    """Always fetch the current role + special_roles from Supabase so changes take effect immediately."""
+    """Fetch role + special_roles from Supabase with a 60s TTL cache.
+    Also enforces is_active — raises 403 if the account has been deactivated.
+    """
+    now = time.time()
+    cached = _role_cache.get(user_id)
+    if cached and cached[2] > now:
+        return cached[0], cached[1]
+
     sb = _get_supabase()
     if sb:
         try:
-            resp = sb.table("users").select("role, special_roles").eq("id", user_id).limit(1).execute()  # special_roles OK to be absent — caught below
+            resp = sb.table("users").select("role, special_roles, is_active").eq("id", user_id).limit(1).execute()
             if resp.data:
-                db_role = resp.data[0].get("role") or jwt_role
-                db_special = resp.data[0].get("special_roles") or []
-                # Backwards-compat: if special_roles column not yet migrated, derive from role
+                row = resp.data[0]
+                if not row.get("is_active", True):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Account has been deactivated",
+                    )
+                db_role = row.get("role") or jwt_role
+                db_special = row.get("special_roles") or []
                 if not db_special and db_role in ("coordinator", "hod"):
                     db_special = [db_role]
+                _role_cache[user_id] = (db_role, db_special, now + ROLE_CACHE_TTL)
                 return db_role, db_special
+        except HTTPException:
+            raise
         except Exception:
             pass
     return jwt_role, jwt_special
@@ -83,45 +107,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             detail="Authentication failed"
         )
 
-async def get_current_active_user(
-    user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Check if user is active in database"""
-    try:
-        user_id = user["user_id"]
-        
-        # Query database by UUID (new) or email (fallback for old tokens)
-        result = await db.execute(
-            text("SELECT is_active FROM users WHERE id = :user_id OR email = :user_id"),
-            {"user_id": user_id}
-        )
-        db_user = result.fetchone()
-        
-        # If user exists in DB and is active
-        if db_user and db_user[0]:
-            return user
-        
-        # If user doesn't exist in DB (mock user - allow anyway for development)
-        if not db_user:
-            logger.debug(f"User {user_id} not found in database (mock user)")
-            return user
-        
-        # User exists but is not active
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is not active. Please wait for admin approval."
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error checking user active status: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to verify user status"
-        )
-
 def require_role(required_role: str):
     """Require a specific role"""
     async def check_role(user = Depends(get_current_user)):
@@ -154,27 +139,3 @@ def require_effective_role(*allowed_roles: str):
         return user
     return check
 
-def require_role_active(required_role: str):
-    """Require a specific role and that user is active"""
-    async def check_role_active(
-        user = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db)
-    ):
-        if user.get("role") != required_role:
-            raise HTTPException(status_code=403, detail="Access denied - insufficient permissions")
-        
-        # Check if user is active
-        result = await db.execute(
-            text("SELECT is_active FROM users WHERE email = :email"),
-            {"email": user["user_id"]}
-        )
-        db_user = result.fetchone()
-        
-        if db_user and not db_user[0]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is not active"
-            )
-        
-        return user
-    return check_role_active
