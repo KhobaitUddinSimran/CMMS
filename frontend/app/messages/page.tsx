@@ -9,8 +9,7 @@ import {
   listMessages, sendMessage, markMessageRead, markAllRead, deleteMessage,
   type Message,
 } from '@/lib/api/messages'
-import { listLecturers } from '@/lib/api/courses'
-import { listCourses } from '@/lib/api/courses'
+import { listLecturers, listCourses } from '@/lib/api/courses'
 import {
   MessageSquare, Send, Plus, Trash2, Mail, MailOpen,
   RefreshCw, X, ChevronDown, ChevronUp, Users, Bell,
