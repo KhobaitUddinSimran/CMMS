@@ -135,5 +135,6 @@ async def delete_message(message_id: str, current_user: User = Depends(get_curre
         supabase.table("messages")
         .delete()
         .eq("id", message_id)
+        .or_(f"from_user_id.eq.{uid},to_user_id.eq.{uid}")
         .execute()
     )

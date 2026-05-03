@@ -208,9 +208,15 @@ async def get_flagged_marks(
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     try:
-        q = supabase.table("marks").select("*").eq("is_flagged", True)
+        # Single query with embedded joins — eliminates N+1 round trips
+        select_expr = (
+            "*, "
+            "users!marks_student_id_fkey(id, full_name, email), "
+            "assessments!marks_assessment_id_fkey(id, name, type, max_score, weight_percentage, "
+            "courses!assessments_course_id_fkey(id, code, name))"
+        )
+        q = supabase.table("marks").select(select_expr).eq("is_flagged", True)
         if course_id:
-            # marks has no course_id — filter via assessment_id
             a_filter = supabase.table("assessments").select("id").eq("course_id", course_id).execute()
             aid_list = [a["id"] for a in (a_filter.data or [])]
             if not aid_list:
@@ -219,36 +225,12 @@ async def get_flagged_marks(
         resp = q.order("updated_at", desc=True).execute()
         marks_data = resp.data or []
 
-        # Enrich with student names
-        student_ids = list({m.get("student_id") for m in marks_data if m.get("student_id")})
-        student_map: dict = {}
-        if student_ids:
-            s_resp = supabase.table("users").select("id, full_name, email").in_("id", student_ids).execute()
-            for s in (s_resp.data or []):
-                student_map[s["id"]] = {"full_name": s.get("full_name"), "email": s.get("email")}
+        # Remap embedded join keys to maintain backward-compatible response shape
         for m in marks_data:
-            m["student"] = student_map.get(m.get("student_id"), {})
-
-        # Enrich with assessment info
-        assessment_ids = list({m.get("assessment_id") for m in marks_data if m.get("assessment_id")})
-        a_map: dict = {}
-        if assessment_ids:
-            a_resp = supabase.table("assessments").select("id, name, type, max_score, weight_percentage").in_("id", assessment_ids).execute()
-            for a in (a_resp.data or []):
-                a_map[a["id"]] = {k: a.get(k) for k in ("name", "type", "max_score", "weight_percentage")}
-
-        # Enrich with course info via assessments.course_id
-        course_ids_all = list({a.get("course_id") for a in a_map.values() if a.get("course_id")})
-        c_map: dict = {}
-        if course_ids_all:
-            c_resp = supabase.table("courses").select("id, code, name").in_("id", course_ids_all).execute()
-            for c in (c_resp.data or []):
-                c_map[c["id"]] = {"code": c.get("code"), "name": c.get("name")}
-
-        for m in marks_data:
-            a_info = a_map.get(m.get("assessment_id"), {})
+            m["student"] = m.pop("users", {}) or {}
+            a_info = m.pop("assessments", {}) or {}
+            m["courses"] = a_info.pop("courses", {}) or {}
             m["assessments"] = {k: a_info.get(k) for k in ("name", "type", "max_score", "weight_percentage")}
-            m["courses"] = c_map.get(a_info.get("course_id"), {})
 
         return {"flagged_marks": marks_data, "count": len(marks_data)}
 
@@ -480,18 +462,16 @@ async def publish_marks(
         raise HTTPException(status_code=403, detail="Only lecturers and admins can publish marks")
 
     try:
-        count = 0
-        for mark_id in request.mark_ids:
-            resp = (
-                supabase.table("marks")
-                .update({"status": "published"})
-                .eq("id", mark_id)
-                .eq("status", "draft")
-                .execute()
-            )
-            if resp.data:
-                count += 1
-
+        if not request.mark_ids:
+            return {"message": "No marks to publish", "count": 0}
+        resp = (
+            supabase.table("marks")
+            .update({"status": "published"})
+            .in_("id", request.mark_ids)
+            .eq("status", "draft")
+            .execute()
+        )
+        count = len(resp.data or [])
         return {"message": f"Published {count} marks", "count": count}
 
     except Exception as e:

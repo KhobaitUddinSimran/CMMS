@@ -6,9 +6,11 @@ import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses, listLecturers } from '@/lib/api/courses'
+import { listMessages } from '@/lib/api/messages'
+import { listTimelines } from '@/lib/api/semester'
 import {
   BookOpen, Users, Plus, Upload, ClipboardList,
-  BarChart3, ChevronRight, Settings
+  BarChart3, ChevronRight, Settings, Mail, CalendarDays
 } from 'lucide-react'
 
 interface CourseItem {
@@ -30,6 +32,8 @@ export default function CoordinatorDashboard() {
   const [loading, setLoading] = useState(true)
   const [courses, setCourses] = useState<CourseItem[]>([])
   const [totalCourses, setTotalCourses] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [nextDeadline, setNextDeadline] = useState<{ label: string; date: string } | null>(null)
 
   useEffect(() => {
     loadData()
@@ -38,10 +42,28 @@ export default function CoordinatorDashboard() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [data, staffList] = await Promise.allSettled([
+      const [data, staffList, msgs, timelines] = await Promise.allSettled([
         listCourses({ limit: 500 }),
         listLecturers(),
+        listMessages(),
+        listTimelines(),
       ])
+
+      if (msgs.status === 'fulfilled') {
+        setUnreadCount((msgs.value as any).unread_count || 0)
+      }
+      if (timelines.status === 'fulfilled') {
+        const today = new Date()
+        const upcoming = ((timelines.value as any[]) || [])
+          .flatMap((tl: any) => [
+            { label: `Midterm (${tl.academic_year} Sem ${tl.semester})`, date: tl.midterm_deadline },
+            { label: `Grade Submission (${tl.academic_year} Sem ${tl.semester})`, date: tl.grade_submission_deadline },
+            { label: `Final Deadline (${tl.academic_year} Sem ${tl.semester})`, date: tl.final_deadline },
+          ])
+          .filter(d => d.date && new Date(d.date) >= today)
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        setNextDeadline(upcoming[0] || null)
+      }
 
       // Build id → name map from teaching staff
       const nameMap: Record<string, string> = {}
@@ -82,7 +104,7 @@ export default function CoordinatorDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
@@ -134,6 +156,49 @@ export default function CoordinatorDashboard() {
             </div>
           </div>
         </Card>
+
+        <div className="cursor-pointer" onClick={() => router.push('/messages')}>
+        <Card className="hover:shadow-md transition-shadow h-full">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Unread Messages</p>
+              {loading ? (
+                <div className="mt-3"><Spinner /></div>
+              ) : (
+                <p className={`text-[32px] font-bold mt-2 ${unreadCount > 0 ? 'text-[#C90031]' : 'text-[#111827]'}`}>
+                  {unreadCount}
+                </p>
+              )}
+            </div>
+            <div className="w-14 h-14 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
+              <Mail className="w-7 h-7 text-[#C90031]" />
+            </div>
+          </div>
+        </Card>
+        </div>
+
+        <div className="cursor-pointer" onClick={() => router.push('/semester-timeline')}>
+        <Card className="hover:shadow-md transition-shadow h-full">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Next Deadline</p>
+              {loading ? (
+                <div className="mt-3"><Spinner /></div>
+              ) : nextDeadline ? (
+                <div className="mt-1">
+                  <p className="text-[13px] font-bold text-[#111827]">{nextDeadline.label}</p>
+                  <p className="text-[12px] text-[#6B7280]">{new Date(nextDeadline.date).toLocaleDateString()}</p>
+                </div>
+              ) : (
+                <p className="text-[14px] text-[#9CA3AF] mt-2">None upcoming</p>
+              )}
+            </div>
+            <div className="w-14 h-14 rounded-lg bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
+              <CalendarDays className="w-7 h-7 text-[#3B82F6]" />
+            </div>
+          </div>
+        </Card>
+        </div>
       </div>
 
       {/* Quick Actions */}

@@ -1,12 +1,14 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
 import {
   Home, BookOpen, BarChart3, MessageSquare, User, Table, Settings,
-  Users, Building2, Download, FileText, Lock, Database, LogOut, Flag, CalendarDays
+  Users, Building2, Download, FileText, Lock, Database, LogOut, Flag, CalendarDays, Mail
 } from 'lucide-react'
 import type { UserRole } from '@/types'
+import { listMessages } from '@/lib/api/messages'
 
 interface NavItem {
   icon: React.ReactNode
@@ -49,6 +51,7 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { icon: <BarChart3 className="w-5 h-5" />, label: 'Analytics', path: '/analytics' },
     { icon: <Download className="w-5 h-5" />, label: 'Export', path: '/export' },
     { icon: <Flag className="w-5 h-5" />, label: 'Flagged Marks', path: '/flagged-marks' },
+    { icon: <Mail className="w-5 h-5" />, label: 'Messages', path: '/messages' },
     { icon: <FileText className="w-5 h-5" />, label: 'Audit Log', path: '/audit-log' },
     { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
   ],
@@ -73,6 +76,19 @@ export function Sidebar({ role, isOpen = true }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { logout, user } = useAuth()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    const hasMessages = Array.isArray(role)
+      ? role.some(r => navByRole[r]?.some(i => i.path === '/messages'))
+      : navByRole[role as UserRole]?.some(i => i.path === '/messages')
+    if (!hasMessages) return
+    let cancelled = false
+    listMessages().then(data => {
+      if (!cancelled) setUnreadCount((data as any).unread_count || 0)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   // Merge nav items from all applicable roles, deduplicated by path.
   // Order: base role first, then special roles (coordinator, hod) appended.
@@ -136,7 +152,12 @@ export function Sidebar({ role, isOpen = true }: SidebarProps) {
               <span className={`flex items-center shrink-0 ${active ? 'text-[#C90031]' : 'text-[#94A3B8]'}`}>
                 {item.icon}
               </span>
-              <span className="truncate">{item.label}</span>
+              <span className="truncate flex-1">{item.label}</span>
+              {item.path === '/messages' && unreadCount > 0 && (
+                <span className="ml-1 text-[10px] font-bold bg-[#C90031] text-white rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shrink-0">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
           )
         })}

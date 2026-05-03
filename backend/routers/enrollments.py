@@ -351,7 +351,7 @@ async def preview_roster_upload(
         raise HTTPException(status_code=500, detail="openpyxl not installed. Run: pip install openpyxl")
     except Exception as e:
         logger.error(f"Error previewing roster for course {course_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to preview roster: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to preview roster")
 
 
 # ==================== Roster Upload (Actual Import) ====================
@@ -536,7 +536,7 @@ async def upload_roster(
         raise HTTPException(status_code=500, detail="openpyxl not installed. Run: pip install openpyxl")
     except Exception as e:
         logger.error(f"Error uploading roster for course {course_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to upload roster: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upload roster")
 
 
 # ==================== Roster Confirm (alias for upload) ====================

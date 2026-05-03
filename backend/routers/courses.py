@@ -100,7 +100,7 @@ async def list_courses(
         logger.error(f"Error listing courses: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list courses: {str(e)}"
+            detail="Failed to list courses"
         )
 
 

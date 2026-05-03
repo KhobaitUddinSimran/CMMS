@@ -257,6 +257,7 @@ export default function SemesterTimelinePage() {
   }
 
   async function handleDelete(id: string) {
+    if (!window.confirm('Delete this semester timeline? This cannot be undone.')) return
     try {
       await deleteTimeline(id)
       addToast('Timeline deleted', 'success')

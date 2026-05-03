@@ -271,7 +271,7 @@ function MessageRow({
 export default function MessagesPage() {
   const { user } = useAuth()
   const { addToast } = useToastStore()
-  const isCoordinator = user?.role === 'coordinator' || (user as any)?.special_roles?.includes('coordinator')
+  const isCoordinator = user?.role === 'coordinator' || user?.special_roles?.includes('coordinator') || false
 
   const [data, setData]       = useState<{ inbox: Message[]; sent: Message[]; unread_count: number } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -293,6 +293,7 @@ export default function MessagesPage() {
   useEffect(() => { load() }, [load])
 
   async function handleDelete(id: string) {
+    if (!window.confirm('Delete this message? This cannot be undone.')) return
     try {
       await deleteMessage(id)
       addToast('Deleted', 'success')

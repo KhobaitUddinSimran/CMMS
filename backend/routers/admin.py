@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from ..core.config import supabase
-from ..dependencies.auth import require_role, require_effective_role
+from ..dependencies.auth import require_role, require_effective_role, invalidate_role_cache
 from ..services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ async def approve_user(request: ApproveUserRequest, current_user=Depends(require
         raise
     except Exception as e:
         logger.error(f"Approve user error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/reject-user")
@@ -73,7 +73,7 @@ async def reject_user(request: RejectUserRequest, current_user=Depends(require_r
         raise
     except Exception as e:
         logger.error(f"Reject user error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/pending-users")
@@ -89,7 +89,7 @@ async def get_pending_users(current_user=Depends(require_role("admin"))):
         return {"count": len(users), "users": users}
     except Exception as e:
         logger.error(f"Pending users error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ==================== SPECIAL ROLE MANAGEMENT ====================
@@ -131,6 +131,7 @@ async def assign_special_role(
         if user.get("role") in ("coordinator", "hod"):
             update_payload["role"] = "lecturer"
         supabase.table("users").update(update_payload).eq("id", user["id"]).execute()
+        invalidate_role_cache(user["id"])
         logger.info(f"User {email} special_roles → {current_special}")
         AuditService.log("SPECIAL_ROLE_ASSIGNED", current_user.get("user_id"), user["id"], {"role": special_role})
         return {"message": f"Special role '{special_role}' assigned successfully", "email": email, "special_roles": current_special}
@@ -138,7 +139,7 @@ async def assign_special_role(
         raise
     except Exception as e:
         logger.error(f"Failed to assign special role in Supabase: {e}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to assign special role")
 
 
 @router.post("/revoke-special-role")
@@ -172,6 +173,7 @@ async def revoke_special_role(
         new_special = [r for r in current_special if r != special_role]
         update_payload = {"special_roles": new_special, "role": "lecturer"}
         supabase.table("users").update(update_payload).eq("id", user["id"]).execute()
+        invalidate_role_cache(user["id"])
         logger.info(f"User {email} special_roles after revoke → {new_special}")
         AuditService.log("SPECIAL_ROLE_REVOKED", current_user.get("user_id"), user["id"], {"role": special_role})
         return {"message": f"Special role '{special_role}' revoked successfully", "email": email, "special_roles": new_special}
@@ -179,7 +181,7 @@ async def revoke_special_role(
         raise
     except Exception as e:
         logger.error(f"Failed to revoke special role in Supabase: {e}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to revoke special role")
 
 
 @router.get("/lecturers")
@@ -223,7 +225,7 @@ async def list_lecturers(
         return {"count": len(lecturers), "lecturers": lecturers}
     except Exception as e:
         logger.error(f"Failed to fetch lecturers: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ==================== DASHBOARD STATS ====================
@@ -308,7 +310,7 @@ async def list_all_users(
         return {"count": len(users_list), "users": users_list}
     except Exception as e:
         logger.error(f"List users error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 class ToggleUserActiveRequest(BaseModel):
@@ -332,6 +334,7 @@ async def toggle_user_active(
             raise HTTPException(status_code=404, detail="User not found")
         uid = resp.data[0]["id"]
         supabase.table("users").update({"is_active": request.is_active}).eq("id", uid).execute()
+        invalidate_role_cache(uid)
         action = "USER_ACTIVATED" if request.is_active else "USER_DEACTIVATED"
         AuditService.log(action, current_user.get("user_id"), uid, {"email": target_email})
         return {"message": f"User {'activated' if request.is_active else 'deactivated'}", "email": target_email, "is_active": request.is_active}
@@ -339,7 +342,7 @@ async def toggle_user_active(
         raise
     except Exception as e:
         logger.error(f"Toggle user active error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ==================== AUDIT LOG ====================

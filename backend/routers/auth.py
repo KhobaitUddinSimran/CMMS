@@ -77,7 +77,7 @@ class AuthUserResponse(BaseModel):
     approval_status: str
     created_at: str | None = None
 
-# In-memory password reset token store: {token: {"email": str, "expires_at": datetime}}
+# In-memory fallback store (used only if DB write fails): {token: {"email": str, "expires_at": datetime}}
 RESET_TOKENS: dict[str, dict] = {}
 
 # ==================== LOGIN ENDPOINT ====================
@@ -271,7 +271,28 @@ async def password_reset(request: PasswordResetRequest):
 
     if user_exists:
         token = secrets.token_urlsafe(32)
-        RESET_TOKENS[token] = {"email": email, "expires_at": datetime.now() + timedelta(minutes=30)}
+        expires_at = (datetime.now() + timedelta(minutes=30)).isoformat()
+        stored_in_db = False
+        if supabase:
+            try:
+                # Remove any existing unused reset tokens for this email
+                supabase.table("otps").delete().eq("email", email).eq("otp_type", "password_reset").eq("is_used", False).execute()
+                supabase.table("otps").insert({
+                    "id": str(uuid.uuid4()),
+                    "email": email,
+                    "code": token,
+                    "otp_type": "password_reset",
+                    "is_used": False,
+                    "expires_at": expires_at,
+                    "attempts": 0,
+                    "max_attempts": 5,
+                    "is_locked": False,
+                }).execute()
+                stored_in_db = True
+            except Exception as db_err:
+                logger.warning(f"Failed to persist reset token to DB, using in-memory fallback: {db_err}")
+        if not stored_in_db:
+            RESET_TOKENS[token] = {"email": email, "expires_at": datetime.now() + timedelta(minutes=30)}
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
         reset_link = f"{frontend_url}/auth/password-reset?token={token}"
         try:
@@ -294,14 +315,40 @@ async def reset_password(request: ResetPasswordRequest):
     if len(request.new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
-    token_data = RESET_TOKENS.get(request.token)
-    if not token_data:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
-    if datetime.now() > token_data["expires_at"]:
-        RESET_TOKENS.pop(request.token, None)
-        raise HTTPException(status_code=400, detail="Reset token has expired.")
+    email: str | None = None
 
-    email = token_data["email"]
+    # Try DB-persisted token first
+    if supabase:
+        try:
+            otp_resp = supabase.table("otps").select("*").eq("code", request.token).eq("otp_type", "password_reset").limit(1).execute()
+            if otp_resp.data:
+                otp = otp_resp.data[0]
+                if otp.get("is_used"):
+                    raise HTTPException(status_code=400, detail="Reset token has already been used.")
+                raw_expiry = otp["expires_at"]
+                # Normalise timezone suffix for datetime.fromisoformat
+                expires_at = datetime.fromisoformat(raw_expiry.replace("Z", "").split("+")[0])
+                if datetime.now() > expires_at:
+                    supabase.table("otps").update({"is_used": True}).eq("id", otp["id"]).execute()
+                    raise HTTPException(status_code=400, detail="Reset token has expired.")
+                email = otp["email"]
+                supabase.table("otps").update({"is_used": True, "used_at": datetime.now().isoformat()}).eq("id", otp["id"]).execute()
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"DB OTP lookup failed, checking in-memory fallback: {e}")
+
+    # Fall back to in-memory store (handles tokens created before DB migration)
+    if email is None:
+        token_data = RESET_TOKENS.get(request.token)
+        if not token_data:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+        if datetime.now() > token_data["expires_at"]:
+            RESET_TOKENS.pop(request.token, None)
+            raise HTTPException(status_code=400, detail="Reset token has expired.")
+        email = token_data["email"]
+        RESET_TOKENS.pop(request.token, None)
+
     new_hash = hash_password(request.new_password)
 
     if not supabase:
@@ -317,6 +364,5 @@ async def reset_password(request: ResetPasswordRequest):
         logger.error(f"Password reset DB error: {e}")
         raise HTTPException(status_code=500, detail="Password reset error")
 
-    RESET_TOKENS.pop(request.token, None)
     logger.info(f"Password reset successful for {email}")
     return ResetPasswordResponse(success=True, message="Password reset successfully. You can now log in.")

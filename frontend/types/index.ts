@@ -7,6 +7,8 @@ export interface User {
   role: UserRole
   initials: string
   firstLogin: boolean
+  special_roles?: string[]
+  full_name?: string
 }
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
