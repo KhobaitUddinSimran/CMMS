@@ -1,6 +1,7 @@
 """Course endpoints - Supabase Edition"""
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Optional
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..models.user import User
@@ -101,6 +102,69 @@ async def list_courses(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list courses: {str(e)}"
         )
+
+
+@router.get("/lecturer-workloads")
+async def get_lecturer_workloads(
+    semester: Optional[str] = Query(None),
+    academic_year: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+):
+    """Return current credit load per lecturer for a given semester/academic_year.
+    Max allowed is 9 credits per lecturer per semester."""
+    _require_supabase()
+    if not has_effective_role(current_user, "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        query = supabase.table("courses").select("id, lecturer_id, credits, semester, academic_year")
+        if semester is not None and semester != "":
+            try:
+                query = query.eq("semester", int(semester))
+            except (ValueError, TypeError):
+                query = query.eq("semester", semester)
+        if academic_year:
+            query = query.eq("academic_year", academic_year)
+
+        courses_data = (query.execute()).data or []
+
+        workload: dict = {}
+        for c in courses_data:
+            lid = c.get("lecturer_id")
+            if not lid:
+                continue
+            workload[lid] = workload.get(lid, 0.0) + float(c.get("credits") or 0)
+
+        if not workload:
+            return []
+
+        lect_map = {
+            u["id"]: u
+            for u in (
+                supabase.table("users")
+                .select("id, full_name, email")
+                .in_("id", list(workload.keys()))
+                .execute()
+            ).data or []
+        }
+
+        MAX_CREDITS = 9.0
+        return [
+            {
+                "lecturer_id": lid,
+                "full_name": lect_map.get(lid, {}).get("full_name", ""),
+                "email": lect_map.get(lid, {}).get("email", ""),
+                "used_credits": round(used, 1),
+                "remaining_credits": round(max(0.0, MAX_CREDITS - used), 1),
+                "is_full": used >= MAX_CREDITS,
+            }
+            for lid, used in workload.items()
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting lecturer workloads: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get lecturer workloads")
 
 
 @router.get("/{course_id}")
@@ -302,6 +366,32 @@ async def assign_lecturer(
         lecturer = lecturer_resp.data[0]
         if lecturer.get("role") not in ["lecturer", "coordinator", "hod", "admin"]:
             raise HTTPException(status_code=400, detail="User is not a teaching staff member")
+
+        # Enforce 9-credit-per-semester limit (only when actually changing lecturer)
+        course = course_resp.data[0]
+        if course.get("lecturer_id") != lecturer_id:
+            course_credits = float(course.get("credits") or 0)
+            existing_resp = (
+                supabase.table("courses")
+                .select("credits")
+                .eq("lecturer_id", lecturer_id)
+                .eq("semester", course.get("semester"))
+                .eq("academic_year", course.get("academic_year"))
+                .neq("id", course_id)
+                .execute()
+            )
+            used_credits = sum(float(c.get("credits") or 0) for c in (existing_resp.data or []))
+            if used_credits + course_credits > 9:
+                remaining = max(0, 9 - used_credits)
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Credit limit exceeded: {lecturer.get('full_name', 'This lecturer')} already has "
+                        f"{used_credits:.0f} credit(s) this semester. "
+                        f"Adding {course_credits:.0f} credit(s) would exceed the 9-credit maximum. "
+                        f"Remaining capacity: {remaining:.0f} credit(s)."
+                    ),
+                )
 
         # Update course
         resp = supabase.table("courses").update({"lecturer_id": lecturer_id}).eq("id", course_id).execute()

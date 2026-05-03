@@ -9,7 +9,7 @@ import { Spinner } from '@/components/common/Spinner'
 import { CourseForm, type CourseFormData } from '@/components/course/CourseForm'
 import { LecturerSelector } from '@/components/course/LecturerSelector'
 import { useToastStore } from '@/stores/toastStore'
-import { getCourse, updateCourse, listLecturers, assignLecturer } from '@/lib/api/courses'
+import { getCourse, updateCourse, listLecturers, assignLecturer, getLecturerWorkloads, type LecturerWorkload } from '@/lib/api/courses'
 import { ArrowLeft, CheckCircle, UserCheck } from 'lucide-react'
 
 interface CourseData extends Partial<CourseFormData> {
@@ -39,6 +39,7 @@ export default function EditCoursePage() {
   const [selectedLecturer, setSelectedLecturer] = useState<string>('')
   const [loadingUpdate, setLoadingUpdate] = useState(false)
   const [assignSuccess, setAssignSuccess] = useState(false)
+  const [workloadMap, setWorkloadMap] = useState<Record<string, LecturerWorkload>>({})
 
   useEffect(() => {
     loadData()
@@ -66,6 +67,19 @@ export default function EditCoursePage() {
         setLecturers(lecturersRes.value)
       } else {
         addToast('Could not load lecturer list', 'error')
+      }
+
+      // Fetch credit workloads for this course's semester/academic_year
+      try {
+        const workloads = await getLecturerWorkloads(
+          courseData.semester,
+          courseData.academic_year
+        )
+        const map: Record<string, LecturerWorkload> = {}
+        for (const w of workloads) map[w.lecturer_id] = w
+        setWorkloadMap(map)
+      } catch {
+        // Non-critical — silently fail
       }
     } finally {
       setLoading(false)
@@ -194,6 +208,8 @@ export default function EditCoursePage() {
                   onChange={(val) => { setSelectedLecturer(val); setAssignSuccess(false) }}
                   lecturers={lecturers}
                   loading={loadingUpdate}
+                  workload={workloadMap}
+                  courseCredits={course.credits as number ?? 0}
                 />
 
                 <Button
