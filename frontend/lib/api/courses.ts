@@ -123,3 +123,27 @@ export async function listLecturers(): Promise<any[]> {
   const response = await apiClient.get('/users?role=lecturer')
   return response.data?.lecturers || []
 }
+
+export interface LecturerWorkload {
+  lecturer_id: string
+  full_name: string
+  email: string
+  used_credits: number
+  remaining_credits: number
+  is_full: boolean
+}
+
+/**
+ * Get credit load per lecturer for a given semester/academic_year.
+ * Max allowed: 9 credits per lecturer per semester.
+ */
+export async function getLecturerWorkloads(
+  semester?: string | number,
+  academic_year?: string
+): Promise<LecturerWorkload[]> {
+  const params: Record<string, string> = {}
+  if (semester !== undefined && semester !== '') params.semester = String(semester)
+  if (academic_year) params.academic_year = academic_year
+  const response = await apiClient.get('/courses/lecturer-workloads', { params })
+  return response.data || []
+}
