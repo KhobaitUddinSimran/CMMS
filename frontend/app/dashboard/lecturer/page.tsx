@@ -10,8 +10,8 @@ import { getEnrolledStudents } from '@/lib/api/enrollments'
 import { listMessages } from '@/lib/api/messages'
 import {
   BookOpen, Users, Grid3x3, ClipboardList, Upload,
-  ChevronRight, ArrowRight, Plus, BarChart3, Settings,
-  TrendingUp, AlertCircle, Download, Shield, Mail
+  ChevronRight, ArrowRight,
+  Shield, Mail
 } from 'lucide-react'
 
 interface CourseItem {
@@ -42,7 +42,6 @@ export default function LecturerDashboard() {
 
   const [loading, setLoading] = useState(true)
   const [myCourses, setMyCourses] = useState<CourseItem[]>([])
-  const [allCourses, setAllCourses] = useState<CourseItem[]>([])
   const [totalStudents, setTotalStudents] = useState<number | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
 
@@ -56,8 +55,6 @@ export default function LecturerDashboard() {
       listMessages().then(d => setUnreadCount((d as any).unread_count || 0)).catch(() => {})
       const data = await listCourses({ limit: 500 })
       const list: CourseItem[] = data.data || (data as any)
-      setAllCourses(list)
-
       // Backend already scopes GET /courses to the current lecturer's assigned
       // courses, so the full list IS their courses.
       setMyCourses(list)
@@ -253,198 +250,7 @@ export default function LecturerDashboard() {
         </Card>
       </section>
 
-      {/* ── SECTION 2: COORDINATOR (conditional) ── */}
-      {isCoordinator && (
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-5 bg-purple-600 rounded-full" />
-            <h2 className="text-[18px] font-bold text-[#111827]">Coordinator — Course Management</h2>
-            <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">Coordinator</span>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-            <Card className="hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Total Courses</p>
-                  {loading ? <div className="mt-3"><Spinner /></div>
-                    : <p className="text-[32px] font-bold text-[#111827] mt-2">{allCourses.length}</p>}
-                </div>
-                <div className="w-14 h-14 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="w-7 h-7 text-purple-600" />
-                </div>
-              </div>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Lecturers Assigned</p>
-                  {loading ? <div className="mt-3"><Spinner /></div>
-                    : <p className="text-[32px] font-bold text-[#111827] mt-2">{allCourses.filter((c) => c.lecturer_id).length}</p>}
-                </div>
-                <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
-                  <Users className="w-7 h-7 text-[#10B981]" />
-                </div>
-              </div>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Unassigned</p>
-                  {loading ? <div className="mt-3"><Spinner /></div>
-                    : <p className="text-[32px] font-bold text-[#111827] mt-2">{allCourses.filter((c) => !c.lecturer_id).length}</p>}
-                </div>
-                <div className="w-14 h-14 rounded-lg bg-[#FEF3C7] flex items-center justify-center flex-shrink-0">
-                  <BarChart3 className="w-7 h-7 text-[#F59E0B]" />
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-            {[
-              { label: 'Create Course', icon: Plus, color: 'bg-[#C90031]', href: '/courses/create' },
-              { label: 'Roster Management', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
-              { label: 'Assessment Config', icon: ClipboardList, color: 'bg-purple-600', href: '/assessment-config' },
-              { label: 'View Reports', icon: BarChart3, color: 'bg-[#059669]', href: '/reports' },
-            ].map((a) => (
-              <button key={a.label} onClick={() => router.push(a.href)}
-                className="flex items-center gap-3 p-4 bg-white border border-[#E5E7EB] rounded-xl hover:shadow-md transition-all text-left">
-                <div className={`w-10 h-10 ${a.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                  <a.icon className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-[13px] font-semibold text-[#111827]">{a.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <Card>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-[17px] font-bold text-[#111827]">All Courses</h3>
-              <button onClick={() => router.push('/courses')}
-                className="flex items-center gap-1 text-[14px] font-medium text-purple-600 hover:text-purple-800 transition-colors">
-                View All <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            {loading ? (
-              <div className="flex justify-center py-8"><Spinner /></div>
-            ) : allCourses.length === 0 ? (
-              <div className="text-center py-8">
-                <BookOpen className="w-10 h-10 text-[#D1D5DB] mx-auto mb-3" />
-                <p className="text-[#6B7280] font-medium">No courses yet</p>
-                <button onClick={() => router.push('/courses/create')}
-                  className="mt-3 px-4 py-2 bg-[#C90031] text-white rounded-lg text-sm font-medium hover:bg-[#A80028] transition-colors">
-                  Create First Course
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-[#E5E7EB]">
-                <table className="w-full text-[14px]">
-                  <thead>
-                    <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                      <th className="text-left py-3 px-4 font-semibold text-[#6B7280]">Code</th>
-                      <th className="text-left py-3 px-4 font-semibold text-[#6B7280]">Name</th>
-                      <th className="text-left py-3 px-4 font-semibold text-[#6B7280]">Year / Sem</th>
-                      <th className="text-left py-3 px-4 font-semibold text-[#6B7280]">Lecturer</th>
-                      <th className="text-right py-3 px-4 font-semibold text-[#6B7280]">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allCourses.slice(0, 6).map((course) => (
-                      <tr key={course.id} className="border-b border-[#E5E7EB] last:border-0 hover:bg-[#F9FAFB] transition-colors">
-                        <td className="py-3 px-4 font-mono font-semibold text-[#C90031]">{course.code}</td>
-                        <td className="py-3 px-4 text-[#111827]">{course.name || course.code}</td>
-                        <td className="py-3 px-4 text-[#6B7280]">{course.academic_year || course.year} / {course.semester}</td>
-                        <td className="py-3 px-4">
-                          {course.lecturer_name
-                            ? <span className="text-[#111827]">{course.lecturer_name}</span>
-                            : <span className="text-[#F59E0B] text-xs font-medium">Unassigned</span>}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <button onClick={() => router.push(`/courses/${course.id}/edit`)}
-                            className="p-1.5 text-[#6B7280] hover:text-[#C90031] hover:bg-red-50 rounded transition-colors">
-                            <Settings className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-        </section>
-      )}
-
-      {/* ── SECTION 3: HOD (conditional) ── */}
-      {isHOD && (
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-5 bg-[#C90031] rounded-full" />
-            <h2 className="text-[18px] font-bold text-[#111827]">HOD — Department Oversight</h2>
-            <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-[#C90031]">HOD</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-            {[
-              { label: 'Total Students', value: '—', icon: Users, bg: 'bg-[#FEE2E2]', color: 'text-[#C90031]' },
-              { label: 'Avg Performance', value: '—', icon: TrendingUp, bg: 'bg-[#ECFDF5]', color: 'text-[#10B981]' },
-              { label: 'Active Courses', value: String(allCourses.length || '—'), icon: BookOpen, bg: 'bg-[#EFF6FF]', color: 'text-[#3B82F6]' },
-              { label: 'Critical Issues', value: '—', icon: AlertCircle, bg: 'bg-[#FEF3C7]', color: 'text-[#F59E0B]' },
-            ].map((s) => (
-              <Card key={s.label} className="hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">{s.label}</p>
-                    {loading ? <div className="mt-3"><Spinner /></div>
-                      : <p className="text-[32px] font-bold text-[#111827] mt-2">{s.value}</p>}
-                  </div>
-                  <div className={`w-14 h-14 rounded-lg ${s.bg} flex items-center justify-center flex-shrink-0`}>
-                    <s.icon className={`w-7 h-7 ${s.color}`} />
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-            {[
-              { label: 'Analytics', icon: BarChart3, color: 'bg-[#7C3AED]', href: '/analytics' },
-              { label: 'Export Data', icon: Download, color: 'bg-[#059669]', href: '/export' },
-              { label: 'Audit Log', icon: ClipboardList, color: 'bg-[#C90031]', href: '/audit-log' },
-            ].map((a) => (
-              <button key={a.label} onClick={() => router.push(a.href)}
-                className="flex items-center gap-3 p-4 bg-white border border-[#E5E7EB] rounded-xl hover:shadow-md transition-all text-left">
-                <div className={`w-10 h-10 ${a.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                  <a.icon className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-[13px] font-semibold text-[#111827]">{a.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <Card>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-[17px] font-bold text-[#111827]">Department Overview</h3>
-            </div>
-            <div className="space-y-3">
-              {[
-                { metric: 'Faculty Members', value: '—' },
-                { metric: 'Active Courses', value: String(allCourses.length || '—') },
-                { metric: 'Courses with Unassigned Lecturers', value: String(allCourses.filter((c) => !c.lecturer_id).length) },
-                { metric: 'Student Queries', value: '—' },
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between py-2 border-b border-[#E5E7EB] last:border-0">
-                  <span className="text-[#111827] text-[14px]">{item.metric}</span>
-                  <span className="text-[14px] font-semibold text-[#111827]">{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </section>
-      )}
     </div>
   )
 }

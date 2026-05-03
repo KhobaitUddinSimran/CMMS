@@ -200,8 +200,6 @@ export interface HodStats {
   total_faculty: number
   active_courses: number
   flagged_marks: number
-  avg_performance: number
-  pass_rate: number
 }
 
 export async function getHodStats(): Promise<HodStats> {

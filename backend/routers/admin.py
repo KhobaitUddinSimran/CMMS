@@ -393,8 +393,6 @@ async def get_hod_stats(
         "total_faculty": 0,
         "active_courses": 0,
         "flagged_marks": 0,
-        "avg_performance": 0.0,
-        "pass_rate": 0.0,
     }
 
     if not supabase:
@@ -412,23 +410,6 @@ async def get_hod_stats(
 
         mr = supabase.table("marks").select("id", count="exact").eq("is_flagged", True).execute()
         stats["flagged_marks"] = mr.count or 0
-
-        marks_r = supabase.table("marks").select("raw_score, assessment_id").eq("status", "published").execute()
-        if marks_r.data:
-            a_ids = list({m["assessment_id"] for m in marks_r.data if m.get("assessment_id")})
-            a_map = {}
-            if a_ids:
-                ar = supabase.table("assessments").select("id, max_score").in_("id", a_ids).execute()
-                for a in (ar.data or []):
-                    a_map[a["id"]] = a.get("max_score", 100)
-            scores = []
-            for m in marks_r.data:
-                max_score = a_map.get(m.get("assessment_id"), 100) or 100
-                raw = m.get("raw_score") or 0
-                scores.append(raw / max_score * 100)
-            if scores:
-                stats["avg_performance"] = round(sum(scores) / len(scores), 1)
-                stats["pass_rate"] = round(sum(1 for s in scores if s >= 60) / len(scores) * 100, 1)
     except Exception as e:
         logger.warning(f"HOD stats query failed: {e}")
 
