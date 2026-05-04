@@ -55,7 +55,7 @@ export default function CoursesPage() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center justify-center min-h-[50vh]">
           <Spinner />
         </div>
       </MainLayout>

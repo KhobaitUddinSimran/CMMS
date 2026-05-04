@@ -1,6 +1,9 @@
 """In-portal messaging — coordinators contact lecturers (and vice-versa)."""
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user
 from ..models.user import User
@@ -9,9 +12,32 @@ router = APIRouter(prefix="/api/messages", tags=["messages"])
 logger = logging.getLogger(__name__)
 
 
+def _rate_key(request: Request) -> str:
+    if os.getenv("ENVIRONMENT", "development") == "development":
+        return "dev-shared-key"
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_rate_key)
+
+
 def _require_supabase():
     if supabase is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
+
+
+def _can_message(sender: dict, recipient_role: str) -> bool:
+    """Students cannot message admin/HOD directly \u2014 they go through their
+    coordinator (who, in real workflows, owns the escalation chain). Lecturers
+    can message anyone except admin (rare ops). Elevated roles can message all."""
+    sender_role = sender.get("role", "")
+    if sender_role in ("admin", "coordinator", "hod"):
+        return True
+    if sender_role == "lecturer":
+        return recipient_role != "admin"
+    if sender_role == "student":
+        return recipient_role in ("lecturer", "coordinator")
+    return False
 
 
 def _enrich_users(messages: list) -> list:
@@ -66,15 +92,23 @@ async def list_messages(current_user: User = Depends(get_current_user)):
 
 
 @router.post("", status_code=201)
-async def send_message(data: dict, current_user: User = Depends(get_current_user)):
+@limiter.limit("60/hour")
+async def send_message(
+    request: Request,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+):
     """Send a message to one or more recipients.
-    Accepts either to_user_id (str) or to_user_ids (list of str) for bulk sending."""
+    Accepts either to_user_id (str) or to_user_ids (list of str) for bulk sending.
+    Optional `parent_message_id` threads the new message under an existing one."""
     _require_supabase()
     uid = current_user.get("user_id")
 
     body = (data.get("body") or "").strip()
     if not body:
         raise HTTPException(status_code=400, detail="Message body is required")
+    if len(body) > 5000:
+        raise HTTPException(status_code=400, detail="Message body exceeds 5000 character limit")
 
     # Resolve recipients
     to_ids: list = []
@@ -84,6 +118,35 @@ async def send_message(data: dict, current_user: User = Depends(get_current_user
         to_ids = [str(data["to_user_id"])]
     if not to_ids:
         raise HTTPException(status_code=400, detail="At least one recipient is required")
+    if len(to_ids) > 50:
+        raise HTTPException(status_code=400, detail="Cannot send to more than 50 recipients in one request")
+
+    # Validate role-based messaging rules
+    recipients_resp = supabase.table("users").select("id, role").in_("id", to_ids).execute()
+    recipient_map = {r["id"]: r for r in (recipients_resp.data or [])}
+    for tid in to_ids:
+        rec = recipient_map.get(tid)
+        if not rec:
+            raise HTTPException(status_code=404, detail=f"Recipient not found: {tid}")
+        if not _can_message(current_user, rec.get("role", "")):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "You cannot message a user with this role directly. "
+                    "Students should contact their lecturer or coordinator instead."
+                ),
+            )
+
+    # Validate parent message (threading) if supplied
+    parent_id = data.get("parent_message_id") or None
+    if parent_id:
+        parent_resp = supabase.table("messages").select("id, from_user_id, to_user_id").eq("id", parent_id).execute()
+        if not parent_resp.data:
+            raise HTTPException(status_code=404, detail="Parent message not found")
+        parent = parent_resp.data[0]
+        # Sender must have been a participant in the parent thread
+        if uid not in (parent.get("from_user_id"), parent.get("to_user_id")):
+            raise HTTPException(status_code=403, detail="You are not a participant in that thread")
 
     rows = [
         {
@@ -92,6 +155,7 @@ async def send_message(data: dict, current_user: User = Depends(get_current_user
             "subject": (data.get("subject") or "").strip(),
             "body": body,
             "course_id": data.get("course_id") or None,
+            "parent_message_id": parent_id,
         }
         for tid in to_ids
     ]

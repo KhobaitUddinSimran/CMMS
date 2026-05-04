@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { getAuditLogs, type AuditLogEntry } from '@/lib/api/admin'
 
 const ACTION_COLORS: Record<string, string> = {
@@ -59,7 +60,7 @@ export default function SystemLogsPage() {
   if (!isAuthenticated || user?.role !== 'admin') return null
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <MainLayout>
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <button onClick={() => router.back()} className="text-gray-600 hover:text-gray-900">
@@ -145,6 +146,6 @@ export default function SystemLogsPage() {
           )}
         </div>
       </div>
-    </div>
+    </MainLayout>
   )
 }

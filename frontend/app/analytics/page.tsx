@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Users, GraduationCap, BookOpen, AlertCircle, Activity, Mail,
 } from 'lucide-react'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { getHodStats, getAdminStats, getAuditLogs, type HodStats, type AdminStats, type AuditLogEntry } from '@/lib/api/admin'
@@ -61,7 +62,8 @@ export default function AnalyticsPage() {
   const totalFaculty = (adminStats?.lecturers ?? 0) + (adminStats?.coordinators ?? 0) + (adminStats?.hods ?? 0)
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto p-6">
+    <MainLayout>
+    <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex items-center gap-4">
         <button onClick={() => router.back()} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
           <ArrowLeft className="w-5 h-5 text-[#6B7280]" />
@@ -173,5 +175,6 @@ export default function AnalyticsPage() {
         )}
       </Card>
     </div>
+    </MainLayout>
   )
 }

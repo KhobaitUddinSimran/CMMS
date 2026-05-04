@@ -5,6 +5,7 @@ import { Flag, CheckCircle, RefreshCw, AlertTriangle } from 'lucide-react'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { useToastStore } from '@/stores/toastStore'
 import { getFlaggedMarks, unflagMark, type FlaggedMark } from '@/lib/api/marks'
 
@@ -46,6 +47,7 @@ export default function FlaggedMarksPage() {
   const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-MY', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
 
   return (
+    <MainLayout>
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="pt-4 flex items-start justify-between">
@@ -148,5 +150,6 @@ export default function FlaggedMarksPage() {
         </Card>
       )}
     </div>
+    </MainLayout>
   )
 }

@@ -4,15 +4,18 @@ Handles student enrollment, roster upload, and add/drop operations.
 import logging
 import io
 import random
+import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 from ..core.config import supabase
 from ..core.security import hash_password
 from ..dependencies.auth import get_current_user, has_effective_role
+from ..services.audit_service import AuditService
 from ..services.email_service import EmailService
+from ..utils.session import get_active_session
 
 router = APIRouter(prefix="/api/courses", tags=["enrollments"])
 logger = logging.getLogger(__name__)
@@ -25,8 +28,31 @@ class AddStudentRequest(BaseModel):
 
 # ==================== Helper Functions ====================
 def _generate_otp(length: int = 6) -> str:
-    """Generate a random numeric OTP"""
+    """Generate a random numeric OTP (for email verification codes)."""
     return ''.join(random.choices(string.digits, k=length))
+
+
+def _generate_invitation_token() -> str:
+    """Cryptographically strong, URL-safe token used when provisioning student
+    accounts from a roster upload. Stored hashed in users.password_hash and
+    emailed in plaintext once — the student must use it to set a real
+    password on first login."""
+    return secrets.token_urlsafe(24)
+
+
+def _enrollment_session_fields(course: dict) -> dict:
+    """Return {semester, academic_year} for enrolling into this course.
+    Prefer the course's own session; fall back to the active timeline rather
+    than the raw calendar year."""
+    sem = course.get("semester")
+    ay = course.get("academic_year")
+    if sem and ay:
+        return {"semester": int(sem), "academic_year": ay}
+    active = get_active_session()
+    return {
+        "semester": int(sem) if sem else active["semester"],
+        "academic_year": ay or active["academic_year"],
+    }
 
 
 def _verify_course_access(course: dict, current_user: dict):
@@ -170,16 +196,20 @@ async def add_student_to_course(
         if existing.data:
             raise HTTPException(status_code=400, detail="Student is already enrolled in this course")
 
-        # Create enrollment — include semester/academic_year to satisfy NOT NULL
-        # constraints that exist in the base schema (pre-sprint2 migration)
+        # Create enrollment with correct session derived from the course /
+        # semester_timelines (no more raw datetime.utcnow().year fallback).
         enrollment = {
             "student_id": student["id"],
             "course_id": course_id,
             "status": "active",
-            "semester": course.get("semester") or 1,
-            "academic_year": course.get("academic_year") or str(datetime.utcnow().year),
+            **_enrollment_session_fields(course),
         }
         resp = supabase.table("enrollments").insert(enrollment).execute()
+
+        AuditService.log(
+            "ENROLLMENT_CREATED", current_user.get("user_id"), course_id,
+            metadata={"student_id": student["id"], "email": student["email"]},
+        )
 
         enrolled_record = resp.data[0] if resp.data else {}
         return {
@@ -448,18 +478,26 @@ async def upload_roster(
                     student_id = user_resp.data[0]["id"]
                     linked_count += 1
                 else:
-                    # New user → create account with OTP
-                    otp = _generate_otp()
-                    hashed = hash_password(otp)
+                    # New user → provision as an invited, not-yet-active account.
+                    # Generate a one-time invitation token that the student will
+                    # exchange for a real password on first login. Account is
+                    # inactive until they accept the invite; no bogus
+                    # `email_verified`, no preset approval bypass.
+                    invite_token = _generate_invitation_token()
+                    hashed = hash_password(invite_token)
+                    expires_at = (datetime.utcnow() + timedelta(days=14)).isoformat()
 
                     new_user = {
                         "email": email,
                         "full_name": full_name,
                         "password_hash": hashed,
                         "role": "student",
-                        "is_active": True,
+                        "is_active": False,  # activates when invite is accepted
                         "email_verified": False,
-                        "approval_status": "approved",
+                        "approval_status": "approved",  # coordinator-provisioned
+                        "invitation_status": "pending",
+                        "invitation_expires_at": expires_at,
+                        "invited_by": current_user.get("user_id"),
                     }
                     if matric:
                         new_user["matric_number"] = matric
@@ -473,13 +511,15 @@ async def upload_roster(
                     created_count += 1
                     student_emails_created.append(email)
 
-                    # Send OTP email (fire-and-forget)
+                    # Send invitation email. If it fails, surface the error —
+                    # a silently dead invite is worse than a loud failure.
                     try:
-                        await EmailService.send_student_otp(email, otp, full_name)
+                        await EmailService.send_student_otp(email, invite_token, full_name)
                     except Exception as email_err:
-                        logger.warning(f"Failed to send OTP email to {email}: {email_err}")
+                        logger.error(f"Failed to send invitation email to {email}: {email_err}")
+                        errors.append(f"Row {row_idx}: Account created but invitation email failed for {email} — resend from Roster Management")
 
-                # Create enrollment (skip if already active)
+                # Create enrollment (skip if already active) with correct session
                 existing_enroll = (
                     supabase.table("enrollments")
                     .select("id")
@@ -493,28 +533,21 @@ async def upload_roster(
                         "student_id": student_id,
                         "course_id": course_id,
                         "status": "active",
-                        "semester": course.get("semester") or 1,
-                        "academic_year": course.get("academic_year") or str(datetime.utcnow().year),
+                        **_enrollment_session_fields(course),
                     }).execute()
 
             except Exception as row_err:
                 errors.append(f"Row {row_idx}: {str(row_err)}")
 
-        # Log audit
-        try:
-            supabase.table("audit_log").insert({
-                "action": "ROSTER_UPLOADED",
-                "actor_id": current_user.get("user_id"),
-                "target_id": course_id,
-                "metadata": {
-                    "created": created_count,
-                    "linked": linked_count,
-                    "errors": len(errors),
-                    "total": created_count + linked_count,
-                },
-            }).execute()
-        except Exception:
-            logger.warning("Failed to write audit log for roster upload")
+        AuditService.log(
+            "ROSTER_UPLOADED", current_user.get("user_id"), course_id,
+            metadata={
+                "created": created_count,
+                "linked": linked_count,
+                "errors": len(errors),
+                "total": created_count + linked_count,
+            },
+        )
 
         return {
             "success": len(errors) == 0,

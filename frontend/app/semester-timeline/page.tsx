@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { useToastStore } from '@/stores/toastStore'
 import {
   listTimelines, upsertTimeline, deleteTimeline,
@@ -284,6 +285,7 @@ export default function SemesterTimelinePage() {
   })
 
   return (
+    <MainLayout>
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between pt-4">
@@ -512,5 +514,6 @@ export default function SemesterTimelinePage() {
         </div>
       )}
     </div>
+    </MainLayout>
   )
 }

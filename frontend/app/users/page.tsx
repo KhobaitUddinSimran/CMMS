@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { ArrowLeft, Search, Loader2, Power, PowerOff } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { useToastStore } from '@/stores/toastStore'
 import { getAllUsers, toggleUserActive, type UserRecord } from '@/lib/api/admin'
 
@@ -85,7 +86,7 @@ export default function UsersPage() {
   if (!isAuthenticated || user?.role !== 'admin') return null
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <MainLayout>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -230,6 +231,6 @@ export default function UsersPage() {
           )}
         </div>
       </div>
-    </div>
+    </MainLayout>
   )
 }

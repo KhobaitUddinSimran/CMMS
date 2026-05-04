@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { MessageSquare, Plus, X, Send, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { useToastStore } from '@/stores/toastStore'
@@ -115,6 +116,7 @@ export default function QueriesPage() {
   const fmt = (d: string) => new Date(d).toLocaleDateString('en-MY', { year: 'numeric', month: 'short', day: 'numeric' })
 
   return (
+    <MainLayout>
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="pt-4 flex items-start justify-between">
@@ -352,5 +354,6 @@ export default function QueriesPage() {
         </div>
       )}
     </div>
+    </MainLayout>
   )
 }

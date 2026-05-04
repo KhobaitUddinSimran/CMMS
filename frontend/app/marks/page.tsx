@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses } from '@/lib/api/courses'
@@ -52,6 +53,7 @@ export default function MarksPage() {
     setExpanded((prev) => ({ ...prev, [courseId]: !prev[courseId] }))
 
   return (
+    <MainLayout>
     <div className="space-y-8 max-w-5xl mx-auto">
       {/* Header */}
       <div>
@@ -64,8 +66,8 @@ export default function MarksPage() {
         <Card>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Courses with Marks</p>
-              <p className="text-3xl font-bold text-[#111827] mt-2">
+              <p className="text-sm text-[#6B7280]">Courses with Marks</p>
+              <p className="text-[28px] font-bold text-[#111827] mt-1.5">
                 {loading ? <Spinner /> : summary.length}
               </p>
             </div>
@@ -78,8 +80,8 @@ export default function MarksPage() {
         <Card>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Passing Courses</p>
-              <p className="text-3xl font-bold text-[#111827] mt-2">
+              <p className="text-sm text-[#6B7280]">Passing Courses</p>
+              <p className="text-[28px] font-bold text-[#111827] mt-1.5">
                 {loading ? <Spinner /> : `${summary.filter((s) => s.carry_total >= 60).length}/${summary.length}`}
               </p>
             </div>
@@ -188,5 +190,6 @@ export default function MarksPage() {
         </div>
       )}
     </div>
+    </MainLayout>
   )
 }

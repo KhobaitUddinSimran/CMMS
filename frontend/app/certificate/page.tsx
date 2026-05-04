@@ -2,6 +2,7 @@
 
 import { Award, Download, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { MainLayout } from '@/components/layout/MainLayout'
 
 export default function CertificatePage() {
   const router = useRouter()
@@ -47,7 +48,7 @@ export default function CertificatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
+    <MainLayout>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -128,6 +129,6 @@ export default function CertificatePage() {
           </div>
         </div>
       </div>
-    </div>
+    </MainLayout>
   )
 }

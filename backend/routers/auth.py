@@ -141,13 +141,32 @@ async def login(request: Request, credentials: LoginRequest):
 @router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("100/1hour")
 async def signup(request: Request, signup_data: SignupRequest):
-    """Signup — writes directly to Supabase as pending."""
+    """Signup — writes directly to Supabase as pending. Admin / coordinator /
+    HOD roles are NEVER self-assignable; they must be granted by an existing
+    admin via the user-management API."""
     try:
-        if signup_data.role not in ("student", "lecturer", "admin"):
-            raise HTTPException(status_code=400, detail="Coordinator and HOD roles are assigned by admin. Please sign up as a lecturer.")
+        # Only student and lecturer can self-signup. Admin/coordinator/HOD are
+        # privileged roles and cannot be created via the public endpoint.
+        if signup_data.role not in ("student", "lecturer"):
+            raise HTTPException(
+                status_code=400,
+                detail="Only student and lecturer roles can self-register. "
+                       "Admin, coordinator, and HOD accounts are provisioned by an administrator.",
+            )
 
-        if not (signup_data.email.endswith("@utm.my") or signup_data.email.endswith("@graduate.utm.my")):
+        email_lc = signup_data.email.strip().lower()
+        is_staff_domain = email_lc.endswith("@utm.my")
+        is_student_domain = email_lc.endswith("@graduate.utm.my")
+
+        if not (is_staff_domain or is_student_domain):
             raise HTTPException(status_code=400, detail="Email must be from UTM domain (@utm.my or @graduate.utm.my)")
+
+        # Lecturers can only use the staff domain; students can use either.
+        if signup_data.role == "lecturer" and not is_staff_domain:
+            raise HTTPException(
+                status_code=400,
+                detail="Lecturer accounts must use the @utm.my staff email domain.",
+            )
 
         if signup_data.role == "student" and not signup_data.matric_number:
             raise HTTPException(status_code=400, detail="Matric number is required for students")
@@ -155,25 +174,39 @@ async def signup(request: Request, signup_data: SignupRequest):
         if not supabase:
             raise HTTPException(status_code=503, detail="Database unavailable")
 
-        # Check duplicate
-        existing = supabase.table("users").select("id").ilike("email", signup_data.email).execute()
+        # Check duplicate (case-insensitive)
+        existing = supabase.table("users").select("id").ilike("email", email_lc).execute()
         if existing.data:
             raise HTTPException(status_code=409, detail="Email already registered")
 
         user_id = str(uuid.uuid4())
+        # Store pending, unverified, inactive. Admin approval + OTP email
+        # verification are the two separate gates before login works.
         supabase.table("users").insert({
             "id": user_id,
-            "email": signup_data.email.lower(),
+            "email": email_lc,
             "full_name": signup_data.full_name,
             "role": signup_data.role,
             "password_hash": hash_password(signup_data.password),
             "is_active": False,
             "approval_status": "pending",
-            "email_verified": True,
-            "matric_number": signup_data.matric_number or "",
+            "email_verified": False,  # must complete OTP step after signup
+            "matric_number": signup_data.matric_number or None,
         }).execute()
 
-        logger.info(f"New signup {signup_data.email} persisted to Supabase (pending)")
+        # Audit trail — "actor" is the new user themselves (self-registration)
+        try:
+            supabase.table("audit_logs").insert({
+                "user_id": user_id,
+                "action": "USER_SIGNED_UP",
+                "entity_type": "users",
+                "entity_id": user_id,
+                "new_values": {"email": email_lc, "role": signup_data.role},
+            }).execute()
+        except Exception:
+            pass
+
+        logger.info(f"New signup {email_lc} persisted to Supabase (role={signup_data.role}, pending)")
         return SignupResponse(user_id=user_id, approval_status="pending")
 
     except HTTPException:

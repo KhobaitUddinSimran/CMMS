@@ -6,8 +6,7 @@ import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses } from '@/lib/api/courses'
-import { getStudentCarryTotal } from '@/lib/api/marks'
-import { BookOpen, TrendingUp, AlertCircle, ChevronRight, FileText } from 'lucide-react'
+import { BookOpen, TrendingUp, ChevronRight, FileText } from 'lucide-react'
 
 interface CourseItem {
   id: string
@@ -20,20 +19,12 @@ interface CourseItem {
   lecturer_name?: string
 }
 
-interface CarryData {
-  carry_total: number
-  max_possible: number
-  percentage: number
-  status: 'pass' | 'at_risk' | 'fail'
-}
-
 export default function StudentDashboard() {
   const { user } = useAuth()
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
   const [courses, setCourses] = useState<CourseItem[]>([])
-  const [carry, setCarry] = useState<CarryData | null>(null)
 
   useEffect(() => {
     loadData()
@@ -42,28 +33,15 @@ export default function StudentDashboard() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [coursesData] = await Promise.all([
-        listCourses({ limit: 500 }),
-      ])
+      const coursesData = await listCourses({ limit: 500 })
       const list: CourseItem[] = coursesData.data || (coursesData as any)
       setCourses(list)
-
-      if (user?.id) {
-        try {
-          const carryData = await getStudentCarryTotal(user.id)
-          setCarry(carryData)
-        } catch {
-          setCarry(null)
-        }
-      }
     } catch {
       setCourses([])
     } finally {
       setLoading(false)
     }
   }
-
-  const carryPct = carry?.percentage ?? null
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -78,19 +56,19 @@ export default function StudentDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Courses Available</p>
+              <p className="text-sm text-[#6B7280]">Enrolled Courses</p>
               {loading ? (
                 <div className="mt-3"><Spinner /></div>
               ) : (
-                <p className="text-[32px] font-bold text-[#111827] mt-2">{courses.length}</p>
+                <p className="text-[28px] font-bold text-[#111827] mt-1.5">{courses.length}</p>
               )}
             </div>
-            <div className="w-14 h-14 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-7 h-7 text-[#C90031]" />
+            <div className="w-12 h-12 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-6 h-6 text-[#C90031]" />
             </div>
           </div>
         </Card>
@@ -98,17 +76,11 @@ export default function StudentDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Overall Carry</p>
-              {loading ? (
-                <div className="mt-3"><Spinner /></div>
-              ) : (
-                <p className="text-[32px] font-bold text-[#111827] mt-2">
-                  {carryPct !== null ? `${carryPct.toFixed(1)}%` : '—'}
-                </p>
-              )}
+              <p className="text-sm text-[#6B7280]">Carry Marks</p>
+              <p className="text-[14px] font-medium text-[#111827] mt-1.5">Check your scores</p>
             </div>
-            <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-7 h-7 text-[#10B981]" />
+            <div className="w-12 h-12 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
+              <TrendingUp className="w-6 h-6 text-[#10B981]" />
             </div>
           </div>
         </Card>
@@ -116,25 +88,11 @@ export default function StudentDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Performance</p>
-              {loading ? (
-                <div className="mt-3"><Spinner /></div>
-              ) : (
-                <p className={`text-[20px] font-bold mt-2 ${
-                  carry?.status === 'pass' ? 'text-[#10B981]' :
-                  carry?.status === 'at_risk' ? 'text-[#F59E0B]' :
-                  carry?.status === 'fail' ? 'text-[#EF4444]' :
-                  'text-[#111827]'
-                }`}>
-                  {carry?.status === 'pass' ? 'Passing' :
-                   carry?.status === 'at_risk' ? 'At Risk' :
-                   carry?.status === 'fail' ? 'Below Pass' :
-                   'No marks yet'}
-                </p>
-              )}
+              <p className="text-sm text-[#6B7280]">Mark Queries</p>
+              <p className="text-[14px] font-medium text-[#111827] mt-1.5">Raise a dispute</p>
             </div>
-            <div className="w-14 h-14 rounded-lg bg-[#FEF3C7] flex items-center justify-center flex-shrink-0">
-              <AlertCircle className="w-7 h-7 text-[#F59E0B]" />
+            <div className="w-12 h-12 rounded-lg bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
+              <FileText className="w-6 h-6 text-[#3B82F6]" />
             </div>
           </div>
         </Card>
@@ -173,7 +131,7 @@ export default function StudentDashboard() {
       {/* Course List */}
       <Card>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-[20px] font-bold text-[#111827]">Available Courses</h2>
+          <h2 className="text-[20px] font-bold text-[#111827]">Enrolled Courses</h2>
           <button
             onClick={() => router.push('/courses')}
             className="flex items-center gap-1 text-[14px] font-medium text-[#C90031] hover:text-[#A80028] transition-colors"

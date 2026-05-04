@@ -4,7 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
+from ..services.audit_service import AuditService
 from typing import Optional
+
+
+def _assessment_has_marks(assessment_id: str) -> bool:
+    """True if any mark has been entered against this assessment.
+    Once marks exist, the assessment's grading parameters (max_score,
+    weight_percentage) are effectively frozen — changing them would
+    retroactively alter student grades."""
+    try:
+        resp = supabase.table("marks").select("id", count="exact").eq("assessment_id", assessment_id).limit(1).execute()
+        return (resp.count or 0) > 0
+    except Exception:
+        return False
 
 # Use prefix to avoid path duplication issues
 router = APIRouter(prefix="/api/courses", tags=["assessments"])
@@ -232,15 +245,39 @@ async def update_assessment(
                 detail="You are not assigned to this course"
             )
         
+        # Refuse any change to the assessment once it's locked. The only way
+        # out is to explicitly unlock (separate endpoint) — which audits.
+        if assessment.get("is_locked"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Assessment schema is locked. Unlock the course's assessment schema before editing.",
+            )
+
+        has_marks = _assessment_has_marks(assessment_id)
+
         # Prepare update data
         update_data = {}
         if data.name is not None:
             update_data["name"] = data.name
         if data.type is not None:
             update_data["type"] = data.type
+
+        # Grading parameters are frozen once marks exist — changing them would
+        # silently alter every student's already-recorded grade.
         if data.max_score is not None:
+            if has_marks and float(data.max_score) != float(assessment.get("max_score") or 0):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot change max_score after marks have been entered. Delete the marks first or create a new assessment.",
+                )
             update_data["max_score"] = data.max_score
+
         if data.weight is not None:
+            if has_marks and float(data.weight) != float(assessment.get("weight_percentage") or 0):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot change weight_percentage after marks have been entered. Delete the marks first or create a new assessment.",
+                )
             # Check weight constraint
             existing_assessments = supabase.table("assessments").select("weight_percentage").eq("course_id", course_id).neq("id", assessment_id).execute()
             existing_weight = sum([a.get("weight_percentage", 0) for a in existing_assessments.data]) if existing_assessments.data else 0
@@ -252,7 +289,10 @@ async def update_assessment(
                 )
             
             update_data["weight_percentage"] = data.weight
-        
+
+        if not update_data:
+            return assessment
+
         # Update assessment
         response = supabase.table("assessments").update(update_data).eq("id", assessment_id).execute()
         if not response.data:
@@ -260,7 +300,10 @@ async def update_assessment(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update assessment"
             )
-        
+        AuditService.log(
+            "ASSESSMENT_UPDATED", current_user.get("user_id"), assessment_id,
+            metadata={"course_id": course_id, "changes": update_data},
+        )
         return response.data[0]
     
     except HTTPException:
@@ -321,12 +364,23 @@ async def delete_assessment(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Assessment does not belong to this course"
             )
-        
+
+        # Refuse delete if any marks exist — grade history is legally required.
+        if _assessment_has_marks(assessment_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Assessment has recorded marks and cannot be deleted. Remove the marks first if this is a genuine mistake.",
+            )
+
         # Delete assessment
         logger.info(f"Deleting assessment {assessment_id} from course {course_id} by user {user_id}")
-        response = supabase.table("assessments").delete().eq("id", assessment_id).execute()
+        supabase.table("assessments").delete().eq("id", assessment_id).execute()
         logger.info(f"Assessment {assessment_id} deleted successfully")
-        
+        AuditService.log(
+            "ASSESSMENT_DELETED", user_id, assessment_id,
+            metadata={"course_id": course_id, "name": assessment.get("name")},
+        )
+
         return {"message": "Assessment deleted successfully"}
         
     except HTTPException:
