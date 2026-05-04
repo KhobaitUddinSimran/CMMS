@@ -29,16 +29,16 @@ export default function RoleManagementPage() {
     fetchLecturers()
   }, [])
 
-  const fetchLecturers = async () => {
+  const fetchLecturers = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const response = await adminApi.listLecturers()
       setLecturers(response.lecturers || [])
     } catch (error: any) {
       addToast('Failed to load lecturers', 'error')
       console.error('Error fetching lecturers:', error)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -53,8 +53,7 @@ export default function RoleManagementPage() {
           : l
       ))
       addToast(`${specialRole.charAt(0).toUpperCase() + specialRole.slice(1)} role assigned`, 'success')
-      // Then re-fetch to get authoritative data
-      fetchLecturers()
+      fetchLecturers(true)
     } catch (error: any) {
       addToast(error?.response?.data?.detail || 'Failed to assign role', 'error')
     } finally {
@@ -73,7 +72,7 @@ export default function RoleManagementPage() {
           : l
       ))
       addToast(`${specialRole.charAt(0).toUpperCase() + specialRole.slice(1)} role revoked`, 'success')
-      fetchLecturers()
+      fetchLecturers(true)
     } catch (error: any) {
       addToast(error?.response?.data?.detail || 'Failed to revoke role', 'error')
     } finally {
@@ -85,8 +84,7 @@ export default function RoleManagementPage() {
   const isHod   = (l: Lecturer) => hasRole(l, 'hod')
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} className="p-2 hover:bg-gray-200 rounded-lg transition">
@@ -204,7 +202,6 @@ export default function RoleManagementPage() {
             )}
           </div>
         )}
-      </div>
     </div>
   )
 }

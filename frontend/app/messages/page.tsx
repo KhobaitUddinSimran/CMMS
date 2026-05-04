@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { useToastStore } from '@/stores/toastStore'
@@ -318,6 +319,7 @@ export default function MessagesPage() {
   const messages = tab === 'inbox' ? (data?.inbox || []) : (data?.sent || [])
 
   return (
+    <MainLayout>
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between pt-4">
@@ -407,5 +409,6 @@ export default function MessagesPage() {
         />
       )}
     </div>
+    </MainLayout>
   )
 }

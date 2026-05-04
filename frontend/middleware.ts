@@ -36,6 +36,7 @@ const protectedRoutes = [
   '/system-logs',
   '/semester-timeline',
   '/messages',
+  '/course-management',
 ]
 
 /** Decode JWT exp claim in Edge runtime (no crypto needed — just base64). */

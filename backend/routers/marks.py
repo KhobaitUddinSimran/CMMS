@@ -7,6 +7,57 @@ from typing import Optional, List
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
+from ..utils.session import is_grade_window_closed
+
+
+# ==================== Letter-grade mapping (UTM standard) ====================
+# Source: UTM Academic Regulations — percentage → letter grade table.
+_LETTER_GRADE_TABLE = (
+    (90, "A+", 4.00),
+    (80, "A",  4.00),
+    (75, "A-", 3.67),
+    (70, "B+", 3.33),
+    (65, "B",  3.00),
+    (60, "B-", 2.67),
+    (55, "C+", 2.33),
+    (50, "C",  2.00),
+    (45, "C-", 1.67),
+    (40, "D+", 1.33),
+    (35, "D",  1.00),
+    (30, "D-", 0.67),
+    (0,  "E",  0.00),
+)
+_PASS_THRESHOLD = 50  # UTM minimum pass mark for undergraduate engineering
+
+
+def _letter_grade(percentage: float) -> dict:
+    """Map a 0–100 percentage to UTM letter grade + GPA point."""
+    for threshold, letter, gpa in _LETTER_GRADE_TABLE:
+        if percentage >= threshold:
+            return {"letter": letter, "gpa": gpa}
+    return {"letter": "E", "gpa": 0.0}
+
+
+def _assert_grade_window_open(course_id: str):
+    """Raise 409 if the grade_submission_deadline for this course's session
+    has already passed. Coordinators/admins can override elsewhere via the
+    explicit unlock endpoints on the timeline itself."""
+    try:
+        c = supabase.table("courses").select("academic_year, semester").eq("id", course_id).execute()
+        if not c.data:
+            return
+        course = c.data[0]
+        if is_grade_window_closed(course.get("academic_year") or "", int(course.get("semester") or 0)):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Grade submission deadline has passed for this semester. "
+                       "Contact the coordinator to re-open the window.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        # fail-open — don't block grading because the timeline lookup hiccuped
+        pass
 
 router = APIRouter(prefix="/api/marks", tags=["marks"])
 logger = logging.getLogger(__name__)
@@ -30,6 +81,7 @@ class MarkUpdateRequest(BaseModel):
 
 class MarkPublishRequest(BaseModel):
     mark_ids: List[str]
+    reason: Optional[str] = None  # required for unpublish audit, optional for publish
 
 
 class MarkBulkCreateRequest(BaseModel):
@@ -413,9 +465,14 @@ async def update_mark(
 
         mark = mark_resp.data[0]
 
-        # Cannot update published marks
+        # Cannot update published marks — must be unpublished via coordinator first
         if mark.get("status") == "published":
-            raise HTTPException(status_code=400, detail="Cannot update published marks")
+            raise HTTPException(status_code=400, detail="Cannot update published marks. Ask the coordinator to unpublish first.")
+
+        # Enforce the semester-end grade submission deadline
+        a_cid_resp = supabase.table("assessments").select("course_id").eq("id", mark["assessment_id"]).execute()
+        if a_cid_resp.data:
+            _assert_grade_window_open(a_cid_resp.data[0].get("course_id"))
 
         # Verify course access for lecturers via assessment
         if current_user.get("role") == "lecturer":
@@ -472,6 +529,10 @@ async def publish_marks(
             .execute()
         )
         count = len(resp.data or [])
+        AuditService.log(
+            "MARKS_PUBLISHED", current_user.get("user_id"), None,
+            metadata={"count": count, "mark_ids": request.mark_ids},
+        )
         return {"message": f"Published {count} marks", "count": count}
 
     except Exception as e:
@@ -485,11 +546,14 @@ async def unpublish_marks(
     request: MarkPublishRequest,
     current_user=Depends(get_current_user),
 ):
-    """Revert published marks back to draft so they can be corrected and re-published."""
+    """Revert published marks back to draft so they can be corrected and re-published.
+    Only coordinators or admins can unpublish — lecturers must request it via
+    a coordinator to create an audit trail of who reopened the grade."""
     _require_supabase()
-    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
-        raise HTTPException(status_code=403, detail="Only lecturers and admins can unpublish marks")
+    if not has_effective_role(current_user, "coordinator", "admin"):
+        raise HTTPException(status_code=403, detail="Only coordinators and admins can unpublish marks")
 
+    reason = (getattr(request, "reason", None) or "").strip() if hasattr(request, "reason") else ""
     try:
         count = 0
         for mark_id in request.mark_ids:
@@ -503,6 +567,10 @@ async def unpublish_marks(
             if resp.data:
                 count += 1
 
+        AuditService.log(
+            "MARKS_UNPUBLISHED", current_user.get("user_id"), None,
+            metadata={"count": count, "mark_ids": request.mark_ids, "reason": reason or None},
+        )
         return {"message": f"Reverted {count} mark{'' if count == 1 else 's'} to draft", "count": count}
 
     except Exception as e:
@@ -559,10 +627,15 @@ async def get_student_course_grade(
 
     try:
         # Scope to this course's assessments only
-        a_resp = supabase.table("assessments").select("id, max_score, weight_percentage").eq("course_id", course_id).execute()
+        a_resp = supabase.table("assessments").select("id, name, max_score, weight_percentage").eq("course_id", course_id).execute()
         course_assessments = {a["id"]: a for a in (a_resp.data or [])}
         if not course_assessments:
-            return {"student_id": student_id, "course_id": course_id, "grade": None, "marks": []}
+            return {
+                "student_id": student_id, "course_id": course_id,
+                "grade": None, "letter_grade": None, "gpa": None,
+                "weight_graded": 0, "weight_remaining": 0, "is_at_risk": False,
+                "is_final": False, "marks": [],
+            }
 
         marks_resp = (
             supabase.table("marks")
@@ -574,23 +647,61 @@ async def get_student_course_grade(
         )
         marks = marks_resp.data or []
 
-        if not marks:
-            return {"student_id": student_id, "course_id": course_id, "grade": None, "marks": []}
+        total_weight = sum(float(a.get("weight_percentage") or 0) for a in course_assessments.values())
+        weighted_sum = 0.0
+        weight_graded = 0.0
+        breakdown = []
 
-        total_grade = 0.0
         for mark in marks:
-            a = course_assessments.get(mark["assessment_id"], {})
-            if a:
-                max_score = a.get("max_score", 100) or 100
-                weight = a.get("weight_percentage", 0) or 0
-                score = mark.get("raw_score") or mark.get("score") or 0
-                normalized = (score / max_score) * 100 if max_score > 0 else 0
-                total_grade += normalized * (weight / 100)
+            a = course_assessments.get(mark["assessment_id"])
+            if not a:
+                continue
+            max_score = float(a.get("max_score") or 100)
+            weight = float(a.get("weight_percentage") or 0)
+            score = float(mark.get("raw_score") or mark.get("score") or 0)
+            normalised = (score / max_score) * 100 if max_score > 0 else 0
+            contribution = normalised * (weight / 100)
+            weighted_sum += contribution
+            weight_graded += weight
+            breakdown.append({
+                "assessment_id": a["id"],
+                "name": a.get("name"),
+                "score": score,
+                "max_score": max_score,
+                "weight_percentage": weight,
+                "normalised_score": round(normalised, 2),
+                "weighted_contribution": round(contribution, 2),
+            })
+
+        weight_remaining = max(0.0, total_weight - weight_graded)
+        is_final = weight_graded >= total_weight > 0
+        # Current total: weighted sum so far. Projected best-case: assume full
+        # marks on remaining weight. Projected worst-case: zero on remainder.
+        projected_best = weighted_sum + weight_remaining  # 100% of remaining
+        # At-risk: if even scoring 100% on every remaining assessment, the
+        # student still cannot cross the pass threshold.
+        is_at_risk = (not is_final) and projected_best < _PASS_THRESHOLD
+        # Final at-risk: already graded everything and still below threshold.
+        if is_final and weighted_sum < _PASS_THRESHOLD:
+            is_at_risk = True
+
+        final_pct = round(weighted_sum, 2) if is_final else None
+        letter_info = _letter_grade(weighted_sum) if is_final else None
 
         return {
             "student_id": student_id,
             "course_id": course_id,
-            "grade": round(total_grade, 2),
+            "grade": round(weighted_sum, 2),                 # current carry-mark
+            "final_percentage": final_pct,                    # only set when is_final
+            "letter_grade": letter_info["letter"] if letter_info else None,
+            "gpa": letter_info["gpa"] if letter_info else None,
+            "weight_graded": round(weight_graded, 2),
+            "weight_remaining": round(weight_remaining, 2),
+            "projected_maximum": round(projected_best, 2),
+            "is_final": is_final,
+            "is_at_risk": is_at_risk,
+            "pass_threshold": _PASS_THRESHOLD,
+            "marks": breakdown,
         }
 
     except HTTPException:

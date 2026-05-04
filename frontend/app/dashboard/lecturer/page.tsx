@@ -145,9 +145,9 @@ export default function LecturerDashboard() {
           <Card className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Courses Teaching</p>
+                <p className="text-sm text-[#6B7280]">Courses Teaching</p>
                 {loading ? <div className="mt-3"><Spinner /></div>
-                  : <p className="text-[32px] font-bold text-[#111827] mt-2">{myCourses.length}</p>}
+                  : <p className="text-[28px] font-bold text-[#111827] mt-1.5">{myCourses.length}</p>}
               </div>
               <div className="w-14 h-14 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
                 <BookOpen className="w-7 h-7 text-[#C90031]" />
@@ -158,9 +158,9 @@ export default function LecturerDashboard() {
           <Card className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Students Enrolled</p>
+                <p className="text-sm text-[#6B7280]">Students Enrolled</p>
                 {loading ? <div className="mt-3"><Spinner /></div>
-                  : <p className="text-[32px] font-bold text-[#111827] mt-2">{totalStudents ?? '—'}</p>}
+                  : <p className="text-[28px] font-bold text-[#111827] mt-1.5">{totalStudents ?? '—'}</p>}
               </div>
               <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
                 <Users className="w-7 h-7 text-[#10B981]" />
@@ -171,9 +171,9 @@ export default function LecturerDashboard() {
           <Card className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Assessments Set Up</p>
+                <p className="text-sm text-[#6B7280]">Assessments Set Up</p>
                 {loading ? <div className="mt-3"><Spinner /></div>
-                  : <p className="text-[32px] font-bold text-[#111827] mt-2">—</p>}
+                  : <p className="text-[28px] font-bold text-[#111827] mt-1.5">—</p>}
               </div>
               <div className="w-14 h-14 rounded-lg bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
                 <ClipboardList className="w-7 h-7 text-[#3B82F6]" />
@@ -184,7 +184,7 @@ export default function LecturerDashboard() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {[
-            { label: 'Smart Grid', desc: 'Enter & manage marks', icon: Grid3x3, color: 'bg-[#C90031]', href: '/smart-grid' },
+            { label: 'Mark Entry', desc: 'Enter & manage marks', icon: Grid3x3, color: 'bg-[#C90031]', href: '/smart-grid' },
             { label: 'Assessment Setup', desc: 'Configure grading schema', icon: ClipboardList, color: 'bg-[#7C3AED]', href: '/assessment-setup' },
             { label: 'Roster Upload', desc: 'Seed students via Excel', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
           ].map((action) => (
@@ -240,7 +240,7 @@ export default function LecturerDashboard() {
                     </button>
                     <button onClick={() => router.push(`/smart-grid?course=${course.id}`)}
                       className="px-3 py-1.5 text-xs font-medium text-[#C90031] border border-[#FECDD3] rounded-lg hover:bg-red-50 transition-colors">
-                      Smart Grid
+                      Mark Entry
                     </button>
                   </div>
                 </div>

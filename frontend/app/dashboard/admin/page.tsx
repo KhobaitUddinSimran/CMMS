@@ -43,8 +43,8 @@ export default function AdminDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Total Users</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.total_users ?? 0).toLocaleString()}</p>
+              <p className="text-sm text-[#6B7280]">Total Users</p>
+              <p className="text-[28px] font-bold text-[#111827] mt-1.5">{loading ? '…' : (stats?.total_users ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
               <Users className="w-7 h-7 text-[#C90031]" />
@@ -55,8 +55,8 @@ export default function AdminDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Active Users</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.active_users ?? 0).toLocaleString()}</p>
+              <p className="text-sm text-[#6B7280]">Active Users</p>
+              <p className="text-[28px] font-bold text-[#111827] mt-1.5">{loading ? '…' : (stats?.active_users ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
               <Shield className="w-7 h-7 text-[#10B981]" />
@@ -67,8 +67,8 @@ export default function AdminDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Pending Approvals</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.pending_approvals ?? 0).toLocaleString()}</p>
+              <p className="text-sm text-[#6B7280]">Pending Approvals</p>
+              <p className="text-[28px] font-bold text-[#111827] mt-1.5">{loading ? '…' : (stats?.pending_approvals ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#FEF3C7] flex items-center justify-center flex-shrink-0">
               <UserCheck className="w-7 h-7 text-[#F59E0B]" />
@@ -79,8 +79,8 @@ export default function AdminDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Total Courses</p>
-              <p className="text-[32px] font-bold text-[#111827] mt-2">{loading ? '…' : (stats?.total_courses ?? 0).toLocaleString()}</p>
+              <p className="text-sm text-[#6B7280]">Total Courses</p>
+              <p className="text-[28px] font-bold text-[#111827] mt-1.5">{loading ? '…' : (stats?.total_courses ?? 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-lg bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
               <BookOpen className="w-7 h-7 text-[#3B82F6]" />

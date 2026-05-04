@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Download, Users, BookOpen, FileText, GraduationCap } from 'lucide-react'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { useToastStore } from '@/stores/toastStore'
@@ -154,7 +155,8 @@ export default function ExportPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto p-6">
+    <MainLayout>
+    <div className="space-y-8 max-w-5xl mx-auto">
       <div className="flex items-center gap-4">
         <button onClick={() => router.back()} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
           <ArrowLeft className="w-5 h-5 text-[#6B7280]" />
@@ -206,5 +208,6 @@ export default function ExportPage() {
         </div>
       </Card>
     </div>
+    </MainLayout>
   )
 }

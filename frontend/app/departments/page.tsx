@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Building2, Users, BookOpen, GraduationCap, ChevronRight } from 'lucide-react'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses } from '@/lib/api/courses'
@@ -109,7 +110,8 @@ export default function DepartmentsPage() {
   const totalStudents = groups.reduce((s, g) => s + g.students, 0)
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto p-6">
+    <MainLayout>
+    <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex items-center gap-4">
         <button onClick={() => router.back()} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
           <ArrowLeft className="w-5 h-5 text-[#6B7280]" />
@@ -243,5 +245,6 @@ export default function DepartmentsPage() {
         </div>
       )}
     </div>
+    </MainLayout>
   )
 }

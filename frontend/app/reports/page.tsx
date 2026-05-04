@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, BarChart3, Users, ClipboardList, Download, ExternalLink, Flag,
 } from 'lucide-react'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { useToastStore } from '@/stores/toastStore'
@@ -155,7 +156,8 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto p-6">
+    <MainLayout>
+    <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex items-center gap-4">
         <button onClick={() => router.back()} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
           <ArrowLeft className="w-5 h-5 text-[#6B7280]" />
@@ -276,5 +278,6 @@ export default function ReportsPage() {
         </div>
       </Card>
     </div>
+    </MainLayout>
   )
 }

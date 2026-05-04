@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { Mail, Shield, Calendar, Pencil, X, Check, Lock } from 'lucide-react'
@@ -64,6 +65,7 @@ export default function ProfilePage() {
   const displayEmail = profileData?.email || user?.email || '—'
 
   return (
+    <MainLayout>
     <div className="space-y-8 max-w-4xl mx-auto">
       <div className="pt-4">
         <h1 className="text-[32px] font-bold text-[#111827]">User Profile</h1>
@@ -168,5 +170,6 @@ export default function ProfilePage() {
         </Card>
       )}
     </div>
+    </MainLayout>
   )
 }

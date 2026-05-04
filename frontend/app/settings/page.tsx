@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useToast } from '@/lib/contexts/toast-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Bell, Lock, Eye, Database } from 'lucide-react'
 
@@ -16,6 +17,7 @@ export default function SettingsPage() {
   }
 
   return (
+    <MainLayout>
     <div className="space-y-8 max-w-4xl mx-auto">
       {/* Page Header */}
       <div>
@@ -135,5 +137,6 @@ export default function SettingsPage() {
         </button>
       </div>
     </div>
+    </MainLayout>
   )
 }

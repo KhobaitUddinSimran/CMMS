@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Database, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { getAdminStats, type AdminStats } from '@/lib/api/admin'
 
 export default function DatabasePage() {
@@ -46,7 +47,7 @@ export default function DatabasePage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <MainLayout>
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <button onClick={() => router.back()} className="text-gray-600 hover:text-gray-900">
@@ -113,6 +114,6 @@ export default function DatabasePage() {
           This page shows read-only statistics from the live database.
         </div>
       </div>
-    </div>
+    </MainLayout>
   )
 }

@@ -99,7 +99,7 @@ function LoginPageContent() {
           <button
             type="submit"
             disabled={!selectedRole}
-            className="w-full mt-6 py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="w-full mt-6 py-2 px-4 bg-[#C90031] text-white font-semibold rounded-lg hover:bg-[#A8002A] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             Continue
           </button>
@@ -158,7 +158,7 @@ function LoginPageContent() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full mt-6 py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          className="w-full mt-6 py-2 px-4 bg-[#C90031] text-white font-semibold rounded-lg hover:bg-[#A8002A] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
         >
           {loading ? (
             <>
@@ -187,7 +187,7 @@ function LoginPageContent() {
         <div className="flex flex-col gap-3">
           <Link
             href="/auth/signup"
-            className="block text-center py-2 px-4 border border-blue-600 text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-colors"
+            className="block text-center py-2 px-4 border border-[#C90031] text-[#C90031] font-semibold rounded-lg hover:bg-red-50 transition-colors"
           >
             Create Account
           </Link>

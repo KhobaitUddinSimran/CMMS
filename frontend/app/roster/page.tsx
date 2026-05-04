@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { RosterUpload } from '@/components/roster/RosterUpload'
 import { RosterPreview } from '@/components/roster/RosterPreview'
 import { RosterConfirmation } from '@/components/roster/RosterConfirmation'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Toast } from '@/components/notification/Toast'
 import { listCourses } from '@/lib/api/courses'
 import { uploadRoster } from '@/lib/api/enrollments'
@@ -121,7 +122,7 @@ function RosterPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <MainLayout>
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
@@ -264,7 +265,7 @@ function RosterPageInner() {
           onClose={() => setShowErrorToast(false)}
         />
       )}
-    </div>
+    </MainLayout>
   )
 }
 

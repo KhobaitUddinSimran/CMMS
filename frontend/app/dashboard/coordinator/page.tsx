@@ -10,7 +10,7 @@ import { listMessages } from '@/lib/api/messages'
 import { listTimelines } from '@/lib/api/semester'
 import {
   BookOpen, Users, Plus, Upload, ClipboardList,
-  BarChart3, ChevronRight, Settings, Mail, CalendarDays
+  BarChart3, ChevronRight, Settings, Mail, CalendarDays, Layers
 } from 'lucide-react'
 
 interface CourseItem {
@@ -92,7 +92,7 @@ export default function CoordinatorDashboard() {
   const recentCourses = courses.slice(0, 5)
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Welcome Header */}
       <div className="pt-4">
         <h1 className="text-[32px] font-bold text-[#111827]">
@@ -103,38 +103,17 @@ export default function CoordinatorDashboard() {
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+      {/* Stats — top row: 3 core counters */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Total Courses</p>
-              {loading ? (
-                <div className="mt-3"><Spinner /></div>
-              ) : (
-                <p className="text-[32px] font-bold text-[#111827] mt-2">{totalCourses}</p>
-              )}
+              <p className="text-sm text-[#6B7280]">Total Courses</p>
+              {loading ? <div className="mt-3"><Spinner /></div>
+                : <p className="text-[28px] font-bold text-[#111827] mt-1.5">{totalCourses}</p>}
             </div>
-            <div className="w-14 h-14 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-7 h-7 text-[#C90031]" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Lecturers Assigned</p>
-              {loading ? (
-                <div className="mt-3"><Spinner /></div>
-              ) : (
-                <p className="text-[32px] font-bold text-[#111827] mt-2">
-                  {courses.filter((c) => c.lecturer_name).length}
-                </p>
-              )}
-            </div>
-            <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
-              <Users className="w-7 h-7 text-[#10B981]" />
+            <div className="w-12 h-12 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-6 h-6 text-[#C90031]" />
             </div>
           </div>
         </Card>
@@ -142,72 +121,80 @@ export default function CoordinatorDashboard() {
         <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Courses Unassigned</p>
-              {loading ? (
-                <div className="mt-3"><Spinner /></div>
-              ) : (
-                <p className="text-[32px] font-bold text-[#111827] mt-2">
-                  {courses.filter((c) => !c.lecturer_name).length}
-                </p>
-              )}
+              <p className="text-sm text-[#6B7280]">Lecturers Assigned</p>
+              {loading ? <div className="mt-3"><Spinner /></div>
+                : <p className="text-[28px] font-bold text-[#111827] mt-1.5">{courses.filter((c) => c.lecturer_name).length}</p>}
             </div>
-            <div className="w-14 h-14 rounded-lg bg-[#FEF3C7] flex items-center justify-center flex-shrink-0">
-              <BarChart3 className="w-7 h-7 text-[#F59E0B]" />
+            <div className="w-12 h-12 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
+              <Users className="w-6 h-6 text-[#10B981]" />
             </div>
           </div>
         </Card>
 
-        <div className="cursor-pointer" onClick={() => router.push('/messages')}>
-        <Card className="hover:shadow-md transition-shadow h-full">
+        <Card className="hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Unread Messages</p>
-              {loading ? (
-                <div className="mt-3"><Spinner /></div>
-              ) : (
-                <p className={`text-[32px] font-bold mt-2 ${unreadCount > 0 ? 'text-[#C90031]' : 'text-[#111827]'}`}>
-                  {unreadCount}
-                </p>
-              )}
+              <p className="text-sm text-[#6B7280]">Courses Unassigned</p>
+              {loading ? <div className="mt-3"><Spinner /></div>
+                : <p className="text-[28px] font-bold text-[#111827] mt-1.5">{courses.filter((c) => !c.lecturer_name).length}</p>}
             </div>
-            <div className="w-14 h-14 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
-              <Mail className="w-7 h-7 text-[#C90031]" />
+            <div className="w-12 h-12 rounded-lg bg-[#FEF3C7] flex items-center justify-center flex-shrink-0">
+              <BarChart3 className="w-6 h-6 text-[#F59E0B]" />
             </div>
           </div>
         </Card>
-        </div>
+      </div>
 
-        <div className="cursor-pointer" onClick={() => router.push('/semester-timeline')}>
-        <Card className="hover:shadow-md transition-shadow h-full">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-medium text-[#6B7280] uppercase tracking-wide">Next Deadline</p>
-              {loading ? (
-                <div className="mt-3"><Spinner /></div>
-              ) : nextDeadline ? (
-                <div className="mt-1">
-                  <p className="text-[13px] font-bold text-[#111827]">{nextDeadline.label}</p>
-                  <p className="text-[12px] text-[#6B7280]">{new Date(nextDeadline.date).toLocaleDateString()}</p>
-                </div>
-              ) : (
-                <p className="text-[14px] text-[#9CA3AF] mt-2">None upcoming</p>
-              )}
+      {/* Stats — bottom row: 2 contextual info cards, wider */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <button className="text-left" onClick={() => router.push('/messages')}>
+          <Card className="hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
+                <Mail className="w-5 h-5 text-[#C90031]" />
+              </div>
+              <div>
+                <p className="text-sm text-[#6B7280]">Unread Messages</p>
+                {loading ? <Spinner size="sm" /> : (
+                  <p className={`text-xl font-bold mt-0.5 ${unreadCount > 0 ? 'text-[#C90031]' : 'text-[#111827]'}`}>
+                    {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="w-14 h-14 rounded-lg bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
-              <CalendarDays className="w-7 h-7 text-[#3B82F6]" />
+          </Card>
+        </button>
+
+        <button className="text-left" onClick={() => router.push('/semester-timeline')}>
+          <Card className="hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
+                <CalendarDays className="w-5 h-5 text-[#3B82F6]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm text-[#6B7280]">Next Deadline</p>
+                {loading ? <Spinner size="sm" /> : nextDeadline ? (
+                  <div className="mt-0.5">
+                    <p className="text-[13px] font-semibold text-[#111827] truncate">{nextDeadline.label}</p>
+                    <p className="text-xs text-[#6B7280]">{new Date(nextDeadline.date).toLocaleDateString()}</p>
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-[#9CA3AF] mt-0.5">No upcoming deadlines</p>
+                )}
+              </div>
             </div>
-          </div>
-        </Card>
-        </div>
+          </Card>
+        </button>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {[
-          { label: 'Create Course', icon: Plus, color: 'bg-[#C90031]', href: '/courses/create' },
-          { label: 'Upload Roster', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
-          { label: 'Assessment Config', icon: ClipboardList, color: 'bg-[#7C3AED]', href: '/assessment-config' },
-          { label: 'View Reports', icon: BarChart3, color: 'bg-[#059669]', href: '/reports' },
+          { label: 'Create Course', desc: 'Add a new course', icon: Plus, color: 'bg-[#C90031]', href: '/courses/create' },
+          { label: 'Course Management', desc: 'Assign & manage lecturers', icon: Layers, color: 'bg-[#0284C7]', href: '/course-management' },
+          { label: 'Upload Roster', desc: 'Import students via Excel', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
+          { label: 'Assessment Config', desc: 'Set grading schema', icon: ClipboardList, color: 'bg-[#7C3AED]', href: '/assessment-config' },
+          { label: 'View Reports', desc: 'Export & analyse data', icon: BarChart3, color: 'bg-[#059669]', href: '/reports' },
         ].map((action) => (
           <button
             key={action.label}
@@ -217,7 +204,10 @@ export default function CoordinatorDashboard() {
             <div className={`w-10 h-10 ${action.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
               <action.icon className="w-5 h-5 text-white" />
             </div>
-            <span className="text-[14px] font-semibold text-[#111827]">{action.label}</span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[#111827]">{action.label}</p>
+              <p className="text-[11px] text-[#9CA3AF] mt-0.5">{action.desc}</p>
+            </div>
           </button>
         ))}
       </div>

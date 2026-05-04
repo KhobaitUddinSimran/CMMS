@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { useToastStore } from '@/stores/toastStore'
@@ -49,6 +50,7 @@ export default function AuditLogPage() {
   const uniqueActions = Array.from(new Set(logs.map(l => l.action))).sort()
 
   return (
+    <MainLayout>
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="pt-4 flex items-start justify-between">
@@ -132,5 +134,6 @@ export default function AuditLogPage() {
         )}
       </Card>
     </div>
+    </MainLayout>
   )
 }
