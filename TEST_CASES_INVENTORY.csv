@@ -1,0 +1,316 @@
+Test_ID,Suite_Name,Test_Case_Title,Priority,Status,Module,Preconditions,Steps,Expected_Results,Postconditions
+TC01,Authentication & Session Management,Student Login with Valid Credentials,High,Pending,Auth,"Student account exists, approval_status='approved', is_active=true","1. Navigate to login page
+2. Select 'Student' role
+3. Enter email: student@graduate.utm.my
+4. Enter password
+5. Click Log In button","1. Credentials accepted without errors
+2. JWT token issued and stored in localStorage and cookie (SameSite=Strict)
+3. User redirected to /dashboard/student
+4. Zustand authStore reflects student role",Clear session data
+TC02,Authentication & Session Management,Lecturer Login with Valid Credentials,High,Pending,Auth,"Lecturer account exists, approval_status='approved', email_verified=true, assigned to course","1. Navigate to login page
+2. Select 'Lecturer' role
+3. Enter lecturer@utm.my and password
+4. Click Log In","1. Login succeeds, valid JWT returned
+2. User redirected to /dashboard/lecturer
+3. Sidebar displays: My Courses, Roster Upload, Smart Grid, Assessment Setup, Queries, Messages, Profile",Clear session
+TC03,Authentication & Session Management,Coordinator Login with Valid Credentials,High,Pending,Auth,"Coordinator account exists (lecturer with special role), approved and active","1. Select 'Lecturer' on login page
+2. Enter coordinator@utm.my and password
+3. Click Log In","1. Login succeeds
+2. User redirected to /dashboard/coordinator
+3. Navigation visible: Courses, Roster Management, Assessment Config, Semester Timeline, Messages, Flagged Marks, Reports",Clear session
+TC04,Authentication & Session Management,HOD Login with Valid Credentials,High,Pending,Auth,"HOD account exists with role='hod', approved and active","1. Enter hod@utm.my and password
+2. Click Log In","1. User redirected to /dashboard/hod
+2. HOD navigation visible: Departments, Analytics, Export, Audit Log",Clear session
+TC05,Authentication & Session Management,Admin Login with Valid Credentials,High,Pending,Auth,"Admin account exists: admin@utm.my, active and approved","1. Enter admin credentials and click Log In","1. User redirected to /dashboard/admin
+2. Admin navigation visible: Pending Approvals, Users, Roles & Permissions, Database, Settings, System Logs",Clear session
+TC06,Authentication & Session Management,Login with Invalid Credentials,High,Pending,Auth,"Email not registered OR password incorrect","1. Navigate to login page
+2. Enter unregistered email or wrong password
+3. Click Log In","1. Error message displayed: 'Invalid email or password'
+2. No JWT token issued
+3. User remains on login page",No cleanup needed
+TC07,Authentication & Session Management,Logout Functionality,Medium,Pending,Auth,User currently logged in (any role),"1. Click user avatar at top-right
+2. Select 'Log Out' from dropdown","1. POST /auth/logout called
+2. localStorage token and cookie cleared
+3. Zustand authStore reset
+4. User redirected to public landing page (/)",Session cleared
+TC08,User Registration & Approval Workflow,Student Self-Registration,High,Pending,Registration,"Student email domain is @graduate.utm.my, not already registered","1. Navigate to Signup page
+2. Select 'Student' role
+3. Enter email, full name, matric number, password
+4. Click Sign Up","1. Account created: role='student', approval_status='pending'
+2. Audit log entry created
+3. User redirected to pending-approval page",Verify account in database
+TC09,User Registration & Approval Workflow,Lecturer Self-Registration (Staff Domain),High,Pending,Registration,Lecturer uses @utm.my email,"1. Select 'Lecturer' on signup
+2. Enter @utm.my email and valid details
+3. Submit form","1. Registration succeeds, account created with approval_status='pending'
+2. Audit log records signup",Verify account in database
+TC10,User Registration & Approval Workflow,Admin/Coordinator/HOD Self-Registration Blocked,High,Pending,Registration,User attempts to register as admin/coordinator/hod,"1. Send POST /auth/signup with role='admin' (or 'coordinator', 'hod')
+2. Or inspect frontend role selector","1. API returns HTTP 400: 'Only student and lecturer roles can self-register. Admin, coordinator, and HOD accounts are provisioned by administrator.'
+2. No user record created",No database changes
+TC11,User Registration & Approval Workflow,OTP Verification Required,High,Pending,Registration,"User just signed up, SMTP/OTP service operational","1. Complete signup form
+2. Check email for OTP code
+3. Enter OTP in verification screen
+4. Submit","1. OTP email delivered in reasonable time
+2. Correct OTP sets email_verified=true
+3. Incorrect OTP shows validation error (no code revelation)",Verify email_verified flag
+TC12,User Registration & Approval Workflow,Admin Approves Pending Lecturer,High,Pending,Registration,Lecturer signup exists with approval_status='pending', admin logged in,"1. Navigate to Pending Approvals page
+2. Locate pending lecturer entry
+3. Click 'Approve'
+4. Confirm in dialog","1. approval_status changes to 'approved'
+2. approved_by set to admin's user ID
+3. approved_at timestamp recorded
+4. Audit log captures approval action",Verify approval in database
+TC13,User Registration & Approval Workflow,Admin Rejects Pending User,Medium,Pending,Registration,Pending user exists, admin logged in,"1. Navigate to Pending Approvals
+2. Click 'Reject' on pending user
+3. Enter rejection reason
+4. Confirm","1. approval_status changes to 'rejected'
+2. rejection_reason stored
+3. User cannot log in (appropriate message shown)",Verify rejection in database
+TC14,Course Management,Create a New Course,High,Pending,Courses,Coordinator logged in; course code not existing for same year/semester,"1. Navigate to Course Management > Create Course
+2. Enter: KKK212, name, 3 credits, semester, academic year
+3. Leave Lecturer field empty
+4. Click Create Course","1. Course created with lecturer_id=null
+2. No silent auto-assignment occurs
+3. Course appears in unassigned list
+4. Audit log records creation with old_values=null",Verify course in database
+TC15,Course Management,Edit Existing Course,High,Pending,Courses,Course exists; user has edit permission,"1. Open course edit form
+2. Change name and max_students
+3. Click Save Changes","1. Course record updated in Supabase
+2. Audit log stores old and new values
+3. Success toast displayed",Verify changes in database
+TC16,Course Management,Archive Course with Academic Records,High,Pending,Courses,Course has enrollments or assessments,"1. Attempt to delete course
+2. Observe system response
+3. Use 'Archive' action instead","1. Hard delete blocked: 'Cannot delete: academic records exist.'
+2. Archive succeeds; course hidden but retained in DB
+3. Audit log records archive action",Verify is_archived flag
+TC17,Course Management,Delete Course Without Academic Records,Medium,Pending,Courses,Course has zero enrollments and zero assessments,"1. Click Delete on course card
+2. Confirm deletion in modal","1. Course removed from database
+2. Audit log records deletion with old_values preserved",Database clean
+TC18,Course Management,Assign Lecturer to Course,High,Pending,Courses,Course exists with no lecturer; target lecturer exists and has capacity,"1. Open Course Management
+2. Click 'Assign Lecturer' on unassigned course
+3. Select lecturer from dropdown
+4. Confirm assignment","1. Course.lecturer_id updated
+2. Lecturer's workload bar reflects new total
+3. Audit log records assignment",Verify assignment in database
+TC19,Course Management,Enforce 9-Credit Workload Cap,High,Pending,Courses,Lecturer assigned courses totaling 9 credits in semester,"1. Attempt to assign additional 3-credit course to same lecturer
+2. Observe system response","1. Assignment blocked: 'Lecturer exceeds 9-credit limit for this semester.'
+2. No database update occurs",No changes made
+TC20,Course Management,HOD Override for Workload Cap,Medium,Pending,Courses,HOD logged in; lecturer at or above 9 credits,"1. HOD navigates to lecturer workload view
+2. Selects overloaded lecturer
+3. Clicks 'Override Cap' with justification
+4. Assigns additional course","1. Assignment succeeds despite exceeding 9 credits
+2. Audit log records override with reason and HOD ID
+3. Workload bar shows excess with red warning indicator",Verify override recorded
+TC21,Course Management,Bulk Import from Curriculum Library,High,Pending,Courses,Coordinator on Course Management page; intake year selected,"1. Click 'Add from Curriculum Library'
+2. Select Program: Bachelor of Chemical Process Engineering
+3. Select Year 1, Semester 1 courses
+4. Click 'Bulk Add to System'","1. All selected courses inserted with derived academic_year
+2. Courses appear with correct metadata (credits, code, name, semester)
+3. No duplicate codes; existing ones skipped or warned",Verify bulk import in database
+TC22,Enrollment & Roster Management,Upload Student Roster via Excel,High,Pending,Enrollment,Coordinator logged in; Excel file with email/full_name/matric_number; active semester timeline exists,"1. Navigate to Roster Management
+2. Select target course
+3. Click 'Upload Roster', choose Excel file
+4. Preview parsed roster
+5. Click 'Confirm Import'","1. Each new student email triggers account provisioning
+2. Invitation tokens generated cryptographically
+3. New accounts created: is_active=false, invitation_status='pending'
+4. Enrollment records created with semester/academic_year from timeline
+5. Audit log records upload",Verify records in database
+TC23,Enrollment & Roster Management,Invitation Token Generation for New Students,High,Pending,Enrollment,Roster upload just processed with new emails,"1. Inspect users table in Supabase
+2. Check invitation_token and invitation_status fields
+3. Verify token expiration (should be 14 days)","1. Each student has unique, cryptographically secure token
+2. Token expiration exactly 14 days after creation
+3. Password hash derived from token (reset on first login)
+4. No default/weak preset password used",Verify token integrity
+TC24,Enrollment & Roster Management,Student Accepts Invitation,High,Pending,Enrollment,Student received invitation email; token not expired,"1. Student clicks invitation link
+2. Enters new strong password
+3. Confirms password
+4. Submits form","1. is_active becomes true
+2. invitation_status changes to 'accepted'
+3. Password hash re-computed
+4. Student can log in with new password",Verify account activated
+TC25,Enrollment & Roster Management,Manual Single Student Enrollment,Medium,Pending,Enrollment,Student account exists and is active; coordinator on roster page,"1. Click 'Add Student'
+2. Search for student by email or matric
+3. Select student
+4. Click 'Enroll'","1. Enrollment record created (student_id + course_id)
+2. Status set to 'enrolled'
+3. Student appears in roster grid",Verify enrollment in database
+TC26,Enrollment & Roster Management,Drop Student from Course,Medium,Pending,Enrollment,Student enrolled in course; no published marks exist,"1. Locate student in roster
+2. Click 'Drop'
+3. Confirm action","1. Enrollment status changes to 'dropped' (or deleted per policy)
+2. Student no longer appears in active roster
+3. Audit log records drop action",Verify drop recorded
+TC27,Assessment Configuration,Create Assessment Components,High,Pending,Assessment,Course exists; lecturer assigned; user has permission,"1. Navigate to Assessment Setup
+2. Select course
+3. Click 'Add Assessment'
+4. Enter: 'Midterm Exam', type='exam', max_score=100, weight=30%
+5. Click Save","1. Assessment created and linked to course
+2. is_locked defaults to false
+3. Assessment appears in list with correct weight",Verify assessment in database
+TC28,Assessment Configuration,Update Assessment Before Marks Exist,High,Pending,Assessment,Assessment exists with zero mark records,"1. Open assessment edit form
+2. Change max_score to 50
+3. Update weight to 25%
+4. Save","1. Update succeeds
+2. Audit log records old and new values",Verify changes in database
+TC29,Assessment Configuration,Block Assessment Update When Marks Exist,High,Pending,Assessment,Assessment has at least one mark record,"1. Open assessment edit form
+2. Attempt to change max_score or weight
+3. Save","1. System returns HTTP 409 CONFLICT
+2. Error: 'Cannot modify assessment: marks already exist. Unpublish or delete marks first.'
+3. No database update occurs",No changes made
+TC30,Assessment Configuration,Lock Assessment Schema (100% Weight Check),High,Pending,Assessment,Course assessments have cumulative weight ≠ 100% (e.g., 70%),"1. Click 'Lock Assessment Schema'
+2. Observe response
+3. Add missing assessments to reach 100%
+4. Click Lock again","1. First attempt fails: 'Total weight must equal 100%. Current: 70%'
+2. After adjustment, lock succeeds
+3. is_locked becomes true for all course assessments
+4. Further destructive edits blocked until explicitly unlocked",Verify lock state
+TC31,Assessment Configuration,Delete Assessment with No Marks,Medium,Pending,Assessment,Assessment exists with zero marks,"1. Click Delete on assessment
+2. Confirm deletion","1. Assessment removed
+2. Audit log records deletion",Database clean
+TC32,Assessment Configuration,Block Delete Assessment with Marks,High,Pending,Assessment,Assessment has one or more mark records,"1. Click Delete on assessment
+2. Confirm deletion","1. Deletion blocked: 'Assessment has marks. Remove marks first or archive course.'
+2. Assessment remains in database",No changes made
+TC33,Mark Entry & Grade Calculation,Lecturer Enters Raw Marks,High,Pending,Marks,Lecturer logged in; assessment exists and not locked; student enrolled,"1. Navigate to Smart Grid or Assessment Setup
+2. Select course and assessment
+3. Enter raw_score for student (e.g., 75)
+4. Click Save","1. Mark record created with status='draft'
+2. normalised_score auto-calculated
+3. is_flagged defaults to false",Verify mark in database
+TC34,Mark Entry & Grade Calculation,Normalised Score Auto-Calculation,High,Pending,Marks,Assessment max_score=100; lecturer enters raw_score=75,"1. Enter raw_score=75 for student
+2. Save
+3. Query marks table","1. normalised_score = (75/100)*100 = 75.0
+2. If max_score=50 and raw_score=40, normalised_score=80.0",Verify calculation
+TC35,Mark Entry & Grade Calculation,Publish Marks for an Assessment,High,Pending,Marks,Draft marks exist; grade submission deadline not passed,"1. Select assessment
+2. Click 'Publish Marks'
+3. Confirm in modal","1. All draft marks change status to 'published'
+2. Students can view on 'My Marks' page
+3. Audit log records publish with assessment_id",Verify publication
+TC36,Mark Entry & Grade Calculation,Block Publish Past Grade Submission Deadline,High,Pending,Marks,Current date past grade_submission_deadline for active semester,"1. Attempt to publish marks for assessment
+2. Observe response","1. Publish blocked: 'Grade submission deadline has passed. Contact coordinator or HOD for extension.'
+2. Marks remain in draft status",No state changes
+TC37,Mark Entry & Grade Calculation,Unpublish Marks (Coordinator/Admin Only),High,Pending,Marks,Marks currently published; coordinator/admin logged in,"1. Navigate to assessment marks view
+2. Click 'Unpublish'
+3. Enter reason: 'Data entry error discovered'
+4. Confirm","1. Marks revert to status='draft'
+2. Students cannot see marks
+3. Audit log records unpublish with reason and user ID
+4. Lecturer attempting same action receives HTTP 403",Verify unpublish recorded
+TC38,Mark Entry & Grade Calculation,Flag a Mark for Review,Medium,Pending,Marks,Mark record exists; user has permission,"1. Locate mark in Smart Grid
+2. Click 'Flag'
+3. Enter flag_note: 'Student claims attendance bonus not applied'
+4. Save","1. is_flagged becomes true
+2. flag_note stored
+3. Mark appears in Flagged Marks page
+4. Optional ai_anomaly_flag set if ML detection enabled",Verify flag recorded
+TC39,Mark Entry & Grade Calculation,Student Views Own Grade & GPA,High,Pending,Marks,Student enrolled with published marks; assessments locked (100% weight),"1. Student logs in and navigates to 'My Marks'
+2. Selects course
+3. Views grade breakdown","1. Weighted total percentage displayed correctly
+2. Letter grade shown (A, A-, B+, etc.) per UTM thresholds
+3. GPA value displayed (e.g., 3.67 for A-)
+4. If total < 50, 'At Risk' warning shown",Verify calculations
+TC40,Mark Entry & Grade Calculation,At-Risk Student Detection,Medium,Pending,Marks,Student has weighted total < 50 OR multiple flagged marks,"1. Coordinator navigates to Reports/Flagged Marks
+2. Views 'At-Risk Students' list","1. At-risk students listed with course, percentage, risk reason
+2. Data sortable and filterable
+3. Coordinator can click to view detailed breakdown",Verify list accuracy
+TC41,Student Queries & Appeals,Student Raises a Query on a Mark,High,Pending,Queries,Student logged in; mark is published,"1. Navigate to 'My Marks'
+2. Locate assessment mark
+3. Click 'Raise Query'
+4. Enter query text: 'I believe my midterm should be 82, not 72'
+5. Submit","1. course_queries record created linked to mark_id
+2. Query status is 'pending'
+3. Lecturer receives notification/message",Verify query in database
+TC42,Student Queries & Appeals,Lecturer Responds to Query,High,Pending,Queries,Query exists with resolved_at=null; lecturer assigned to course,"1. Lecturer navigates to Queries page
+2. Opens pending query
+3. Reviews mark and evidence
+4. Enters response: 'Verified: attendance penalty due to 3 absences'
+5. Clicks 'Resolve'","1. lecturer_response stored
+2. resolved_at timestamped
+3. Student sees response on 'My Marks' or Queries view",Verify response recorded
+TC43,Student Queries & Appeals,Query Resolution and Closure,Medium,Pending,Queries,Query has been responded to by lecturer,"1. Student views query status
+2. Coordinator views query in master list","1. Status shows as 'Resolved' with timestamp
+2. Resolved queries filterable separately from open
+3. Audit log tracks query activity (not necessarily every query, for privacy)",Verify resolution state
+TC44,Student Queries & Appeals,Query on Unpublished Mark Blocked,Medium,Pending,Queries,Mark status is 'draft',"1. Student navigates to 'My Marks'
+2. Attempts to click 'Raise Query' on draft mark","1. 'Raise Query' button disabled or hidden
+2. If accessed via API: HTTP 400: 'Cannot query unpublished marks.'",No changes
+TC45,Semester Timeline Management,Create Semester Timeline,High,Pending,Timeline,Coordinator logged in; no existing timeline for same year+semester,"1. Navigate to Semester Timeline page
+2. Click 'Create Timeline'
+3. Enter: academic_year='2025/2026', semester='1'
+4. Set dates and deadlines
+5. Save","1. Timeline inserted into semester_timelines
+2. UNIQUE constraint prevents duplicates
+3. Visual timeline bar renders with deadlines marked
+4. Mini-calendar highlights deadline dates",Verify timeline in database
+TC46,Semester Timeline Management,Grade Submission Deadline Enforcement,High,Pending,Timeline,Semester timeline exists with past grade_submission_deadline,"1. Lecturer attempts to publish marks
+2. System checks deadline via session.py helper","1. Publish blocked with clear error message
+2. session helper correctly derives active semester",No marks published
+TC47,Semester Timeline Management,Edit Active Timeline,Medium,Pending,Timeline,Timeline exists; coordinator has permission,"1. Open timeline edit form
+2. Extend grade_submission_deadline by one week
+3. Save","1. Timeline record updated
+2. Audit log records change with old/new deadline values
+3. Lecturers can now publish until new deadline",Verify edit recorded
+TC48,Semester Timeline Management,Delete Past Timeline,Low,Pending,Timeline,Timeline from previous academic year; no active enrollments reference it,"1. Click Delete on past timeline
+2. Confirm","1. Timeline removed
+2. Audit log records deletion",Database clean
+TC49,Messaging & Notifications,Send Message to Single Recipient,High,Pending,Messaging,Sender logged in; recipient exists,"1. Navigate to Messages > Compose
+2. Select recipient from dropdown
+3. Enter subject and body
+4. Click Send","1. Message record created in messages table
+2. is_read defaults to false
+3. Recipient sees message in inbox",Verify message in database
+TC50,Messaging & Notifications,Message Threading (Reply to Parent),Medium,Pending,Messaging,Existing message between two users; user is participant,"1. Open existing message
+2. Click Reply
+3. Type reply text
+4. Send","1. New message has parent_message_id set to original ID
+2. Thread visually grouped in UI
+3. Non-participants cannot inject (403 if attempted)",Verify threading in database
+TC51,Messaging & Notifications,Role-Based Messaging Restrictions,High,Pending,Messaging,Student logged in; policy restricts students from messaging HOD directly,"1. Student opens Compose message
+2. Attempts to select HOD from recipient list
+3. Or crafts direct API request to HOD","1. HOD does not appear in student's dropdown
+2. API returns HTTP 403: 'You are not authorized to message this recipient. Message lecturer or coordinator instead.'
+3. Student can message enrolled course lecturers/coordinators",No messages sent
+TC52,Messaging & Notifications,Rate Limiting on Message Send,Medium,Pending,Messaging,Rate limiter configured (e.g., 60/hour),"1. User sends 61 messages within one hour","1. First 60 messages succeed
+2. 61st returns HTTP 429 Too Many Requests with retry-after header
+3. User sees: 'You have reached messaging limit. Wait before sending more.'",Rate limit enforced
+TC53,Messaging & Notifications,Mark Message as Read,Medium,Pending,Messaging,Message exists with is_read=false,"1. Recipient opens message
+2. System auto-marks as read (or user clicks 'Mark as Read')","1. is_read becomes true
+2. read_at timestamped
+3. Unread badge count decreases",Verify read status
+TC54,Messaging & Notifications,Unread Message Badge Count,Low,Pending,Messaging,User has 3 unread messages,"1. Observe bell icon in header (shows '3')
+2. Open one message (mark as read)
+3. Observe badge again","1. Badge initially shows '3'
+2. After reading one, badge updates to '2' without full refresh",Verify badge accuracy
+TC55,Audit Logs & Reporting,Audit Log Captures Course Creation,High,Pending,Audit,Coordinator creates a course,"1. Create new course
+2. Query audit_logs table","1. Entry exists: action='CREATE', entity_type='course', entity_id=<course_id>
+2. user_id is coordinator's ID
+3. new_values JSONB contains full payload
+4. ip_address and user_agent captured",Verify audit entry
+TC56,Audit Logs & Reporting,Audit Log Captures Mark Publish,High,Pending,Audit,Lecturer publishes marks for assessment,"1. Publish marks
+2. Check audit_logs","1. action='PUBLISH_MARKS', entity_type='assessment'
+2. old_values and new_values show status transition (draft→published)
+3. Timestamp exact",Verify audit entry
+TC57,Audit Logs & Reporting,Audit Log Captures Login Events,Medium,Pending,Audit,User logs in,"1. Log in as any role
+2. Query audit_logs filtered by action='LOGIN'","1. Login event recorded: user_id, ip_address, user_agent, timestamp
+2. Failed logins may be logged as action='LOGIN_FAILED'",Verify audit entry
+TC58,Audit Logs & Reporting,HOD Views Department Analytics,Medium,Pending,Reporting,HOD logged in; department has courses/lecturers/students,"1. Navigate to HOD Dashboard > Analytics
+2. Observe charts and KPIs","1. Analytics show: total courses, total students, average GPA, lecturer workload
+2. Charts responsive and filterable by semester
+3. Data matches underlying tables",Verify analytics accuracy
+TC59,Audit Logs & Reporting,Coordinator Generates Grade Report,High,Pending,Reporting,Course has published marks for all assessments,"1. Navigate to Reports
+2. Select course and semester
+3. Click 'Generate Grade Report'
+4. Download report","1. Report contains: name, matric number, assessment breakdown, weighted total, letter grade, GPA
+2. Format structured (CSV/JSON/DOCX available)
+3. Only published marks included",Verify report contents
+TC60,Dashboard & RBAC,Role-Based Dashboard Redirect,High,Pending,RBAC,User account has valid role,"1. Log in
+2. Observe URL after authentication","1. Student → /dashboard/student
+2. Lecturer (no special roles) → /dashboard/lecturer
+3. Coordinator → /dashboard/coordinator
+4. HOD → /dashboard/hod
+5. Admin → /dashboard/admin",Verify routing
+TC61,Dashboard & RBAC,Student Sidebar Navigation,Medium,Pending,RBAC,Student logged in,"1. Observe left sidebar after login","1. Visible: Dashboard, My Courses, My Marks, Queries, Profile
+2. Hidden: Courses, Roster, Assessment Config, Reports, Timeline, Admin tools",Verify visibility
+TC62,Dashboard & RBAC,Lecturer Sidebar Navigation,Medium,Pending,RBAC,Lecturer logged in (not coordinator/hod),"1. Observe sidebar","1. Visible: Dashboard, My Courses, Roster Upload, Smart Grid, Assessment Setup, Queries, Messages, Profile
+2. Hidden: Course Management (full), Flagged Marks, Audit Log",Verify visibility
+TC63,Dashboard & RBAC,Coordinator Sidebar Navigation,Medium,Pending,RBAC,Coordinator logged in,"1. Observe sidebar","1. Visible: Dashboard, Courses, Roster Management, Assessment Config, Semester Timeline, Messages, Flagged Marks, Reports, Profile",Verify visibility
+TC64,Dashboard & RBAC,HOD Sidebar Navigation,Medium,Pending,RBAC,HOD logged in,"1. Observe sidebar","1. Visible: Dashboard, Departments, Analytics, Export, Audit Log, Profile",Verify visibility
+TC65,Dashboard & RBAC,Admin Sidebar Navigation,Medium,Pending,RBAC,Admin logged in,"1. Observe sidebar","1. Visible: Dashboard, Pending Approvals, Users, Roles & Permissions, Database, Settings, System Logs, Profile",Verify visibility
