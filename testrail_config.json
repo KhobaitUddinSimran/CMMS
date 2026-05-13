@@ -1,0 +1,319 @@
+{
+  "project": {
+    "id": 1,
+    "name": "Carry Mark Management System (CMMS)",
+    "announcement": "Comprehensive test suite for CMMS academic grading platform. 65 test cases across 11 functional domains.",
+    "show_announcement": true,
+    "created_on": 1683763200,
+    "is_completed": false,
+    "completed_on": null
+  },
+  "test_suites": [
+    {
+      "id": 1,
+      "name": "Authentication & Session Management",
+      "description": "Tests user login, logout, and session management across all role types",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases": [
+        {
+          "id": 1,
+          "title": "TC01: Student Login with Valid Credentials",
+          "section_id": 1,
+          "type_id": 1,
+          "priority_id": 3,
+          "estimate": "15m",
+          "milestone_id": null,
+          "refs": "",
+          "created_by": 1,
+          "created_on": 1683763200,
+          "updated_by": 1,
+          "updated_on": 1683763200,
+          "custom_steps_separated": [
+            {
+              "content": "Navigate to CMMS login page",
+              "expected": "Login page displayed"
+            },
+            {
+              "content": "Select 'Student' from role selector",
+              "expected": "Student login form shown"
+            },
+            {
+              "content": "Enter email: student@graduate.utm.my and correct password",
+              "expected": "Credentials accepted"
+            },
+            {
+              "content": "Click 'Log In' button",
+              "expected": "JWT token issued and stored"
+            }
+          ],
+          "custom_preconds": "Student account exists with approval_status='approved' and is_active=true. System is accessible at deployed frontend URL.",
+          "custom_result": "User redirected to /dashboard/student with Zustand authStore reflecting student role"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "User Registration & Approval Workflow",
+      "description": "Tests user registration flows, OTP verification, and approval workflows",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 6
+    },
+    {
+      "id": 3,
+      "name": "Course Management",
+      "description": "Validates course creation, editing, archival, deletion, and lecturer assignment",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 8
+    },
+    {
+      "id": 4,
+      "name": "Enrollment & Roster Management",
+      "description": "Tests student roster management, bulk import, and enrollment tracking",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 5
+    },
+    {
+      "id": 5,
+      "name": "Assessment Configuration",
+      "description": "Tests assessment component creation, schema locking, and integrity",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 6
+    },
+    {
+      "id": 6,
+      "name": "Mark Entry & Grade Calculation",
+      "description": "Tests mark entry, normalization, publication, and GPA calculation",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 8
+    },
+    {
+      "id": 7,
+      "name": "Student Queries & Appeals",
+      "description": "Tests student mark query workflow and resolution tracking",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 4
+    },
+    {
+      "id": 8,
+      "name": "Semester Timeline Management",
+      "description": "Tests academic calendar creation and deadline enforcement",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 4
+    },
+    {
+      "id": 9,
+      "name": "Messaging & Notifications",
+      "description": "Tests internal messaging system and notification badges",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 6
+    },
+    {
+      "id": 10,
+      "name": "Audit Logs & Reporting",
+      "description": "Tests audit trail completeness and reporting capabilities",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 5
+    },
+    {
+      "id": 11,
+      "name": "Dashboard & Role-Based Access Control",
+      "description": "Tests role-based dashboard routing and sidebar navigation",
+      "project_id": 1,
+      "is_master": true,
+      "parent_id": null,
+      "test_cases_count": 6
+    }
+  ],
+  "custom_fields": [
+    {
+      "id": 1,
+      "name": "Module",
+      "label": "Module",
+      "type_id": 1,
+      "configs": ["Auth", "Registration", "Courses", "Enrollment", "Assessment", "Marks", "Queries", "Timeline", "Messaging", "Audit", "RBAC"]
+    },
+    {
+      "id": 2,
+      "name": "Automation_Status",
+      "label": "Automation Status",
+      "type_id": 1,
+      "configs": ["Not Automated", "Partial", "Fully Automated"]
+    }
+  ],
+  "milestones": [
+    {
+      "id": 1,
+      "name": "Phase 1: Core Functionality",
+      "description": "Authentication & Registration, Course & Enrollment",
+      "start_on": 1683763200,
+      "due_on": 1684023600,
+      "is_completed": false,
+      "completed_on": null,
+      "project_id": 1
+    },
+    {
+      "id": 2,
+      "name": "Phase 2: Grading Pipeline",
+      "description": "Assessment, Mark Entry, Timeline Management",
+      "start_on": 1684023600,
+      "due_on": 1684628400,
+      "is_completed": false,
+      "completed_on": null,
+      "project_id": 1
+    },
+    {
+      "id": 3,
+      "name": "Phase 3: Advanced Features",
+      "description": "Student Queries, Messaging, Audit & Reporting",
+      "start_on": 1684628400,
+      "due_on": 1685233200,
+      "is_completed": false,
+      "completed_on": null,
+      "project_id": 1
+    },
+    {
+      "id": 4,
+      "name": "Phase 4: UAT & Regression",
+      "description": "End-to-end integration, performance, security, UAT",
+      "start_on": 1685233200,
+      "due_on": 1685838000,
+      "is_completed": false,
+      "completed_on": null,
+      "project_id": 1
+    }
+  ],
+  "priorities": [
+    {
+      "id": 1,
+      "name": "None",
+      "short_name": ""
+    },
+    {
+      "id": 2,
+      "name": "Low",
+      "short_name": "L"
+    },
+    {
+      "id": 3,
+      "name": "Medium",
+      "short_name": "M"
+    },
+    {
+      "id": 4,
+      "name": "High",
+      "short_name": "H"
+    },
+    {
+      "id": 5,
+      "name": "Critical",
+      "short_name": "C"
+    }
+  ],
+  "case_types": [
+    {
+      "id": 1,
+      "name": "Acceptance",
+      "is_default": false
+    },
+    {
+      "id": 2,
+      "name": "Automated",
+      "is_default": false
+    },
+    {
+      "id": 3,
+      "name": "Compatibility",
+      "is_default": false
+    },
+    {
+      "id": 4,
+      "name": "Other",
+      "is_default": true
+    },
+    {
+      "id": 5,
+      "name": "Performance",
+      "is_default": false
+    },
+    {
+      "id": 6,
+      "name": "Regression",
+      "is_default": false
+    },
+    {
+      "id": 7,
+      "name": "Smoke",
+      "is_default": false
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "name": "Khobait Uddin Simran",
+      "email": "khobait@mjiit.utm.my",
+      "role_id": 1,
+      "is_active": true
+    },
+    {
+      "id": 2,
+      "name": "Tanjim Shadman Saad",
+      "email": "tanjim@mjiit.utm.my",
+      "role_id": 1,
+      "is_active": true
+    },
+    {
+      "id": 3,
+      "name": "Madam Mazliza Aini",
+      "email": "mazliza@utm.my",
+      "role_id": 2,
+      "is_active": true
+    }
+  ],
+  "test_runs": [
+    {
+      "id": 1,
+      "name": "CMMS Test Run - Sprint 1",
+      "description": "Initial test execution for Phase 1 functionality",
+      "milestone_id": 1,
+      "created_by": 1,
+      "created_on": 1683763200,
+      "is_completed": false,
+      "completed_on": null,
+      "planned_on": null
+    }
+  ],
+  "statistics": {
+    "total_test_cases": 65,
+    "high_priority": 44,
+    "medium_priority": 18,
+    "low_priority": 3,
+    "not_automated": 42,
+    "partially_automated": 15,
+    "fully_automated": 8,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0,
+    "retest": 0,
+    "untested": 65
+  }
+}

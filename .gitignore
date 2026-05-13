@@ -89,3 +89,15 @@ dist/
 
 # Development Context (for Copilot, not tracked in git)
 .copilot-context.md
+
+# Virtual environments
+.venv*/
+venv*/
+
+# Logs
+*.log
+mcp.log
+
+# Temporary files
+*.pdf
+Untitled*
