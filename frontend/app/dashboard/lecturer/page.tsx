@@ -186,7 +186,7 @@ export default function LecturerDashboard() {
           {[
             { label: 'Mark Entry', desc: 'Enter & manage marks', icon: Grid3x3, color: 'bg-[#C90031]', href: '/smart-grid' },
             { label: 'Assessment Setup', desc: 'Configure grading schema', icon: ClipboardList, color: 'bg-[#7C3AED]', href: '/assessment-setup' },
-            { label: 'Roster Upload', desc: 'Seed students via Excel', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
+            { label: 'Import Students', desc: 'Seed students via Excel', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
           ].map((action) => (
             <button key={action.label} onClick={() => router.push(action.href)}
               className="flex items-center gap-4 p-4 bg-white border border-[#E5E7EB] rounded-xl hover:shadow-md transition-all text-left">

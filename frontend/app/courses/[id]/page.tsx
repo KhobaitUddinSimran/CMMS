@@ -174,7 +174,7 @@ function LecturerView({
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
             >
               <Grid3x3 className="w-4 h-4" />
-              Smart Grid
+              Grade Sheet
             </button>
             <button
               onClick={() => router.push(`/roster?course=${course.id}`)}
@@ -711,7 +711,7 @@ export default function CourseDetailPage() {
     else if (isStudent) loadStudentData()
   }, [course, user, isStaff, isStudent, loadStaffData, loadStudentData])
 
-  // Auto-refresh when the tab regains visibility (e.g. user returns from Smart Grid)
+  // Auto-refresh when the tab regains visibility (e.g. user returns from Grade Sheet)
   useEffect(() => {
     if (!course || !user) return
     const onVisible = () => {

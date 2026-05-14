@@ -47,7 +47,7 @@ export interface CarryTotalData {
 // ==================== Marks API Methods ====================
 
 /**
- * Get marks for a course (Smart Grid data)
+ * Get marks for a course (Grade Sheet data)
  */
 export async function getCourseMarks(
   courseId: string,
@@ -190,7 +190,7 @@ export async function createMark(data: {
 }
 
 /**
- * Get ALL marks for a course (Smart Grid — all students × all assessments)
+ * Get ALL marks for a course (Grade Sheet — all students × all assessments)
  */
 export async function getCourseAllMarks(courseId: string): Promise<MarkData[]> {
   const response = await apiClient.get(`/marks/course/${courseId}`)

@@ -273,7 +273,7 @@ function SmartGridInner() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-[#111827]">Smart Grid</h1>
+          <h1 className="text-3xl font-bold text-[#111827]">Grade Sheet</h1>
           <p className="text-[#6B7280] mt-1">Enter and publish marks for your courses</p>
         </div>
 

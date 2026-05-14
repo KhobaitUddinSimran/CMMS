@@ -70,10 +70,10 @@ export async function getCourseEnrollments(
   return response.data
 }
 
-// ==================== Roster Upload Methods ====================
+// ==================== Import Students Methods ====================
 
 /**
- * Upload Excel roster file (dry-run preview)
+ * Upload Excel student import file (dry-run preview)
  */
 export async function previewRosterUpload(courseId: string, file: File): Promise<RosterImportResult> {
   const formData = new FormData()
@@ -86,7 +86,7 @@ export async function previewRosterUpload(courseId: string, file: File): Promise
 }
 
 /**
- * Upload and process Excel roster (actual import)
+ * Upload and process Excel student file (actual import)
  */
 export async function uploadRoster(courseId: string, file: File): Promise<RosterImportResult> {
   const formData = new FormData()
@@ -99,7 +99,7 @@ export async function uploadRoster(courseId: string, file: File): Promise<Roster
 }
 
 /**
- * Confirm roster import after preview
+ * Confirm student import after preview
  */
 export async function confirmRosterImport(
   courseId: string,

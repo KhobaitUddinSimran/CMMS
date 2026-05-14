@@ -176,7 +176,7 @@ export function StudentRoster({ students, onAddStudent, onDropStudent }: Student
         <div className="text-center py-10 text-[#6B7280]">
           <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No students enrolled yet</p>
-          <p className="text-xs mt-1">Add students manually above or use Roster Upload</p>
+          <p className="text-xs mt-1">Add students manually above or use Import Students</p>
         </div>
       )}
 
