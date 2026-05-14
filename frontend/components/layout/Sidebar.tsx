@@ -28,7 +28,7 @@ const navByRole: Record<UserRole, NavItem[]> = {
   lecturer: [
     { icon: <Home className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
     { icon: <BookOpen className="w-5 h-5" />, label: 'My Courses', path: '/courses' },
-    { icon: <Upload className="w-5 h-5" />, label: 'Roster Upload', path: '/roster' },
+    { icon: <Upload className="w-5 h-5" />, label: 'Import Students', path: '/roster' },
     { icon: <Table className="w-5 h-5" />, label: 'Mark Entry', path: '/smart-grid' },
     { icon: <Settings className="w-5 h-5" />, label: 'Assessment Setup', path: '/assessment-setup' },
     { icon: <HelpCircle className="w-5 h-5" />, label: 'Queries', path: '/queries' },

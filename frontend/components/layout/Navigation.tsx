@@ -19,7 +19,7 @@ const navItems: Record<string, { label: string; href: string }[]> = {
   lecturer: [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'My Courses', href: '/my-courses' },
-    { label: 'Smart Grid', href: '/smart-grid' },
+    { label: 'Grade Sheet', href: '/smart-grid' },
     { label: 'Assessment Setup', href: '/assessment-setup' },
     { label: 'Queries', href: '/queries' },
     { label: 'Profile', href: '/profile' },

@@ -272,7 +272,7 @@ export default function ReportsPage() {
           <div className="text-[13px] text-[#6B7280]">
             <p className="font-medium text-[#374151]">Need a per-course grade report?</p>
             <p className="mt-1">
-              Open a course from <button onClick={() => router.push('/courses')} className="text-[#C90031] hover:underline font-medium">My Courses</button> and use the &quot;Smart Grid&quot; export to download grades for that specific course.
+              Open a course from <button onClick={() => router.push('/courses')} className="text-[#C90031] hover:underline font-medium">My Courses</button> and use the &quot;Grade Sheet&quot; export to download grades for that specific course.
             </p>
           </div>
         </div>
