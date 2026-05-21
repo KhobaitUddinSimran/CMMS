@@ -13,9 +13,10 @@ export interface QueryData {
   lecturer_response: string | null
   resolved_at: string | null
   created_at: string
-  updated_at?: string
-  // Derived field added by backend
+  updated_at: string
   status: 'OPEN' | 'RESOLVED'
+  is_read_by_lecturer?: boolean
+  is_read_by_student?: boolean
   // Enriched fields
   student?: { full_name: string; email: string }
   mark?: { id: string; assessment_id: string; raw_score: number | null }
@@ -26,6 +27,7 @@ export interface QueryData {
 export interface QueriesListResponse {
   queries: QueryData[]
   count: number
+  unread_count: number
 }
 
 export interface CreateQueryPayload {

@@ -110,7 +110,7 @@ export default function ExportPage() {
   const items: ExportItem[] = [
     {
       key: 'students',
-      title: 'Student Roster',
+      title: 'Student List',
       description: 'All registered students with email, matric number, approval status',
       icon: GraduationCap,
       color: 'text-[#C90031]', bg: 'bg-[#FEE2E2]',

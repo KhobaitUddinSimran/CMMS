@@ -3,8 +3,6 @@
 import { User, AlertTriangle, CheckCircle } from 'lucide-react'
 import type { LecturerWorkload } from '@/lib/api/courses'
 
-const MAX_CREDITS = 9
-
 interface Lecturer {
   id: string
   email: string
@@ -20,18 +18,20 @@ interface LecturerSelectorProps {
   courseCredits?: number
 }
 
-function CreditBar({ used, adding = 0 }: { used: number; adding?: number }) {
-  const pct = Math.min(100, (used / MAX_CREDITS) * 100)
-  const addingPct = Math.min(100 - pct, (adding / MAX_CREDITS) * 100)
-  const wouldExceed = used + adding > MAX_CREDITS
-  const barColor = wouldExceed ? 'bg-red-500' : used >= MAX_CREDITS ? 'bg-red-500' : used >= 7 ? 'bg-amber-400' : 'bg-emerald-500'
+function CreditBar({ used, adding = 0, cap }: { used: number; adding?: number; cap: number | null }) {
+  const effectiveCap = cap ?? 0
+  const hasLimit = cap !== null && cap > 0
+  const pct = hasLimit ? Math.min(100, (used / effectiveCap) * 100) : Math.min(100, (used / Math.max(used + adding, 1)) * 50)
+  const addingPct = hasLimit ? Math.min(100 - pct, (adding / effectiveCap) * 100) : 30
+  const wouldExceed = hasLimit && (used + adding > effectiveCap)
+  const barColor = wouldExceed ? 'bg-red-500' : hasLimit && used >= effectiveCap ? 'bg-red-500' : hasLimit && used >= effectiveCap * 0.8 ? 'bg-amber-400' : 'bg-emerald-500'
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-[#6B7280]">Semester credit load</span>
-        <span className={`font-semibold ${wouldExceed ? 'text-red-600' : used >= MAX_CREDITS ? 'text-red-600' : 'text-[#111827]'}`}>
-          {used}{adding > 0 ? ` + ${adding}` : ''} / {MAX_CREDITS} cr
+        <span className={`font-semibold ${wouldExceed ? 'text-red-600' : 'text-[#111827]'}`}>
+          {used}{adding > 0 ? ` + ${adding}` : ''} cr{hasLimit ? ` / ${effectiveCap}` : ' (no limit)'}
         </span>
       </div>
       <div className="h-2 rounded-full bg-[#E5E7EB] overflow-hidden flex">
@@ -57,7 +57,8 @@ export function LecturerSelector({
 }: LecturerSelectorProps) {
   const selected = lecturers.find((l) => l.id === value)
   const selectedLoad = value ? workload[value] : undefined
-  const wouldExceed = selectedLoad ? selectedLoad.used_credits + courseCredits > MAX_CREDITS : false
+  const cap = selectedLoad?.max_credits ?? null
+  const wouldExceed = cap !== null && selectedLoad ? selectedLoad.used_credits + courseCredits > cap : false
 
   return (
     <div className="space-y-3">
@@ -78,9 +79,11 @@ export function LecturerSelector({
             const w = workload[lect.id]
             const used = w?.used_credits ?? 0
             const full = w?.is_full ?? false
-            const nearFull = used >= 7 && !full
+            const wCap = w?.max_credits ?? null
+            const nearFull = wCap !== null ? (used >= wCap * 0.8 && !full) : false
+            const creditLabel = wCap !== null ? `${used}/${wCap} cr` : `${used} cr`
             const label = w
-              ? `${lect.full_name || lect.email} (${used}/${MAX_CREDITS} cr${full ? ' — FULL' : nearFull ? ' — near limit' : ''})`
+              ? `${lect.full_name || lect.email} (${creditLabel}${full ? ' — FULL' : nearFull ? ' — near limit' : ''})`
               : lect.full_name || lect.email
             return (
               <option key={lect.id} value={lect.id} disabled={false}>
@@ -106,21 +109,23 @@ export function LecturerSelector({
             {selectedLoad && (
               selectedLoad.is_full
                 ? <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><AlertTriangle className="w-3 h-3" />Full</span>
-                : selectedLoad.used_credits >= 7
+                : selectedLoad.max_credits !== null && selectedLoad.max_credits !== undefined && selectedLoad.used_credits >= (selectedLoad.max_credits ?? 0) * 0.8
                   ? <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><AlertTriangle className="w-3 h-3" />Near limit</span>
-                  : <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><CheckCircle className="w-3 h-3" />{selectedLoad.remaining_credits} cr left</span>
+                  : selectedLoad.remaining_credits !== null
+                    ? <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><CheckCircle className="w-3 h-3" />{selectedLoad.remaining_credits} cr left</span>
+                    : <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><CheckCircle className="w-3 h-3" />No limit set</span>
             )}
           </div>
 
           {selectedLoad ? (
-            <CreditBar used={selectedLoad.used_credits} adding={courseCredits} />
+            <CreditBar used={selectedLoad.used_credits} adding={courseCredits} cap={cap} />
           ) : courseCredits > 0 ? (
-            <CreditBar used={0} adding={courseCredits} />
+            <CreditBar used={0} adding={courseCredits} cap={cap} />
           ) : null}
 
-          {wouldExceed && (
+          {wouldExceed && cap !== null && (
             <p className="text-red-600 font-medium text-[11px]">
-              ⚠ Assigning this course ({courseCredits} cr) would exceed the 9-credit semester limit.
+              ⚠ Assigning this course ({courseCredits} cr) would exceed this lecturer&apos;s {cap}-credit semester limit.
             </p>
           )}
         </div>

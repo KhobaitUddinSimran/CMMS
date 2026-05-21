@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
-from .routers import auth, health, user, admin, courses, assessments, enrollments, marks, otp, queries, semester, messages
+from .routers import auth, health, user, admin, courses, assessments, enrollments, marks, otp, queries, semester
 from .core.config import settings
 
 # Configure logging with more detailed format
@@ -59,7 +59,6 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(queries.router)
     app.include_router(semester.router)
-    app.include_router(messages.router)
     
     # Custom exception handler for rate limit errors
     @app.exception_handler(RateLimitExceeded)

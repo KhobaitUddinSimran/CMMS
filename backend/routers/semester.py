@@ -1,4 +1,4 @@
-"""Semester timeline endpoints — coordinator/admin only"""
+"""Semester timeline endpoints — coursework deadlines only (coordinator/lecturer/admin)"""
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from ..core.config import supabase
@@ -32,8 +32,8 @@ async def list_timelines(current_user: User = Depends(get_current_user)):
 async def upsert_timeline(data: dict, current_user: User = Depends(get_current_user)):
     """Create or update a semester timeline (upserts on academic_year + semester)."""
     _require_supabase()
-    if not has_effective_role(current_user, "coordinator", "admin"):
-        raise HTTPException(status_code=403, detail="Only coordinators and admins can manage timelines")
+    if not has_effective_role(current_user, "coordinator", "admin", "lecturer"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions to manage timelines")
 
     required = ("academic_year", "semester", "start_date", "end_date")
     for field in required:
@@ -47,8 +47,8 @@ async def upsert_timeline(data: dict, current_user: User = Depends(get_current_u
         "end_date": data["end_date"],
         "midterm_deadline": data.get("midterm_deadline") or None,
         "grade_submission_deadline": data.get("grade_submission_deadline") or None,
-        "final_deadline": data.get("final_deadline") or None,
         "notes": data.get("notes") or None,
+        # final_deadline intentionally omitted — finals not managed via this system
     }
 
     try:
@@ -80,6 +80,6 @@ async def upsert_timeline(data: dict, current_user: User = Depends(get_current_u
 async def delete_timeline(timeline_id: str, current_user: User = Depends(get_current_user)):
     """Delete a semester timeline."""
     _require_supabase()
-    if not has_effective_role(current_user, "coordinator", "admin"):
+    if not has_effective_role(current_user, "coordinator", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     supabase.table("semester_timelines").delete().eq("id", timeline_id).execute()

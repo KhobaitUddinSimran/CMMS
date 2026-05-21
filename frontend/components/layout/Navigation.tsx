@@ -27,7 +27,7 @@ const navItems: Record<string, { label: string; href: string }[]> = {
   coordinator: [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'Courses', href: '/courses' },
-    { label: 'Roster', href: '/roster' },
+    { label: 'Student List', href: '/roster' },
     { label: 'Assessment Config', href: '/assessment-config' },
     { label: 'Reports', href: '/reports' },
     { label: 'Profile', href: '/profile' },

@@ -129,7 +129,7 @@ function RosterPageInner() {
             <button onClick={() => router.back()} className="text-gray-600 hover:text-gray-900">
               <ArrowLeft size={24} />
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">Roster Management</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Student List</h1>
           </div>
           <p className="text-gray-600">Upload Excel files to create student lists for your courses</p>
         </div>
@@ -155,7 +155,7 @@ function RosterPageInner() {
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Upload Roster
+              Upload Student List
             </button>
           )}
         </div>
@@ -195,7 +195,7 @@ function RosterPageInner() {
                         onClick={() => startUpload(course.id)}
                         className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
                       >
-                        Upload Roster
+                        Upload
                       </button>
                     </td>
                   </tr>
@@ -208,7 +208,7 @@ function RosterPageInner() {
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Upload Roster for {courses.find(c => c.id === selectedCourse)?.code || courses.find(c => c.id === selectedCourse)?.name}
+                Upload Student List for {courses.find(c => c.id === selectedCourse)?.code || courses.find(c => c.id === selectedCourse)?.name}
               </h2>
               <RosterUpload
                 courseId={selectedCourse || ''}

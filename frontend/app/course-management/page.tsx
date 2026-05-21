@@ -8,9 +8,11 @@ import { Spinner } from '@/components/common/Spinner'
 import { useToastStore } from '@/stores/toastStore'
 import { listCourses, assignLecturer, getLecturerWorkloads, createCourse } from '@/lib/api/courses'
 import { listLecturers } from '@/lib/api/courses'
+import { updateTeachingCredits } from '@/lib/api/users'
 import {
   BookOpen, Users, ChevronLeft, RefreshCw,
-  AlertTriangle, Search, Filter, UserCheck, UserX, Library
+  AlertTriangle, Search, Filter, UserCheck, UserX, Library,
+  Pencil, Check, X
 } from 'lucide-react'
 import { CurriculumLibrary } from '@/components/course-management/CurriculumLibrary'
 import { yearLevelFromCode, type CurriculumCourse } from '@/lib/data/mjiit-curriculum'
@@ -77,6 +79,9 @@ export default function CourseManagementPage() {
   const [semesterFilter, setSemesterFilter] = useState('')
   const [yearLevelFilter, setYearLevelFilter] = useState<'all' | 1 | 2 | 3 | 4>('all')
   const [curriculumOpen, setCurriculumOpen] = useState(false)
+  const [editingLecturer, setEditingLecturer] = useState<string | null>(null)
+  const [editCreditsValue, setEditCreditsValue] = useState<string>('')
+  const [savingCredits, setSavingCredits] = useState(false)
   const intakeYearOptions = useMemo(generateIntakeYears, [])
   const [intakeYear, setIntakeYear] = useState<string>(() => {
     const opts = generateIntakeYears()
@@ -186,6 +191,29 @@ export default function CourseManagementPage() {
       fail === 0 ? 'success' : 'error'
     )
     loadData()
+  }
+
+  const handleSetCredits = async (lecturerId: string) => {
+    const parsed = editCreditsValue.trim() === '' ? null : parseInt(editCreditsValue, 10)
+    if (parsed !== null && (isNaN(parsed) || parsed < 1)) {
+      addToast('Enter a valid credit number (min 1) or leave blank for no limit', 'error')
+      return
+    }
+    setSavingCredits(true)
+    try {
+      await updateTeachingCredits(lecturerId, parsed)
+      setLecturers(prev => prev.map(l =>
+        l.id === lecturerId
+          ? { ...l, max_credits: parsed ?? DEFAULT_MAX_CREDITS, remaining_credits: Math.max(0, (parsed ?? DEFAULT_MAX_CREDITS) - l.used_credits), is_full: parsed !== null && l.used_credits >= parsed }
+          : l
+      ))
+      addToast(parsed === null ? 'Credit limit removed (no limit)' : `Credit limit set to ${parsed} cr`, 'success')
+      setEditingLecturer(null)
+    } catch (e: any) {
+      addToast(e?.response?.data?.detail || 'Failed to update credit limit', 'error')
+    } finally {
+      setSavingCredits(false)
+    }
   }
 
   const handleAssign = async (courseId: string, lecturerId: string) => {
@@ -301,10 +329,48 @@ export default function CourseManagementPage() {
               return (
                 <div key={l.id} className="p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[13px] font-medium text-[#111827] truncate max-w-[160px]">{l.full_name}</span>
-                    <span className={`text-[12px] font-bold ${l.is_full ? 'text-[#EF4444]' : 'text-[#374151]'}`}>
-                      {l.used_credits}/{cap} cr
-                    </span>
+                    <span className="text-[13px] font-medium text-[#111827] truncate max-w-[140px]">{l.full_name}</span>
+                    {editingLecturer === l.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          autoFocus
+                          type="number"
+                          min={1}
+                          value={editCreditsValue}
+                          onChange={e => setEditCreditsValue(e.target.value)}
+                          placeholder="no limit"
+                          className="w-16 h-6 text-[12px] border border-[#C90031] rounded px-1.5 outline-none text-center"
+                          onKeyDown={e => { if (e.key === 'Enter') handleSetCredits(l.id); if (e.key === 'Escape') setEditingLecturer(null) }}
+                        />
+                        <span className="text-[11px] text-[#6B7280]">cr</span>
+                        <button
+                          onClick={() => handleSetCredits(l.id)}
+                          disabled={savingCredits}
+                          className="p-0.5 rounded bg-[#C90031] text-white hover:bg-[#A80028] disabled:opacity-50"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => setEditingLecturer(null)}
+                          className="p-0.5 rounded border border-[#E5E7EB] text-[#6B7280] hover:bg-white"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[12px] font-bold ${l.is_full ? 'text-[#EF4444]' : 'text-[#374151]'}`}>
+                          {l.used_credits}/{cap} cr
+                        </span>
+                        <button
+                          onClick={() => { setEditingLecturer(l.id); setEditCreditsValue(l.max_credits !== DEFAULT_MAX_CREDITS || l.max_credits ? String(l.max_credits) : '') }}
+                          className="p-0.5 rounded text-[#D1D5DB] hover:text-[#C90031]"
+                          title="Edit credit limit"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
                     <div className={`h-2 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />

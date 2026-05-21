@@ -1,6 +1,6 @@
 """Queries endpoints — student mark queries and lecturer responses
 Real DB table: course_queries
-Columns: id, mark_id, student_id, query_text, lecturer_response, resolved_at, created_at, updated_at
+New columns: is_read_by_lecturer, is_read_by_student (Sprint 5)
 """
 import logging
 from datetime import datetime, timezone
@@ -173,7 +173,20 @@ async def list_queries(
 
         resp = q.order("created_at", desc=True).execute()
         queries = _enrich_queries(resp.data or [])
-        return {"queries": queries, "count": len(queries)}
+
+        # Compute unread_count for the calling user
+        unread_count = 0
+        for qry in queries:
+            if role == "student":
+                # Student sees unread = responded queries not yet seen
+                if not qry.get("is_read_by_student") and qry.get("lecturer_response"):
+                    unread_count += 1
+            else:
+                # Lecturer/coordinator/admin sees unread = queries awaiting response
+                if not qry.get("is_read_by_lecturer"):
+                    unread_count += 1
+
+        return {"queries": queries, "count": len(queries), "unread_count": unread_count}
 
     except HTTPException:
         raise
@@ -198,9 +211,22 @@ async def get_query(
             raise HTTPException(status_code=404, detail="Query not found")
 
         qry = _enrich_queries(resp.data)[0]
+        role = current_user.get("role")
+        user_id = current_user["user_id"]
 
-        if current_user.get("role") == "student" and qry.get("student_id") != current_user["user_id"]:
+        if role == "student" and qry.get("student_id") != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
+
+        # Auto-mark read
+        try:
+            if role == "student" and not qry.get("is_read_by_student"):
+                supabase.table("course_queries").update({"is_read_by_student": True}).eq("id", query_id).execute()
+                qry["is_read_by_student"] = True
+            elif role != "student" and not qry.get("is_read_by_lecturer"):
+                supabase.table("course_queries").update({"is_read_by_lecturer": True}).eq("id", query_id).execute()
+                qry["is_read_by_lecturer"] = True
+        except Exception:
+            pass  # non-critical
 
         return qry
 
@@ -234,6 +260,8 @@ async def respond_to_query(
         resp = supabase.table("course_queries").update({
             "lecturer_response": data.response,
             "resolved_at": now,
+            "is_read_by_lecturer": True,  # lecturer just wrote the response
+            "is_read_by_student": False,  # student hasn't seen the response yet
         }).eq("id", query_id).execute()
         if not resp.data:
             raise HTTPException(status_code=500, detail="Failed to save response")

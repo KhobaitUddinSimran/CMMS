@@ -189,7 +189,7 @@ export default function CoursesPage() {
                       onClick={() => router.push(`/courses/${course.id}/manage`)}
                       className="flex-1 text-xs"
                     >
-                      Roster
+                      Student List
                     </Button>
                     {(userRole === 'admin' || userRole === 'coordinator') && (
                       <Button

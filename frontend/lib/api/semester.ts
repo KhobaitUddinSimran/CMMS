@@ -8,7 +8,6 @@ export interface SemesterTimeline {
   end_date: string
   midterm_deadline?: string | null
   grade_submission_deadline?: string | null
-  final_deadline?: string | null
   notes?: string | null
   created_by?: string
   created_at: string
@@ -22,7 +21,6 @@ export interface SemesterTimelineInput {
   end_date: string
   midterm_deadline?: string
   grade_submission_deadline?: string
-  final_deadline?: string
   notes?: string
 }
 
