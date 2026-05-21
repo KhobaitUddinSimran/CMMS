@@ -38,9 +38,23 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// Public auth endpoints that must NOT send a Bearer token
+const AUTH_PUBLIC_PATHS = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/password-reset',
+  '/auth/reset-password',
+  '/auth/verify-email',
+  '/auth/resend-verification',
+]
+
 authApiClient.interceptors.request.use((config: any) => {
-  const token = getTokenFromCache()
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  const url = config.url || ''
+  const isPublic = AUTH_PUBLIC_PATHS.some((p) => url.includes(p))
+  if (!isPublic) {
+    const token = getTokenFromCache()
+    if (token) config.headers.Authorization = `Bearer ${token}`
+  }
   return config
 })
 

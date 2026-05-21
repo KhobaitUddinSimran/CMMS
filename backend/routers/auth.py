@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 def get_rate_limit_key(request: Request) -> str:
     if os.getenv("ENVIRONMENT", "development") == "development":
         return "dev-shared-key"
+    # When behind the Next.js proxy on Render, the real client IP is in
+    # X-Forwarded-For. Falling back to X-Real-IP, then the TCP peer address.
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
     return get_remote_address(request)
 
 limiter = Limiter(key_func=get_rate_limit_key)
