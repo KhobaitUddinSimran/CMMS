@@ -4,12 +4,12 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
 import {
-  Home, BookOpen, BarChart3, MessageSquare, User, Table, Settings,
-  Users, Building2, Download, FileText, Lock, Database, LogOut, Flag, CalendarDays, Mail, Layers,
+  Home, BookOpen, BarChart3, User, Table, Settings,
+  Users, Building2, Download, FileText, Lock, Database, LogOut, Flag, CalendarDays, Layers,
   Upload, HelpCircle, UserCheck, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import type { UserRole } from '@/types'
-import { listMessages } from '@/lib/api/messages'
+import { listQueries } from '@/lib/api/queries'
 
 interface NavItem {
   icon: React.ReactNode
@@ -32,17 +32,16 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { icon: <Table className="w-5 h-5" />, label: 'Mark Entry', path: '/smart-grid' },
     { icon: <Settings className="w-5 h-5" />, label: 'Assessment Setup', path: '/assessment-setup' },
     { icon: <HelpCircle className="w-5 h-5" />, label: 'Queries', path: '/queries' },
-    { icon: <Mail className="w-5 h-5" />, label: 'Messages', path: '/messages' },
     { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
   ],
   coordinator: [
     { icon: <Home className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
     { icon: <BookOpen className="w-5 h-5" />, label: 'Courses', path: '/courses' },
     { icon: <Layers className="w-5 h-5" />, label: 'Course Management', path: '/course-management' },
-    { icon: <Users className="w-5 h-5" />, label: 'Roster Management', path: '/roster' },
+    { icon: <Users className="w-5 h-5" />, label: 'Student List', path: '/roster' },
     { icon: <Settings className="w-5 h-5" />, label: 'Assessment Config', path: '/assessment-config' },
     { icon: <CalendarDays className="w-5 h-5" />, label: 'Semester Timeline', path: '/semester-timeline' },
-    { icon: <MessageSquare className="w-5 h-5" />, label: 'Messages', path: '/messages' },
+    { icon: <HelpCircle className="w-5 h-5" />, label: 'Queries', path: '/queries' },
     { icon: <Flag className="w-5 h-5" />, label: 'Flagged Marks', path: '/flagged-marks' },
     { icon: <BarChart3 className="w-5 h-5" />, label: 'Reports', path: '/reports' },
     { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
@@ -52,8 +51,8 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { icon: <Building2 className="w-5 h-5" />, label: 'Departments', path: '/departments' },
     { icon: <BarChart3 className="w-5 h-5" />, label: 'Analytics', path: '/analytics' },
     { icon: <Download className="w-5 h-5" />, label: 'Export', path: '/export' },
+    { icon: <Layers className="w-5 h-5" />, label: 'Course Management', path: '/course-management' },
     { icon: <Flag className="w-5 h-5" />, label: 'Flagged Marks', path: '/flagged-marks' },
-    { icon: <Mail className="w-5 h-5" />, label: 'Messages', path: '/messages' },
     { icon: <FileText className="w-5 h-5" />, label: 'Audit Log', path: '/audit-log' },
     { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
   ],
@@ -80,16 +79,16 @@ export function Sidebar({ role, isOpen = true, collapsed = false, onToggleCollap
   const router = useRouter()
   const pathname = usePathname()
   const { logout, user } = useAuth()
-  const [unreadCount, setUnreadCount] = useState(0)
+  const [queriesUnreadCount, setQueriesUnreadCount] = useState(0)
 
   useEffect(() => {
-    const hasMessages = Array.isArray(role)
-      ? role.some(r => navByRole[r]?.some(i => i.path === '/messages'))
-      : navByRole[role as UserRole]?.some(i => i.path === '/messages')
-    if (!hasMessages) return
+    const hasQueries = Array.isArray(role)
+      ? role.some(r => navByRole[r]?.some(i => i.path === '/queries'))
+      : navByRole[role as UserRole]?.some(i => i.path === '/queries')
+    if (!hasQueries) return
     let cancelled = false
-    listMessages().then(data => {
-      if (!cancelled) setUnreadCount((data as any).unread_count || 0)
+    listQueries().then(data => {
+      if (!cancelled) setQueriesUnreadCount((data as any).unread_count || 0)
     }).catch(() => {})
     return () => { cancelled = true }
   }, [])
@@ -168,9 +167,9 @@ export function Sidebar({ role, isOpen = true, collapsed = false, onToggleCollap
                 <span className={`shrink-0 ${active ? 'text-[#C90031]' : 'text-[#94A3B8]'}`}>
                   {item.icon}
                 </span>
-                {item.path === '/messages' && unreadCount > 0 && (
+                {item.path === '/queries' && queriesUnreadCount > 0 && (
                   <span className="absolute top-1 right-1 text-[9px] font-bold bg-[#C90031] text-white rounded-full min-w-[14px] h-3.5 flex items-center justify-center px-1 shrink-0">
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {queriesUnreadCount > 9 ? '9+' : queriesUnreadCount}
                   </span>
                 )}
               </button>
@@ -190,9 +189,9 @@ export function Sidebar({ role, isOpen = true, collapsed = false, onToggleCollap
                 {item.icon}
               </span>
               <span className="truncate flex-1 text-left">{item.label}</span>
-              {item.path === '/messages' && unreadCount > 0 && (
+              {item.path === '/queries' && queriesUnreadCount > 0 && (
                 <span className="ml-1 text-[10px] font-bold bg-[#C90031] text-white rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shrink-0">
-                  {unreadCount > 9 ? '9+' : unreadCount}
+                  {queriesUnreadCount > 9 ? '9+' : queriesUnreadCount}
                 </span>
               )}
             </button>

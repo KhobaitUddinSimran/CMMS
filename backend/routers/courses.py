@@ -125,9 +125,9 @@ async def get_lecturer_workloads(
     current_user: User = Depends(get_current_user),
 ):
     """Return current credit load per lecturer for a given semester/academic_year.
-    Cap is per-lecturer (`users.max_credits`, default 9)."""
+    Cap is per-lecturer (`users.max_teaching_credits`; advisory only if NULL)."""
     _require_supabase()
-    if not has_effective_role(current_user, "coordinator", "hod", "admin"):
+    if not has_effective_role(current_user, "coordinator", "hod", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     try:
@@ -153,7 +153,7 @@ async def get_lecturer_workloads(
         # UI workload list isn't empty at semester start.
         staff_resp = (
             supabase.table("users")
-            .select("id, full_name, email, role, special_roles, max_credits")
+            .select("id, full_name, email, role, special_roles, max_teaching_credits")
             .in_("role", ["lecturer", "coordinator", "hod"])
             .execute()
         )
@@ -161,20 +161,21 @@ async def get_lecturer_workloads(
         # merge load for lecturers not returned above (shouldn't happen but safe)
         for lid in list(workload.keys()):
             if not any(s["id"] == lid for s in staff):
-                staff.append({"id": lid, "full_name": "", "email": "", "max_credits": 9})
+                staff.append({"id": lid, "full_name": "", "email": "", "max_teaching_credits": None})
 
         result = []
         for s in staff:
             used = workload.get(s["id"], 0.0)
-            cap = float(s.get("max_credits") or 9)
+            raw_cap = s.get("max_teaching_credits")
+            cap = float(raw_cap) if raw_cap is not None else None
             result.append({
                 "lecturer_id": s["id"],
                 "full_name": s.get("full_name", ""),
                 "email": s.get("email", ""),
                 "used_credits": round(used, 1),
-                "max_credits": cap,
-                "remaining_credits": round(max(0.0, cap - used), 1),
-                "is_full": used >= cap,
+                "max_credits": cap,  # None means no limit set
+                "remaining_credits": round(max(0.0, cap - used), 1) if cap is not None else None,
+                "is_full": (used >= cap) if cap is not None else False,
             })
         return result
     except HTTPException:
@@ -447,12 +448,12 @@ async def assign_lecturer(
     data: dict,
     current_user: User = Depends(get_current_user),
 ):
-    """Assign a lecturer to a course - requires coordinator or admin role"""
+    """Assign a lecturer to a course - requires coordinator, HOD, or admin role"""
     _require_supabase()
-    if not has_effective_role(current_user, "coordinator", "admin"):
+    if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only coordinators and admins can assign lecturers"
+            detail="Only coordinators, HODs, and admins can assign lecturers"
         )
 
     lecturer_id = data.get("lecturer_id")
@@ -474,13 +475,14 @@ async def assign_lecturer(
         if lecturer.get("role") not in ["lecturer", "coordinator", "hod", "admin"]:
             raise HTTPException(status_code=400, detail="User is not a teaching staff member")
 
-        # Enforce per-lecturer credit cap (users.max_credits; default 9)
+        # Enforce per-lecturer credit cap (users.max_teaching_credits; no enforcement if NULL)
         course = course_resp.data[0]
         override = bool(data.get("override")) and has_effective_role(current_user, "hod", "admin")
         override_reason = (data.get("override_reason") or "").strip()
         if course.get("lecturer_id") != lecturer_id:
             course_credits = float(course.get("credits") or 0)
-            cap = float(lecturer.get("max_credits") or 9)
+            raw_cap = lecturer.get("max_teaching_credits")
+            cap = float(raw_cap) if raw_cap is not None else None
             existing_resp = (
                 supabase.table("courses")
                 .select("credits")
@@ -492,7 +494,7 @@ async def assign_lecturer(
                 .execute()
             )
             used_credits = sum(float(c.get("credits") or 0) for c in (existing_resp.data or []))
-            if used_credits + course_credits > cap and not override:
+            if cap is not None and used_credits + course_credits > cap and not override:
                 remaining = max(0, cap - used_credits)
                 raise HTTPException(
                     status_code=400,
@@ -503,7 +505,7 @@ async def assign_lecturer(
                         f"Remaining capacity: {remaining:.0f} credit(s). An HOD or admin can override with a reason."
                     ),
                 )
-            if override and used_credits + course_credits > cap and not override_reason:
+            if cap is not None and override and used_credits + course_credits > cap and not override_reason:
                 raise HTTPException(status_code=400, detail="override_reason is required when overriding the credit cap")
 
         # Update course

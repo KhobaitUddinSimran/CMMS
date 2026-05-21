@@ -82,7 +82,7 @@ export function StudentRoster({ students, onAddStudent, onDropStudent }: Student
             <Users className="w-5 h-5 text-[#2563EB]" />
           </div>
           <div>
-            <h3 className="font-semibold text-[#111827]">Student Roster</h3>
+            <h3 className="font-semibold text-[#111827]">Student List</h3>
             <p className="text-xs text-[#6B7280]">
               {activeStudents.length} active student{activeStudents.length !== 1 ? 's' : ''}
               {droppedStudents.length > 0 && ` · ${droppedStudents.length} dropped`}

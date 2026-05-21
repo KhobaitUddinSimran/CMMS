@@ -10,8 +10,8 @@ import { useToastStore } from '@/stores/toastStore'
 import { listCourses } from '@/lib/api/courses'
 import { listAssessments } from '@/lib/api/assessments'
 import { getEnrolledStudents } from '@/lib/api/enrollments'
-import { getCourseAllMarks, createMark, updateMark, publishMarkIds, unpublishMarkIds } from '@/lib/api/marks'
-import { Save, CheckCircle, Grid3x3, Users, ClipboardList, Lock, LockOpen, TrendingUp, RefreshCw } from 'lucide-react'
+import { getCourseAllMarks, createMark, updateMark, publishMarkIds, unpublishMarkIds, importMarksExcel } from '@/lib/api/marks'
+import { Save, CheckCircle, Grid3x3, Users, ClipboardList, Lock, LockOpen, TrendingUp, RefreshCw, Upload, X, AlertTriangle } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CourseOption { id: string; label: string }
@@ -72,6 +72,10 @@ function SmartGridInner() {
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState<string | null>(null)
   const [unpublishing, setUnpublishing] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: any[] } | null>(null)
 
   // ── Load courses ───────────────────────────────────────────────
   useEffect(() => {
@@ -262,6 +266,28 @@ function SmartGridInner() {
     } finally { setPublishing(null) }
   }
 
+  // ── Excel import ───────────────────────────────────────────────
+  const handleExcelImport = async () => {
+    if (!importFile || !selectedCourseId) return
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const result = await importMarksExcel(selectedCourseId, importFile)
+      setImportResult(result)
+      if (result.imported > 0) {
+        addToast(`Imported ${result.imported} mark${result.imported !== 1 ? 's' : ''}`, 'success')
+        await loadGrid(selectedCourseId)
+      }
+      if (result.errors.length > 0) {
+        addToast(`${result.errors.length} row${result.errors.length !== 1 ? 's' : ''} had errors`, 'error')
+      }
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || 'Import failed', 'error')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   // ── Derived stats ─────────────────────────────────────────────
   const allCells = Object.values(grid).flatMap(Object.values)
   const draftCount = allCells.filter((c) => c.markId && c.status === 'draft').length
@@ -357,6 +383,14 @@ function SmartGridInner() {
                       : <span className="text-[#6B7280]">All changes saved</span>}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
+                    {/* Import Excel */}
+                    <button
+                      onClick={() => { setShowImport(true); setImportFile(null); setImportResult(null) }}
+                      className="flex items-center gap-1.5 px-3 py-2 border border-[#E5E7EB] bg-white hover:bg-[#F9FAFB] text-[#374151] rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Import Excel
+                    </button>
                     {/* Reload */}
                     <button
                       onClick={() => loadGrid(selectedCourseId)}
@@ -553,6 +587,71 @@ function SmartGridInner() {
           </>
         )}
       </div>
+
+      {/* Excel Import Modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
+              <h2 className="text-[18px] font-bold text-[#111827]">Import Marks from Excel</h2>
+              <button onClick={() => setShowImport(false)} className="text-[#9CA3AF] hover:text-[#111827]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-[12px] text-blue-700 space-y-1">
+                <p className="font-semibold">Expected format:</p>
+                <p>Column 1: <code className="bg-blue-100 px-1 rounded">email</code> or <code className="bg-blue-100 px-1 rounded">matric_number</code></p>
+                <p>Remaining columns: assessment names (must match exactly)</p>
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium text-[#374151] mb-2">Select .xlsx file</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportResult(null) }}
+                  className="w-full text-sm text-[#374151] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#C90031] file:text-white hover:file:bg-[#A80028] cursor-pointer"
+                />
+              </div>
+              {importResult && (
+                <div className={`rounded-lg p-3 text-[12px] space-y-1 ${
+                  importResult.errors.length > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'
+                }`}>
+                  <p className="font-semibold text-[#111827]">
+                    ✓ Imported: {importResult.imported} &nbsp;·&nbsp; Skipped: {importResult.skipped}
+                  </p>
+                  {importResult.errors.length > 0 && (
+                    <div className="mt-2 space-y-0.5 max-h-32 overflow-y-auto">
+                      {importResult.errors.map((e, i) => (
+                        <p key={i} className="flex items-start gap-1 text-amber-700">
+                          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                          Row {e.row}{e.identifier ? ` (${e.identifier})` : ''}{e.col ? ` [${e.col}]` : ''}: {e.error}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-[#E5E7EB]">
+              <button onClick={() => setShowImport(false)}
+                className="px-4 py-2 border border-[#E5E7EB] rounded-lg text-[14px] text-[#374151] hover:bg-[#F9FAFB]">
+                {importResult ? 'Close' : 'Cancel'}
+              </button>
+              {!importResult && (
+                <button
+                  onClick={handleExcelImport}
+                  disabled={!importFile || importing}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#C90031] hover:bg-[#A80028] text-white text-[14px] font-medium rounded-lg disabled:opacity-50"
+                >
+                  {importing ? <Spinner /> : <Upload className="w-4 h-4" />}
+                  {importing ? 'Importing…' : 'Import'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   )
 }

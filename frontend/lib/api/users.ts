@@ -11,6 +11,8 @@ export interface UserData {
   email_verified: boolean
   approval_status: string
   special_roles?: string[]
+  matric_number?: string | null
+  max_teaching_credits?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -84,6 +86,19 @@ export async function changePassword(
   const response = await apiClient.post('/users/password-change', {
     old_password: oldPassword,
     new_password: newPassword,
+  })
+  return response.data
+}
+
+/**
+ * Set or clear the per-semester teaching credit cap for a lecturer (coordinator/hod/admin only)
+ */
+export async function updateTeachingCredits(
+  userId: string,
+  maxCredits: number | null
+): Promise<{ user_id: string; max_teaching_credits: number | null }> {
+  const response = await apiClient.patch(`/users/${userId}/teaching-credits`, {
+    max_credits: maxCredits,
   })
   return response.data
 }

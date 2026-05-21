@@ -1,142 +1,128 @@
 'use client'
 
-import { useState } from 'react'
-import { useToast } from '@/lib/contexts/toast-context'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/lib/contexts/auth-context'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
-import { Bell, Lock, Eye, Database } from 'lucide-react'
+import { Spinner } from '@/components/common/Spinner'
+import { Lock, User, ShieldCheck, LogOut, ChevronRight } from 'lucide-react'
+import { getCurrentUser, type UserData } from '@/lib/api/users'
 
 export default function SettingsPage() {
-  const { showToast } = useToast()
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
-  const [emailDigest, setEmailDigest] = useState('weekly')
-  const [darkMode, setDarkMode] = useState(false)
+  const { user, logout } = useAuth()
+  const router = useRouter()
 
-  const handleSave = () => {
-    showToast('success', 'Settings saved successfully!')
+  const [profileData, setProfileData] = useState<UserData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getCurrentUser()
+      .then(setProfileData)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleLogout = () => {
+    logout()
+    router.push('/')
   }
+
+  const displayName  = profileData?.full_name || user?.name || '—'
+  const displayEmail = profileData?.email || user?.email || '—'
+  const displayRole  = profileData?.role || user?.role || '—'
+
+  const settingRows = [
+    {
+      icon: <User className="w-5 h-5 text-[#9CA3AF]" />,
+      label: 'Edit Profile',
+      description: 'Update your display name and view account details',
+      onClick: () => router.push('/profile'),
+    },
+    {
+      icon: <Lock className="w-5 h-5 text-[#9CA3AF]" />,
+      label: 'Change Password',
+      description: 'Update your account password',
+      onClick: () => router.push('/password-change'),
+    },
+  ]
 
   return (
     <MainLayout>
-    <div className="space-y-8 max-w-4xl mx-auto">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-2">Customize your preferences and account settings</p>
-      </div>
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <div className="pt-4">
+          <h1 className="text-[32px] font-bold text-[#111827]">Settings</h1>
+          <p className="text-[16px] text-[#6B7280] mt-1">Manage your account preferences</p>
+        </div>
 
-      {/* Notifications Section */}
-      <Card>
-        <div className="p-6 border-b">
-          <div className="flex items-center gap-3 mb-2">
-            <Bell className="w-5 h-5 text-blue-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Notifications</h2>
-          </div>
-          <p className="text-gray-600 text-sm">Manage how you receive updates</p>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-gray-900">Enable Notifications</p>
-              <p className="text-sm text-gray-600">Receive system notifications</p>
+        {/* Account summary */}
+        <Card>
+          <div className="pb-4 border-b border-[#E5E7EB] mb-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#C90031]" />
+              <h2 className="text-[14px] font-semibold text-[#111827]">Account</h2>
             </div>
-            <input type="checkbox" checked={notificationsEnabled} onChange={(e) => setNotificationsEnabled(e.target.checked)} className="w-5 h-5" />
           </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-gray-900">Email Digest</p>
-              <p className="text-sm text-gray-600">Receive summary emails</p>
+          {loading ? (
+            <div className="flex justify-center py-6"><Spinner /></div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#C90031] flex items-center justify-center flex-shrink-0">
+                <span className="text-base font-bold text-white">
+                  {displayName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold text-[#111827] truncate">{displayName}</p>
+                <p className="text-[13px] text-[#6B7280] truncate">{displayEmail}</p>
+                <p className="text-[12px] text-[#9CA3AF] capitalize mt-0.5">{displayRole}</p>
+              </div>
             </div>
-            <select value={emailDigest} onChange={(e) => setEmailDigest(e.target.value)} className="px-3 py-2 border rounded-lg bg-white">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="never">Never</option>
-            </select>
-          </div>
-        </div>
-      </Card>
+          )}
+        </Card>
 
-      {/* Privacy & Security Section */}
-      <Card>
-        <div className="p-6 border-b">
-          <div className="flex items-center gap-3 mb-2">
-            <Lock className="w-5 h-5 text-green-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Privacy & Security</h2>
-          </div>
-          <p className="text-gray-600 text-sm">Manage your privacy and security settings</p>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-gray-900">Two-Factor Authentication</p>
-              <p className="text-sm text-gray-600">Add extra security to your account</p>
+        {/* Settings links */}
+        <Card>
+          <div className="pb-4 border-b border-[#E5E7EB] mb-2">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-[#C90031]" />
+              <h2 className="text-[14px] font-semibold text-[#111827]">Profile & Security</h2>
             </div>
-            <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              Set Up
-            </button>
           </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-gray-900">Active Sessions</p>
-              <p className="text-sm text-gray-600">Manage your active sessions</p>
-            </div>
-            <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              View
-            </button>
+          <div className="divide-y divide-[#F3F4F6]">
+            {settingRows.map((row) => (
+              <button
+                key={row.label}
+                onClick={row.onClick}
+                className="w-full flex items-center gap-4 py-3.5 text-left hover:bg-[#F9FAFB] rounded-lg px-1 transition-colors group"
+              >
+                <div className="flex-shrink-0">{row.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-medium text-[#111827]">{row.label}</p>
+                  <p className="text-[12px] text-[#9CA3AF] mt-0.5">{row.description}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#D1D5DB] group-hover:text-[#9CA3AF] flex-shrink-0" />
+              </button>
+            ))}
           </div>
-        </div>
-      </Card>
+        </Card>
 
-      {/* Display Section */}
-      <Card>
-        <div className="p-6 border-b">
-          <div className="flex items-center gap-3 mb-2">
-            <Eye className="w-5 h-5 text-purple-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Display</h2>
-          </div>
-          <p className="text-gray-600 text-sm">Customize your display preferences</p>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-gray-900">Dark Mode</p>
-              <p className="text-sm text-gray-600">Use dark theme</p>
+        {/* Sign out */}
+        <Card>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-4 py-3 text-left hover:bg-red-50 rounded-lg px-1 transition-colors group"
+          >
+            <LogOut className="w-5 h-5 text-[#EF4444] flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-[14px] font-medium text-[#EF4444]">Sign Out</p>
+              <p className="text-[12px] text-[#9CA3AF] mt-0.5">Sign out of your CMMS account</p>
             </div>
-            <input type="checkbox" checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} className="w-5 h-5" />
-          </div>
-        </div>
-      </Card>
-
-      {/* Data Section */}
-      <Card>
-        <div className="p-6 border-b">
-          <div className="flex items-center gap-3 mb-2">
-            <Database className="w-5 h-5 text-red-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Data</h2>
-          </div>
-          <p className="text-gray-600 text-sm">Manage your data and exports</p>
-        </div>
-        <div className="p-6 space-y-4">
-          <button className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-left">
-            Download Your Data
           </button>
-          <button className="w-full px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors text-left">
-            Delete Account
-          </button>
-        </div>
-      </Card>
+        </Card>
 
-      {/* Save Button */}
-      <div className="flex justify-end gap-3">
-        <button className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
-          Cancel
-        </button>
-        <button onClick={handleSave} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors font-medium">
-          Save Changes
-        </button>
+        <p className="text-center text-[11px] text-[#D1D5DB]">CMMS v5.0 · Universiti Teknologi Malaysia</p>
       </div>
-    </div>
     </MainLayout>
   )
 }

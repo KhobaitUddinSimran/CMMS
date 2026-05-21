@@ -1,9 +1,11 @@
 """Mark endpoints - Supabase Edition"""
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, List
+import io
+import openpyxl
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
@@ -61,6 +63,134 @@ def _assert_grade_window_open(course_id: str):
 
 router = APIRouter(prefix="/api/marks", tags=["marks"])
 logger = logging.getLogger(__name__)
+
+
+# ==================== Excel Import ====================
+@router.post("/course/{course_id}/import")
+async def import_marks_excel(
+    course_id: str,
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    """Import marks from an Excel file (.xlsx).
+    Expected columns: student_email (or matric_number), then one column per assessment name.
+    Returns: { imported, skipped, errors }
+    """
+    _require_supabase()
+    if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        contents = await file.read()
+        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            raise HTTPException(status_code=400, detail="Empty spreadsheet")
+
+        headers = [str(h).strip() if h is not None else "" for h in rows[0]]
+        if not headers:
+            raise HTTPException(status_code=400, detail="No headers found in spreadsheet")
+
+        # Identify the student identifier column
+        id_col = None
+        id_type = None
+        for i, h in enumerate(headers):
+            if h.lower() in ("email", "student_email"):
+                id_col, id_type = i, "email"
+                break
+            if h.lower() in ("matric", "matric_number", "matric number"):
+                id_col, id_type = i, "matric"
+                break
+        if id_col is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Sheet must have a column named 'email' or 'matric_number'"
+            )
+
+        # Load assessments for this course
+        a_resp = supabase.table("assessments").select("id, name, max_score").eq("course_id", course_id).execute()
+        assessments = {a["name"].strip().lower(): a for a in (a_resp.data or [])}
+
+        # Map header column index → assessment
+        col_to_assessment: dict = {}
+        for i, h in enumerate(headers):
+            if i == id_col:
+                continue
+            key = h.lower()
+            if key in assessments:
+                col_to_assessment[i] = assessments[key]
+
+        if not col_to_assessment:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No matching assessment columns found. Course has: {list(assessments.keys())}"
+            )
+
+        imported, skipped = 0, 0
+        errors: list = []
+
+        for row_idx, row in enumerate(rows[1:], start=2):
+            student_identifier = row[id_col] if row[id_col] is not None else ""
+            if not str(student_identifier).strip():
+                skipped += 1
+                continue
+
+            # Look up student
+            if id_type == "email":
+                u_resp = supabase.table("users").select("id").ilike("email", str(student_identifier).strip()).execute()
+            else:
+                u_resp = supabase.table("users").select("id").eq("matric_number", str(student_identifier).strip()).execute()
+
+            if not u_resp.data:
+                errors.append({"row": row_idx, "identifier": str(student_identifier), "error": "Student not found"})
+                skipped += 1
+                continue
+
+            student_id = u_resp.data[0]["id"]
+
+            for col_idx, assessment in col_to_assessment.items():
+                raw_val = row[col_idx] if col_idx < len(row) else None
+                if raw_val is None or str(raw_val).strip() == "":
+                    continue
+                try:
+                    score = float(str(raw_val).strip())
+                except ValueError:
+                    errors.append({"row": row_idx, "col": headers[col_idx], "error": f"Invalid score: {raw_val}"})
+                    continue
+
+                max_s = float(assessment.get("max_score") or 100)
+                if score < 0 or score > max_s:
+                    errors.append({"row": row_idx, "col": headers[col_idx], "error": f"Score {score} out of range [0, {max_s}]"})
+                    continue
+
+                # Upsert mark
+                existing = (
+                    supabase.table("marks")
+                    .select("id")
+                    .eq("student_id", student_id)
+                    .eq("assessment_id", assessment["id"])
+                    .execute()
+                )
+                if existing.data:
+                    supabase.table("marks").update({"raw_score": score, "status": "draft"}).eq("id", existing.data[0]["id"]).execute()
+                else:
+                    supabase.table("marks").insert({
+                        "student_id": student_id,
+                        "assessment_id": assessment["id"],
+                        "raw_score": score,
+                        "status": "draft",
+                    }).execute()
+                imported += 1
+
+        logger.info(f"Excel import: course={course_id} imported={imported} skipped={skipped} errors={len(errors)}")
+        return {"imported": imported, "skipped": skipped, "errors": errors}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Excel import error for course {course_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
 
 # ==================== Request Models ====================

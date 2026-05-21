@@ -236,7 +236,7 @@ export default function LecturerDashboard() {
                   <div className="flex items-center gap-2">
                     <button onClick={() => router.push(`/roster?course=${course.id}`)}
                       className="px-3 py-1.5 text-xs font-medium text-[#2563EB] border border-[#BFDBFE] rounded-lg hover:bg-blue-50 transition-colors">
-                      Roster
+                      Student List
                     </button>
                     <button onClick={() => router.push(`/smart-grid?course=${course.id}`)}
                       className="px-3 py-1.5 text-xs font-medium text-[#C90031] border border-[#FECDD3] rounded-lg hover:bg-red-50 transition-colors">

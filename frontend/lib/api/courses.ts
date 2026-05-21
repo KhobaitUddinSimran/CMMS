@@ -129,13 +129,14 @@ export interface LecturerWorkload {
   full_name: string
   email: string
   used_credits: number
-  remaining_credits: number
+  max_credits: number | null
+  remaining_credits: number | null
   is_full: boolean
 }
 
 /**
  * Get credit load per lecturer for a given semester/academic_year.
- * Max allowed: 9 credits per lecturer per semester.
+ * Cap is per-lecturer (users.max_teaching_credits); null means no limit.
  */
 export async function getLecturerWorkloads(
   semester?: string | number,

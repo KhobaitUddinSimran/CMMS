@@ -142,6 +142,18 @@ export async function getStudentCarryTotal(studentId: string): Promise<CarryTota
 }
 
 /**
+ * Import marks from an Excel file (new endpoint)
+ */
+export async function importMarksExcel(courseId: string, file: File): Promise<{ imported: number; skipped: number; errors: Array<{ row: number; identifier?: string; col?: string; error: string }> }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await apiClient.post(`/marks/course/${courseId}/import`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data
+}
+
+/**
  * Bulk import marks from Excel
  */
 export async function bulkImportMarks(courseId: string, file: File): Promise<any> {

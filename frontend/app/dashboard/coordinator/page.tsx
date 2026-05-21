@@ -192,7 +192,7 @@ export default function CoordinatorDashboard() {
         {[
           { label: 'Create Course', desc: 'Add a new course', icon: Plus, color: 'bg-[#C90031]', href: '/courses/create' },
           { label: 'Course Management', desc: 'Assign & manage lecturers', icon: Layers, color: 'bg-[#0284C7]', href: '/course-management' },
-          { label: 'Upload Roster', desc: 'Import students via Excel', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
+          { label: 'Student List', desc: 'Import students via Excel', icon: Upload, color: 'bg-[#2563EB]', href: '/roster' },
           { label: 'Assessment Config', desc: 'Set grading schema', icon: ClipboardList, color: 'bg-[#7C3AED]', href: '/assessment-config' },
           { label: 'View Reports', desc: 'Export & analyse data', icon: BarChart3, color: 'bg-[#059669]', href: '/reports' },
         ].map((action) => (
@@ -274,7 +274,7 @@ export default function CoordinatorDashboard() {
                         <button
                           onClick={() => router.push(`/courses/${course.id}/manage`)}
                           className="p-1.5 text-[#6B7280] hover:text-[#2563EB] hover:bg-blue-50 rounded transition-colors"
-                          title="Manage Roster"
+                          title="Manage Student List"
                         >
                           <Users className="w-4 h-4" />
                         </button>

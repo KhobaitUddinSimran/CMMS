@@ -11,7 +11,7 @@ import {
 } from '@/lib/api/semester'
 import {
   CalendarDays, Plus, Trash2, ChevronLeft, ChevronRight,
-  GraduationCap, BookOpen, Flag, AlertCircle, X,
+  GraduationCap, BookOpen, AlertCircle, X,
 } from 'lucide-react'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -65,10 +65,6 @@ function MiniCalendar({ year, month, timelines }: MiniCalendarProps) {
       if (tl.grade_submission_deadline) {
         const gd = parseDate(tl.grade_submission_deadline)
         if (gd && sameDay(date, gd)) dots.push({ color: 'bg-purple-500', label: 'Grade Deadline' })
-      }
-      if (tl.final_deadline) {
-        const fd = parseDate(tl.final_deadline)
-        if (fd && sameDay(date, fd)) dots.push({ color: 'bg-blue-500', label: 'Finals' })
       }
     }
     return dots
@@ -140,7 +136,6 @@ function TimelineBar({ tl }: { tl: SemesterTimeline }) {
   const milestones = [
     { date: parseDate(tl.midterm_deadline),            color: 'bg-amber-400',  label: 'Midterm' },
     { date: parseDate(tl.grade_submission_deadline),   color: 'bg-purple-500', label: 'Grades Due' },
-    { date: parseDate(tl.final_deadline),              color: 'bg-blue-500',   label: 'Finals' },
   ].filter(m => m.date !== null)
 
   const todayPct = pct(new Date())
@@ -192,7 +187,6 @@ const EMPTY_FORM: SemesterTimelineInput = {
   end_date: '',
   midterm_deadline: '',
   grade_submission_deadline: '',
-  final_deadline: '',
   notes: '',
 }
 
@@ -230,7 +224,6 @@ export default function SemesterTimelinePage() {
         end_date: tl.end_date,
         midterm_deadline: tl.midterm_deadline || '',
         grade_submission_deadline: tl.grade_submission_deadline || '',
-        final_deadline: tl.final_deadline || '',
         notes: tl.notes || '',
       })
     } else {
@@ -291,7 +284,7 @@ export default function SemesterTimelinePage() {
       <div className="flex items-start justify-between pt-4">
         <div>
           <h1 className="text-[32px] font-bold text-[#111827]">Semester Timeline</h1>
-          <p className="text-[16px] text-[#6B7280] mt-1">Configure semester dates and key academic deadlines</p>
+          <p className="text-[16px] text-[#6B7280] mt-1">Configure coursework deadlines and semester dates</p>
         </div>
         <button
           onClick={() => openForm()}
@@ -358,11 +351,6 @@ export default function SemesterTimelinePage() {
                       <BookOpen className="w-3 h-3" /> Midterm: {tl.midterm_deadline}
                     </span>
                   )}
-                  {tl.final_deadline && (
-                    <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
-                      <Flag className="w-3 h-3" /> Finals: {tl.final_deadline}
-                    </span>
-                  )}
                   {tl.grade_submission_deadline && (
                     <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-purple-50 text-purple-700 rounded-full border border-purple-200">
                       <AlertCircle className="w-3 h-3" /> Grades Due: {tl.grade_submission_deadline}
@@ -404,7 +392,6 @@ export default function SemesterTimelinePage() {
                 { color: 'bg-emerald-500', label: 'Semester Start' },
                 { color: 'bg-red-500',     label: 'Semester End' },
                 { color: 'bg-amber-500',   label: 'Midterm Deadline' },
-                { color: 'bg-blue-500',    label: 'Finals Deadline' },
                 { color: 'bg-purple-500',  label: 'Grade Submission' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-2">
@@ -474,11 +461,10 @@ export default function SemesterTimelinePage() {
               </div>
 
               <div className="border-t border-[#F3F4F6] pt-3">
-                <p className="text-[12px] font-semibold text-[#9CA3AF] uppercase tracking-wide mb-3">Key Deadlines</p>
+                <p className="text-[12px] font-semibold text-[#9CA3AF] uppercase tracking-wide mb-3">Coursework Deadlines</p>
                 <div className="space-y-3">
                   {[
                     { key: 'midterm_deadline',          label: 'Midterm Deadline' },
-                    { key: 'final_deadline',            label: 'Finals Deadline' },
                     { key: 'grade_submission_deadline', label: 'Grade Submission Deadline' },
                   ].map(({ key, label }) => (
                     <div key={key}>

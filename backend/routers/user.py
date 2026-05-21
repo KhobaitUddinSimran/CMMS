@@ -44,6 +44,49 @@ async def list_users(
         logger.error(f"Error listing users: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to list users")
 
+class SetTeachingCreditsRequest(BaseModel):
+    max_credits: int | None = None
+
+@router.patch("/{user_id}/teaching-credits")
+async def set_teaching_credits(
+    user_id: str,
+    request: SetTeachingCreditsRequest,
+    current_user = Depends(get_current_user),
+):
+    """Set or clear the per-semester teaching credit cap for a lecturer.
+    Accessible by coordinator, hod, or admin only."""
+    from ..core.config import supabase
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    # Permission check
+    role = current_user.get("role", "")
+    special = current_user.get("special_roles", [])
+    allowed = role in ("admin",) or any(r in special for r in ("coordinator", "hod")) or role in ("coordinator", "hod")
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    # Validate value
+    if request.max_credits is not None and request.max_credits < 1:
+        raise HTTPException(status_code=400, detail="max_credits must be at least 1, or null for no limit")
+
+    try:
+        resp = supabase.table("users").update(
+            {"max_teaching_credits": request.max_credits}
+        ).eq("id", user_id).execute()
+
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Lecturer not found")
+
+        logger.info(f"Teaching credits for {user_id} set to {request.max_credits} by {current_user.get('user_id')}")
+        return {"user_id": user_id, "max_teaching_credits": request.max_credits}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting teaching credits: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update teaching credits")
+
+
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str

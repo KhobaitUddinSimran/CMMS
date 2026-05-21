@@ -181,7 +181,7 @@ function LecturerView({
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100 transition-colors"
             >
               <Upload className="w-4 h-4" />
-              Roster
+              Student List
             </button>
             <button
               onClick={() => router.push('/assessment-setup')}
@@ -319,7 +319,7 @@ function LecturerView({
                   onClick={() => router.push('/roster')}
                   className="flex items-center gap-1.5 text-sm text-[#C90031] font-medium hover:underline"
                 >
-                  <Upload className="w-3.5 h-3.5" /> Upload Roster
+                  <Upload className="w-3.5 h-3.5" /> Upload Student List
                 </button>
               </div>
               {activeStudents.length === 0 ? (
@@ -327,11 +327,11 @@ function LecturerView({
                   <div className="text-center py-14 text-[#6B7280]">
                     <Users className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                     <p className="font-medium">No students enrolled yet</p>
-                    <p className="text-sm mt-1">Upload an Excel roster to enroll students</p>
+                    <p className="text-sm mt-1">Upload an Excel file to enroll students</p>
                     <button
                       onClick={() => router.push('/roster')}
                       className="mt-4 text-sm text-[#C90031] font-medium hover:underline"
-                    >Upload Roster →</button>
+                    >Upload Student List →</button>
                   </div>
                 </Card>
               ) : (

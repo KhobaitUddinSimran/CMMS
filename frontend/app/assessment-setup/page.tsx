@@ -10,7 +10,8 @@ import { AssessmentForm, type AssessmentFormData } from '@/components/assessment
 import { useToastStore } from '@/stores/toastStore'
 import { listCourses } from '@/lib/api/courses'
 import { listAssessments, createAssessment, deleteAssessment, lockAssessmentSchema } from '@/lib/api/assessments'
-import { Lock } from 'lucide-react'
+import { getCarryTotals, type CarryTotalData } from '@/lib/api/marks'
+import { Lock, TrendingUp, ClipboardList } from 'lucide-react'
 
 interface CourseData {
   id: string
@@ -35,6 +36,9 @@ export default function AssessmentSetupPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [loadingAssessments, setLoadingAssessments] = useState(false)
   const [loadingCreate, setLoadingCreate] = useState(false)
+  const [activeTab, setActiveTab] = useState<'config' | 'carry'>('config')
+  const [carryTotals, setCarryTotals] = useState<CarryTotalData[]>([])
+  const [loadingCarry, setLoadingCarry] = useState(false)
 
   useEffect(() => {
     loadCourses()
@@ -123,6 +127,18 @@ export default function AssessmentSetupPage() {
     }
   }
 
+  const loadCarryTotals = async (courseId: string) => {
+    setLoadingCarry(true)
+    try {
+      const data = await getCarryTotals(courseId)
+      setCarryTotals(Array.isArray(data) ? data : [])
+    } catch {
+      addToast('Failed to load carry totals', 'error')
+    } finally {
+      setLoadingCarry(false)
+    }
+  }
+
   const courseOptions = courses.map((c) => ({
     label: `${c.code}-${c.section} (${c.year}, Sem ${c.semester})`,
     value: c.id,
@@ -155,8 +171,96 @@ export default function AssessmentSetupPage() {
 
         {selectedCourseId && selectedCourse && (
           <>
-            {/* Schema Status */}
-            {selectedCourse.assessment_schema_locked && (
+            {/* Tab switcher */}
+            <div className="flex items-center gap-1 bg-[#F3F4F6] rounded-lg p-1 w-fit">
+              <button
+                onClick={() => setActiveTab('config')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-medium transition-colors ${
+                  activeTab === 'config' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'
+                }`}
+              >
+                <ClipboardList className="w-4 h-4" />
+                Assessment Config
+              </button>
+              <button
+                onClick={() => { setActiveTab('carry'); loadCarryTotals(selectedCourseId) }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-medium transition-colors ${
+                  activeTab === 'carry' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                Carry Marks Summary
+              </button>
+            </div>
+            {activeTab === 'carry' && (
+              <Card>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-[#111827]">Carry Marks Summary</h3>
+                      <p className="text-[13px] text-[#6B7280] mt-0.5">Cumulative carry % per student (published marks only)</p>
+                    </div>
+                    <button
+                      onClick={() => loadCarryTotals(selectedCourseId)}
+                      className="text-[13px] text-[#6B7280] border border-[#E5E7EB] px-3 py-1.5 rounded-lg hover:bg-[#F9FAFB]"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  {loadingCarry ? (
+                    <div className="flex justify-center py-10"><Spinner /></div>
+                  ) : carryTotals.length === 0 ? (
+                    <div className="text-center py-10">
+                      <TrendingUp className="w-10 h-10 text-[#D1D5DB] mx-auto mb-3" />
+                      <p className="text-[#6B7280]">No published marks yet for this course</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
+                            <th className="text-left px-4 py-2.5 font-semibold text-[#374151]">#</th>
+                            <th className="text-left px-4 py-2.5 font-semibold text-[#374151]">Student</th>
+                            <th className="text-right px-4 py-2.5 font-semibold text-[#374151]">Carry %</th>
+                            <th className="text-left px-4 py-2.5 font-semibold text-[#374151]">Grade Band</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...carryTotals]
+                            .sort((a, b) => b.carry_total - a.carry_total)
+                            .map((row, i) => {
+                              const pct = Number(row.carry_total)
+                              const band = pct >= 70 ? { label: 'Strong', cls: 'bg-green-100 text-green-700' }
+                                : pct >= 50 ? { label: 'Satisfactory', cls: 'bg-amber-100 text-amber-700' }
+                                : { label: 'At Risk', cls: 'bg-red-100 text-red-700' }
+                              return (
+                                <tr key={row.student_id} className={`border-b border-[#E5E7EB] last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
+                                  <td className="px-4 py-2.5 text-[#9CA3AF] text-[13px]">{i + 1}</td>
+                                  <td className="px-4 py-2.5">
+                                    <p className="font-medium text-[#111827]">{row.student_name || '—'}</p>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right">
+                                    <span className={`font-bold text-[15px] ${
+                                      pct >= 70 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'
+                                    }`}>
+                                      {isNaN(pct) ? '—' : pct.toFixed(1) + '%'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${band.cls}`}>{band.label}</span>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {activeTab === 'config' && selectedCourse.assessment_schema_locked && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex gap-3">
                 <Lock className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                 <div>
@@ -168,7 +272,7 @@ export default function AssessmentSetupPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {activeTab === 'config' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Assessment Form */}
               {!selectedCourse.assessment_schema_locked && (
                 <div className="lg:col-span-1">
@@ -252,7 +356,7 @@ export default function AssessmentSetupPage() {
                   </div>
                 </Card>
               </div>
-            </div>
+            </div>}
           </>
         )}
 
