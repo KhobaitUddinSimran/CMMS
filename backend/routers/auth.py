@@ -1,5 +1,6 @@
 """Authentication endpoints — fully database-backed (Supabase)"""
 import logging
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter
@@ -8,6 +9,7 @@ from ..core.security import hash_password, verify_password, create_access_token
 from ..core.config import supabase
 from ..models.user import User
 from ..dependencies.auth import get_current_user
+from ..services.email_service import EmailService
 from datetime import datetime, timedelta
 import uuid
 import os
@@ -111,8 +113,16 @@ async def login(request: Request, credentials: LoginRequest):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
         if not db_user.get("is_active", False):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail="Account not approved yet. Please wait for admin approval.")
+            # Check if student needs email verification
+            if db_user.get("role") == "student" and not db_user.get("email_verified"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Please verify your email before logging in. Check your inbox for the verification link."
+                )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account not approved yet. Please wait for admin approval."
+            )
 
         db_role = db_user["role"]
         # Use special_roles from DB if present; fall back to deriving from role for old rows
@@ -187,40 +197,101 @@ async def signup(request: Request, signup_data: SignupRequest):
         if existing.data:
             raise HTTPException(status_code=409, detail="Email already registered")
 
-        user_id = str(uuid.uuid4())
-        # Store pending, unverified, inactive. Admin approval + OTP email
-        # verification are the two separate gates before login works.
-        supabase.table("users").insert({
-            "id": user_id,
-            "email": email_lc,
-            "full_name": signup_data.full_name,
-            "role": signup_data.role,
-            "password_hash": hash_password(signup_data.password),
-            "is_active": False,
-            "approval_status": "pending",
-            "email_verified": False,  # must complete OTP step after signup
-            "matric_number": signup_data.matric_number or None,
-        }).execute()
+        # Different flows for students vs lecturers
+        if signup_data.role == "student":
+            # Student flow: Magic link verification (no admin approval needed)
+            # Use atomic RPC to ensure both user and OTP are created together, or neither
+            verification_token = secrets.token_urlsafe(32)
+            expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
 
-        # Audit trail — "actor" is the new user themselves (self-registration)
-        try:
-            supabase.table("audit_logs").insert({
-                "user_id": user_id,
-                "action": "USER_SIGNED_UP",
-                "entity_type": "users",
-                "entity_id": user_id,
-                "new_values": {"email": email_lc, "role": signup_data.role},
+            try:
+                # Call the atomic signup function via RPC
+                result = supabase.rpc("signup_student", {
+                    "p_email": email_lc,
+                    "p_full_name": signup_data.full_name,
+                    "p_password_hash": hash_password(signup_data.password),
+                    "p_matric_number": signup_data.matric_number or None,
+                    "p_role": signup_data.role,
+                    "p_verification_token": verification_token,
+                    "p_expires_at": expires_at
+                }).execute()
+
+                if not result.data:
+                    raise HTTPException(status_code=500, detail="Failed to create account")
+
+                user_id = result.data[0]["user_id"]
+
+            except Exception as rpc_err:
+                error_str = str(rpc_err)
+                logger.error(f"Atomic signup failed: {rpc_err}")
+                # Check for specific constraint violations
+                if "matric_number" in error_str and ("duplicate" in error_str or "23505" in error_str):
+                    raise HTTPException(status_code=409, detail="This matric number is already registered.")
+                if "email" in error_str and ("duplicate" in error_str or "23505" in error_str):
+                    raise HTTPException(status_code=409, detail="This email is already registered.")
+                raise HTTPException(status_code=500, detail="Failed to create account. Please try again.")
+
+            # Send verification email (after successful DB transaction)
+            try:
+                asyncio.create_task(EmailService.send_verification_email(
+                    email_lc, signup_data.full_name, verification_token
+                ))
+            except Exception as email_err:
+                logger.warning(f"Verification email failed for {email_lc}: {email_err}")
+                # Note: User record exists but email failed. They can use resend verification.
+
+            logger.info(f"New student signup {email_lc} - verification email sent")
+            return SignupResponse(user_id=user_id, approval_status="pending_verification")
+
+        else:
+            # Lecturer flow: Admin approval required
+            user_id = str(uuid.uuid4())
+            supabase.table("users").insert({
+                "id": user_id,
+                "email": email_lc,
+                "full_name": signup_data.full_name,
+                "role": signup_data.role,
+                "password_hash": hash_password(signup_data.password),
+                "is_active": False,
+                "approval_status": "pending",
+                "email_verified": False,
+                "matric_number": signup_data.matric_number or None,
             }).execute()
-        except Exception:
-            pass
 
-        logger.info(f"New signup {email_lc} persisted to Supabase (role={signup_data.role}, pending)")
-        return SignupResponse(user_id=user_id, approval_status="pending")
+            # Audit trail
+            try:
+                supabase.table("audit_logs").insert({
+                    "user_id": user_id,
+                    "action": "USER_SIGNED_UP",
+                    "entity_type": "users",
+                    "entity_id": user_id,
+                    "new_values": {"email": email_lc, "role": signup_data.role},
+                }).execute()
+            except Exception:
+                pass
+
+            logger.info(f"New lecturer signup {email_lc} persisted to Supabase (pending admin approval)")
+
+            # Send signup confirmation email (pending admin review)
+            try:
+                asyncio.create_task(EmailService.send_signup_confirmation(
+                    email_lc, signup_data.full_name, signup_data.role
+                ))
+            except Exception as email_err:
+                logger.warning(f"Signup confirmation email failed for {email_lc}: {email_err}")
+
+            return SignupResponse(user_id=user_id, approval_status="pending")
 
     except HTTPException:
         raise
     except Exception as e:
+        error_str = str(e)
         logger.error(f"Signup error: {e}")
+        # Check for specific database constraint violations
+        if "matric_number" in error_str and ("duplicate" in error_str or "23505" in error_str):
+            raise HTTPException(status_code=409, detail="This matric number is already registered. Please use a different one or contact support if this is your account.")
+        if "email" in error_str and ("duplicate" in error_str or "23505" in error_str):
+            raise HTTPException(status_code=409, detail="This email is already registered.")
         raise HTTPException(status_code=500, detail="Signup service error")
 
 
@@ -299,7 +370,6 @@ async def check_approval_status(user_id: str):
 @router.post("/password-reset", response_model=PasswordResetResponse)
 async def password_reset(request: PasswordResetRequest):
     """Request password reset."""
-    from ..services.email_service import EmailService
     email = request.email.lower().strip()
 
     user_exists = False
@@ -407,3 +477,151 @@ async def reset_password(request: ResetPasswordRequest):
 
     logger.info(f"Password reset successful for {email}")
     return ResetPasswordResponse(success=True, message="Password reset successfully. You can now log in.")
+
+
+# ==================== EMAIL VERIFICATION ====================
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+class VerifyEmailResponse(BaseModel):
+    success: bool
+    message: str
+
+@router.post("/verify-email", response_model=VerifyEmailResponse)
+async def verify_email(request: VerifyEmailRequest):
+    """Verify email address using magic link token (for students)."""
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    if not request.token:
+        raise HTTPException(status_code=400, detail="Verification token is required")
+
+    try:
+        # Find the verification token
+        otp_resp = supabase.table("otps").select("*").eq("code", request.token).eq("otp_type", "email_verification").limit(1).execute()
+
+        if not otp_resp.data:
+            raise HTTPException(status_code=400, detail="Invalid verification token.")
+
+        otp = otp_resp.data[0]
+
+        # Check if already used
+        if otp.get("is_used"):
+            raise HTTPException(status_code=400, detail="This verification link has already been used.")
+
+        # Check if expired
+        raw_expiry = otp["expires_at"]
+        expires_at = datetime.fromisoformat(raw_expiry.replace("Z", "").split("+")[0])
+        if datetime.now() > expires_at:
+            supabase.table("otps").update({"is_used": True}).eq("id", otp["id"]).execute()
+            raise HTTPException(status_code=400, detail="This verification link has expired. Please request a new one.")
+
+        email = otp["email"]
+
+        # Get user
+        user_resp = supabase.table("users").select("id, full_name, role").ilike("email", email).execute()
+        if not user_resp.data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user = user_resp.data[0]
+
+        # Activate user account
+        supabase.table("users").update({
+            "email_verified": True,
+            "is_active": True,
+        }).ilike("email", email).execute()
+
+        # Mark token as used
+        supabase.table("otps").update({
+            "is_used": True,
+            "used_at": datetime.now().isoformat()
+        }).eq("id", otp["id"]).execute()
+
+        # Send welcome email
+        try:
+            asyncio.create_task(EmailService.send_approval_email(email, user.get("full_name", "")))
+        except Exception as email_err:
+            logger.warning(f"Welcome email failed for {email}: {email_err}")
+
+        logger.info(f"Email verified and account activated for {email}")
+        return VerifyEmailResponse(success=True, message="Your email has been verified! You can now log in.")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Email verification error: {e}")
+        raise HTTPException(status_code=500, detail="Email verification failed")
+
+
+# ==================== RESEND VERIFICATION EMAIL ====================
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+class ResendVerificationResponse(BaseModel):
+    message: str
+
+@router.post("/resend-verification", response_model=ResendVerificationResponse)
+@limiter.limit("5/1hour")
+async def resend_verification(request: Request, req_data: ResendVerificationRequest):
+    """Resend email verification link (for students)."""
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    email = req_data.email.lower().strip()
+
+    try:
+        # Find user
+        user_resp = supabase.table("users").select("id, full_name, role, email_verified").ilike("email", email).execute()
+        if not user_resp.data:
+            # Don't reveal if email exists or not
+            return ResendVerificationResponse(message="If a matching account exists, a verification email has been sent.")
+
+        user = user_resp.data[0]
+
+        # Only for students
+        if user.get("role") != "student":
+            return ResendVerificationResponse(message="If a matching account exists, a verification email has been sent.")
+
+        # Already verified
+        if user.get("email_verified"):
+            return ResendVerificationResponse(message="If a matching account exists, a verification email has been sent.")
+
+        # Invalidate old tokens
+        try:
+            supabase.table("otps").update({"is_used": True}).eq("email", email).eq("otp_type", "email_verification").eq("is_used", False).execute()
+        except Exception:
+            pass
+
+        # Generate new token
+        verification_token = secrets.token_urlsafe(32)
+        expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
+
+        # Store new token
+        supabase.table("otps").insert({
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "code": verification_token,
+            "otp_type": "email_verification",
+            "is_used": False,
+            "expires_at": expires_at,
+            "attempts": 0,
+            "max_attempts": 5,
+            "is_locked": False,
+        }).execute()
+
+        # Send verification email
+        try:
+            asyncio.create_task(EmailService.send_verification_email(
+                email, user.get("full_name", ""), verification_token
+            ))
+            logger.info(f"Verification email resent to {email}")
+        except Exception as email_err:
+            logger.warning(f"Failed to resend verification email to {email}: {email_err}")
+
+        return ResendVerificationResponse(message="If a matching account exists, a verification email has been sent.")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Resend verification error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to resend verification email")

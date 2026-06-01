@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { MessageSquare, Send, ChevronDown, ChevronUp, ArrowUpDown, RefreshCw, Plus, X } from 'lucide-react'
+import { MessageSquare, Send, ChevronDown, ChevronUp, ArrowUpDown, RefreshCw, Plus, X, Search } from 'lucide-react'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
@@ -27,6 +27,7 @@ export default function QueriesPage() {
   const [queries, setQueries] = useState<QueryData[]>([])
   const [filter, setFilter] = useState<'ALL' | 'OPEN' | 'RESOLVED'>('ALL')
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [respondingId, setRespondingId] = useState<string | null>(null)
@@ -127,6 +128,17 @@ export default function QueriesPage() {
 
   const filtered = queries
     .filter(q => filter === 'ALL' || q.status === filter)
+    .filter(q => {
+      const q_lower = search.trim().toLowerCase()
+      if (!q_lower) return true
+      return (
+        (q.student?.full_name ?? '').toLowerCase().includes(q_lower) ||
+        (q.student?.email ?? '').toLowerCase().includes(q_lower) ||
+        (q.courses?.code ?? '').toLowerCase().includes(q_lower) ||
+        (q.courses?.name ?? '').toLowerCase().includes(q_lower) ||
+        (q.query_text ?? '').toLowerCase().includes(q_lower)
+      )
+    })
     .slice()
     .sort((a, b) => {
       const ta = new Date(a.created_at).getTime()
@@ -167,34 +179,46 @@ export default function QueriesPage() {
           </div>
         </div>
 
-        {/* Filter + Sort bar */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1 bg-[#F3F4F6] rounded-lg p-1">
-            {(['ALL', 'OPEN', 'RESOLVED'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
-                  filter === f ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'
-                }`}
-              >
-                {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
-                {f !== 'ALL' && (
-                  <span className="ml-1.5 text-[11px] text-[#9CA3AF]">
-                    ({queries.filter(q => q.status === f).length})
-                  </span>
-                )}
-              </button>
-            ))}
+        {/* Filter + Sort + Search bar */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1 bg-[#F3F4F6] rounded-lg p-1">
+              {(['ALL', 'OPEN', 'RESOLVED'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+                    filter === f ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'
+                  }`}
+                >
+                  {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+                  {f !== 'ALL' && (
+                    <span className="ml-1.5 text-[11px] text-[#9CA3AF]">
+                      ({queries.filter(q => q.status === f).length})
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setSortOrder(o => o === 'newest' ? 'oldest' : 'newest')}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] bg-white rounded-lg text-[13px] text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              {sortOrder === 'newest' ? 'Newest first' : 'Oldest first'}
+            </button>
+            <span className="text-[13px] text-[#9CA3AF] ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
           </div>
-          <button
-            onClick={() => setSortOrder(o => o === 'newest' ? 'oldest' : 'newest')}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] bg-white rounded-lg text-[13px] text-[#374151] hover:bg-[#F9FAFB] transition-colors"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            {sortOrder === 'newest' ? 'Newest first' : 'Oldest first'}
-          </button>
-          <span className="text-[13px] text-[#9CA3AF] ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+            <input
+              type="text"
+              placeholder="Search by student name, course code, or query text…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-[13px] border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C90031]/20 focus:border-[#C90031]"
+            />
+          </div>
         </div>
 
         {/* New Query Modal (student) */}

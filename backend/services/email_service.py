@@ -1,401 +1,408 @@
-"""Email service using Resend"""
+"""Email service using Gmail SMTP"""
 import logging
 import os
+import asyncio
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Optional
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Load environment variables from backend/.env file
-# Get the backend directory path
 backend_dir = Path(__file__).parent.parent
-env_file = backend_dir / '.env'
-load_dotenv(env_file)
+load_dotenv(backend_dir / '.env')
 
 class EmailConfig:
     def __init__(self):
-        self.resend_api_key = os.getenv('RESEND_API_KEY', '')
-        self.email_from_address = os.getenv('EMAIL_FROM_ADDRESS', 'noreply@cmms.utm.my')
+        self.smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
+        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        self.smtp_login = os.getenv('SMTP_LOGIN', '')
+        self.smtp_password = os.getenv('SMTP_PASSWORD', '').replace(' ', '')
+        self.email_from_address = os.getenv('EMAIL_FROM_ADDRESS', '')
         self.email_from_name = os.getenv('EMAIL_FROM_NAME', 'CMMS')
 
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.smtp_login and self.smtp_password and self.email_from_address)
+
 email_config = EmailConfig()
+
+_FOOTER = """
+<hr style="margin:32px 0 16px;border:none;border-top:1px solid #E5E7EB;"/>
+<p style="font-size:12px;color:#9CA3AF;margin:0;">
+    Carry Mark Management System (CMMS) &nbsp;·&nbsp; Universiti Teknologi Malaysia
+</p>
+"""
+
+def _send_smtp(to: str, subject: str, html: str) -> bool:
+    """Blocking SMTP send — called via asyncio.to_thread."""
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = f"{email_config.email_from_name} <{email_config.email_from_address}>"
+    msg['To'] = to
+    msg.attach(MIMEText(html, 'html', 'utf-8'))
+    with smtplib.SMTP(email_config.smtp_host, email_config.smtp_port) as server:
+        server.ehlo()
+        server.starttls()
+        server.login(email_config.smtp_login, email_config.smtp_password)
+        server.sendmail(email_config.email_from_address, to, msg.as_string())
+    return True
+
+async def _send(to: str, subject: str, html: str) -> bool:
+    """Async wrapper: runs _send_smtp in a thread pool."""
+    if not email_config.is_configured:
+        logger.warning(f"Email not configured — skipping send to {to}")
+        return False
+    try:
+        await asyncio.to_thread(_send_smtp, to, subject, html)
+        logger.info(f"Email '{subject}' sent to {to}")
+        return True
+    except Exception as exc:
+        logger.error(f"Failed to send '{subject}' to {to}: {exc}")
+        return False
+
 
 class EmailService:
     @staticmethod
     async def send_otp(email: str, otp: str, expires_in_minutes: int = 15):
         """Send OTP via email for password reset"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. OTP not sent to {email}")
-            return False
-        
-        try:
-            import resend
-            
-            # Set API key
-            resend.api_key = email_config.resend_api_key
-            
-            subject = "Your CMMS Password Reset Code"
-            html_content = f"""
-            <h2>Password Reset</h2>
-            <p>You requested a password reset for your CMMS account.</p>
-            <p>Your reset code is:</p>
-            <h1 style="font-size: 32px; letter-spacing: 5px; font-weight: bold;">{otp}</h1>
-            <p>This code expires in {expires_in_minutes} minutes.</p>
-            <p>If you didn't request this, ignore this email.</p>
-            <hr/>
-            <p style="font-size: 12px; color: #666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia
-            </p>
-            """
-            
-            response = resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-            
-            logger.info(f"OTP email sent to {email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send OTP email to {email}: {str(e)}")
-            return False
-    
+        subject = "Your CMMS Password Reset Code"
+        html = f"""
+        <h2 style="color:#0F172A;">Password Reset Code</h2>
+        <p>You requested a password reset for your CMMS account.</p>
+        <p>Your one-time code is:</p>
+        <div style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#C90031;
+                    background:#FFF1F2;padding:16px 24px;border-radius:8px;
+                    display:inline-block;margin:12px 0;">
+            {otp}
+        </div>
+        <p style="color:#6B7280;font-size:13px;">This code expires in <strong>{expires_in_minutes} minutes</strong>.</p>
+        <p>If you didn't request this, you can safely ignore this email.</p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
     @staticmethod
     async def send_student_otp(email: str, otp: str, student_name: str = "Student"):
         """Send OTP to new student account"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. OTP not sent to {email}")
-            return False
-        
-        try:
-            import resend
-            
-            resend.api_key = email_config.resend_api_key
-            
-            subject = "Welcome to CMMS - Your Login Code"
-            html_content = f"""
-            <h2>Welcome to CMMS!</h2>
-            <p>Hi {student_name},</p>
-            <p>Your CMMS student account has been created. Use this code to log in:</p>
-            <h1 style="font-size: 32px; letter-spacing: 5px; font-weight: bold;">{otp}</h1>
-            <p><strong>Steps to log in:</strong></p>
-            <ol>
-                <li>Go to https://cmms.utm.my/login</li>
-                <li>Select your role as "Student"</li>
-                <li>Enter your email and the code above</li>
-                <li>Set your password on first login</li>
-            </ol>
-            <p>This code expires in 24 hours.</p>
-            <hr/>
-            <p style="font-size: 12px; color: #666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia
-            </p>
-            """
-            
-            response = resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-            
-            logger.info(f"Student welcome email sent to {email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send student welcome email to {email}: {str(e)}")
-            return False
-    
+        subject = "Welcome to CMMS – Your Login Code"
+        html = f"""
+        <h2 style="color:#0F172A;">Welcome to CMMS!</h2>
+        <p>Hi {student_name},</p>
+        <p>Your CMMS student account has been created. Use this one-time code to log in for the first time:</p>
+        <div style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#C90031;
+                    background:#FFF1F2;padding:16px 24px;border-radius:8px;
+                    display:inline-block;margin:12px 0;">
+            {otp}
+        </div>
+        <p style="color:#6B7280;font-size:13px;">This code expires in <strong>24 hours</strong>.</p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
     @staticmethod
     async def send_marks_published(email: str, student_name: str, course_name: str):
         """Notify student that marks have been published"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. Notification not sent to {email}")
-            return False
-        
-        try:
-            import resend
-            
-            resend.api_key = email_config.resend_api_key
-            
-            subject = f"Marks Published - {course_name}"
-            html_content = f"""
-            <h2>Marks Published</h2>
-            <p>Hi {student_name},</p>
-            <p>Marks for <strong>{course_name}</strong> have been published.</p>
-            <p><a href="https://cmms.utm.my/marks" style="
-                display: inline-block;
-                padding: 10px 20px;
-                background-color: #C90031;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-            ">View Your Marks</a></p>
-            <hr/>
-            <p style="font-size: 12px; color: #666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia
-            </p>
-            """
-            
-            response = resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-            
-            logger.info(f"Marks notification sent to {email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send marks notification to {email}: {str(e)}")
-            return False
-    
+        subject = f"Marks Published – {course_name}"
+        html = f"""
+        <h2 style="color:#0F172A;">Marks Published</h2>
+        <p>Hi {student_name},</p>
+        <p>Your marks for <strong>{course_name}</strong> have been published and are now available.</p>
+        <p style="margin:24px 0;">
+            <a href="http://localhost:3000/marks"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                View My Marks
+            </a>
+        </p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
     @staticmethod
     async def send_notification(email: str, subject: str, body: str):
         """Send generic notification email"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. Notification not sent to {email}")
-            return False
-        
-        try:
-            import resend
-            
-            resend.api_key = email_config.resend_api_key
-            
-            html_content = f"""
-            {body}
-            <hr/>
-            <p style="font-size: 12px; color: #666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia
-            </p>
-            """
-            
-            response = resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-            
-            logger.info(f"Notification sent to {email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send notification to {email}: {str(e)}")
-            return False
-    
+        html = f"{body}{_FOOTER}"
+        return await _send(email, subject, html)
+
     @staticmethod
     async def send_signup_confirmation(email: str, full_name: str, role: str):
-        """Send signup confirmation email"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. Confirmation not sent to {email}")
-            return False
-        
-        try:
-            import resend
-            
-            resend.api_key = email_config.resend_api_key
-            
-            role_display = "Student" if role == "student" else "Lecturer"
-            subject = "CMMS Account Signup Received - Pending Review"
-            html_content = f"""
-            <h2>Welcome to CMMS!</h2>
-            <p>Hi {full_name},</p>
-            <p>Thank you for signing up for the Carry Mark Management System (CMMS).</p>
-            <p><strong>Signup Details:</strong></p>
-            <ul>
-                <li>Email: {email}</li>
-                <li>Role: {role_display}</li>
-                <li>Status: <span style="color: #FFA500; font-weight: bold;">Pending Admin Review</span></li>
-            </ul>
-            <p>Your account is currently under review by our administrators. You will receive an email once your account is approved and activated.</p>
-            <p>This typically takes 24-48 hours.</p>
-            <p><strong>What happens next:</strong></p>
-            <ol>
-                <li>An admin will review your signup details</li>
-                <li>Your account will be verified and activated</li>
-                <li>You'll receive a confirmation email with login instructions</li>
-                <li>You can then log in and start using CMMS</li>
-            </ol>
-            <p>If you have any questions, please contact us at support@utm.my</p>
-            <hr/>
-            <p style="font-size: 12px; color: #666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia<br/>
-                <a href="https://cmms.utm.my" style="color: #C90031;">cmms.utm.my</a>
-            </p>
-            """
-            
-            response = resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-            
-            logger.info(f"Signup confirmation sent to {email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send signup confirmation to {email}: {str(e)}")
-            return False
-    
+        """Send signup confirmation email (for lecturers - admin approval flow)"""
+        role_display = "Student" if role == "student" else "Lecturer"
+        subject = "CMMS Account Signup Received – Pending Review"
+        html = f"""
+        <h2 style="color:#0F172A;">Signup Received!</h2>
+        <p>Hi {full_name},</p>
+        <p>Thank you for registering with the <strong>Carry Mark Management System (CMMS)</strong>.</p>
+        <table style="border-collapse:collapse;margin:16px 0;">
+            <tr>
+                <td style="padding:6px 12px;font-weight:bold;color:#374151;">Email</td>
+                <td style="padding:6px 12px;color:#111827;">{email}</td>
+            </tr>
+            <tr style="background:#F9FAFB;">
+                <td style="padding:6px 12px;font-weight:bold;color:#374151;">Role</td>
+                <td style="padding:6px 12px;color:#111827;">{role_display}</td>
+            </tr>
+            <tr>
+                <td style="padding:6px 12px;font-weight:bold;color:#374151;">Status</td>
+                <td style="padding:6px 12px;color:#D97706;font-weight:bold;">Pending Admin Review</td>
+            </tr>
+        </table>
+        <p>An administrator will review your account within <strong>24–48 hours</strong>.
+           You will receive another email once your account is approved.</p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
+    @staticmethod
+    async def send_verification_email(email: str, full_name: str, token: str):
+        """Send email verification magic link (for students - OTP flow)"""
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        verification_link = f"{frontend_url}/auth/verify-email?token={token}"
+
+        subject = "Verify Your CMMS Student Account"
+        html = f"""
+        <h2 style="color:#0F172A;">Welcome to CMMS!</h2>
+        <p>Hi {full_name},</p>
+        <p>Thank you for registering with the <strong>Carry Mark Management System (CMMS)</strong>.</p>
+        <p>Please click the button below to verify your email address and activate your account:</p>
+        <p style="margin:24px 0;">
+            <a href="{verification_link}"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                Verify My Account
+            </a>
+        </p>
+        <p style="font-size:13px;color:#6B7280;">
+            Or copy this link into your browser:<br/>
+            <code style="word-break:break-all;color:#374151;">{verification_link}</code>
+        </p>
+        <p style="color:#6B7280;font-size:13px;">This link expires in <strong>24 hours</strong>.</p>
+        <p>If you didn't create this account, you can safely ignore this email.</p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
     @staticmethod
     async def send_approval_email(email: str, full_name: str):
         """Send account approval email"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. Approval email not sent to {email}")
-            return False
-        
-        try:
-            import resend
-            
-            resend.api_key = email_config.resend_api_key
-            
-            subject = "Your CMMS Account Has Been Approved!"
-            html_content = f"""
-            <h2>Account Approved! 🎉</h2>
-            <p>Hi {full_name},</p>
-            <p>Great news! Your CMMS account application has been approved and activated.</p>
-            <p>You can now log in to the system using your email and password:</p>
-            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                <p><strong>Login URL:</strong><br/>
-                <a href="https://cmms.utm.my/login" style="color: #C90031;">https://cmms.utm.my/login</a></p>
-                <p><strong>Email:</strong> {email}</p>
-            </div>
-            <p><strong>Next Steps:</strong></p>
-            <ol>
-                <li>Go to the login page using the link above</li>
-                <li>Enter your email and password</li>
-                <li>You'll be logged in to your dashboard</li>
-            </ol>
-            <p>If you have any issues logging in, please contact us at support@utm.my</p>
-            <hr/>
-            <p style="font-size: 12px; color: #666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia<br/>
-                <a href="https://cmms.utm.my" style="color: #C90031;">cmms.utm.my</a>
-            </p>
-            """
-            
-            response = resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-            
-            logger.info(f"Approval email sent to {email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send approval email to {email}: {str(e)}")
-            return False
-    
+        subject = "Your CMMS Account Has Been Approved!"
+        html = f"""
+        <h2 style="color:#0F172A;">Account Approved!</h2>
+        <p>Hi {full_name},</p>
+        <p>Your CMMS account has been reviewed and <strong style="color:#16A34A;">approved</strong>.
+           You can now log in using your registered email and password.</p>
+        <p style="margin:24px 0;">
+            <a href="http://localhost:3000/auth/login"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                Log In to CMMS
+            </a>
+        </p>
+        <p style="color:#6B7280;font-size:13px;">Login email: <strong>{email}</strong></p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
     @staticmethod
     async def send_rejection_email(email: str, full_name: str, reason: str = "Your application was not approved"):
         """Send account rejection email"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. Rejection email not sent to {email}")
-            return False
-        
-        try:
-            import resend
-            
-            resend.api_key = email_config.resend_api_key
-            
-            subject = "CMMS Account Application - Review Complete"
-            html_content = f"""
-            <h2>Account Application Review</h2>
-            <p>Hi {full_name},</p>
-            <p>We have reviewed your CMMS account application.</p>
-            <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #FFA500; border-radius: 3px; margin: 20px 0;">
-                <p><strong>Status:</strong> <span style="color: #C90031; font-weight: bold;">Application Not Approved</span></p>
-                <p><strong>Reason:</strong> {reason}</p>
-            </div>
-            <p><strong>What you can do:</strong></p>
-            <ul>
-                <li>Contact your department administrator for more information</li>
-                <li>Reapply with correct information if needed</li>
-                <li>Reach out to support@utm.my for assistance</li>
-            </ul>
-            <p>We appreciate your interest in CMMS.</p>
-            <hr/>
-            <p style="font-size: 12px; color: #666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia<br/>
-                <a href="https://cmms.utm.my" style="color: #C90031;">cmms.utm.my</a>
-            </p>
-            """
-            
-            response = resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-            
-            logger.info(f"Rejection email sent to {email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send rejection email to {email}: {str(e)}")
-            return False
+        subject = "CMMS Account Application – Review Complete"
+        html = f"""
+        <h2 style="color:#0F172A;">Account Application Update</h2>
+        <p>Hi {full_name},</p>
+        <p>We have reviewed your CMMS account application.</p>
+        <div style="background:#FFF7ED;border-left:4px solid #F97316;padding:12px 16px;
+                    border-radius:4px;margin:16px 0;">
+            <p style="margin:0;font-weight:bold;color:#C2410C;">Application Not Approved</p>
+            <p style="margin:8px 0 0;color:#374151;">{reason}</p>
+        </div>
+        <p>Please contact <a href="mailto:support@utm.my" style="color:#C90031;">support@utm.my</a>
+           if you believe this was a mistake or need further assistance.</p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
+    @staticmethod
+    async def send_query_submitted(
+        email: str,
+        lecturer_name: str,
+        student_name: str,
+        course_name: str,
+        query_text: str,
+    ):
+        """Notify lecturer that a student has submitted a mark query"""
+        subject = f"New Mark Query – {course_name}"
+        html = f"""
+        <h2 style="color:#0F172A;">New Mark Query Received</h2>
+        <p>Hi {lecturer_name},</p>
+        <p>A student has submitted a query about their marks in <strong>{course_name}</strong>.</p>
+        <div style="background:#F9FAFB;border-left:4px solid #C90031;padding:12px 16px;
+                    margin:16px 0;border-radius:4px;">
+            <p style="margin:0;font-weight:bold;color:#374151;">{student_name} writes:</p>
+            <p style="margin:8px 0 0;color:#111827;">{query_text}</p>
+        </div>
+        <p style="margin:24px 0;">
+            <a href="http://localhost:3000/queries"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                View &amp; Respond
+            </a>
+        </p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
+
+    @staticmethod
+    async def send_deadline_reminder(
+        email: str,
+        lecturer_name: str,
+        academic_year: str,
+        semester: int,
+        start_date: str,
+        end_date: str,
+        grade_submission_deadline: str | None,
+        notes: str | None,
+        courses: list[str],
+    ):
+        """Send semester deadline reminder to a lecturer"""
+        def _fmt(d: str | None) -> str:
+            return d if d else "—"
+
+        course_rows = "".join(f"<li>{c}</li>" for c in courses) if courses else "<li>No courses assigned</li>"
+        subject = f"Semester Deadlines – {academic_year} Semester {semester}"
+        html = f"""
+        <h2 style="color:#0F172A;">Semester Deadline Reminder</h2>
+        <p>Hi {lecturer_name},</p>
+        <p>Here are the key dates for <strong>{academic_year} Semester {semester}</strong>:</p>
+        <table style="border-collapse:collapse;width:100%;max-width:480px;margin:16px 0;">
+            <tr style="background:#F3F4F6;">
+                <td style="padding:8px 12px;font-weight:bold;border:1px solid #E5E7EB;">Semester Start</td>
+                <td style="padding:8px 12px;border:1px solid #E5E7EB;">{_fmt(start_date)}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 12px;font-weight:bold;border:1px solid #E5E7EB;">Semester End</td>
+                <td style="padding:8px 12px;border:1px solid #E5E7EB;">{_fmt(end_date)}</td>
+            </tr>
+            <tr style="background:#FFF1F2;">
+                <td style="padding:8px 12px;font-weight:bold;border:1px solid #E5E7EB;">Grade Submission</td>
+                <td style="padding:8px 12px;border:1px solid #E5E7EB;color:#C90031;font-weight:bold;">{_fmt(grade_submission_deadline)}</td>
+            </tr>
+        </table>
+        <p><strong>Your assigned course(s):</strong></p>
+        <ul style="margin:8px 0 16px 20px;">{course_rows}</ul>
+        {f'<p><strong>Notes:</strong> {notes}</p>' if notes else ''}
+        <p style="margin:24px 0;">
+            <a href="http://localhost:3000/course-management"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                Open Course Management
+            </a>
+        </p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
 
     @staticmethod
     async def send_password_reset(email: str, reset_link: str):
         """Send password reset link via email"""
-        if not email_config.resend_api_key:
-            logger.warning(f"Email service not configured. Password reset link for {email}: {reset_link}")
-            return False
+        subject = "Reset Your CMMS Password"
+        html = f"""
+        <h2 style="color:#0F172A;">Password Reset Request</h2>
+        <p>You requested a password reset for your CMMS account.</p>
+        <p>Click the button below to set a new password.
+           This link expires in <strong>30 minutes</strong>.</p>
+        <p style="margin:24px 0;">
+            <a href="{reset_link}"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                Reset My Password
+            </a>
+        </p>
+        <p style="font-size:13px;color:#6B7280;">
+            Or copy this link into your browser:<br/>
+            <code style="word-break:break-all;color:#374151;">{reset_link}</code>
+        </p>
+        <p>If you did not request a password reset, please ignore this email.</p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
 
-        try:
-            import resend
+    @staticmethod
+    async def send_flagged_mark_notification(
+        email: str,
+        lecturer_name: str,
+        student_name: str,
+        course_code: str,
+        course_name: str,
+        assessment_name: str,
+        raw_score: float | None,
+        max_score: float | None,
+        flag_reason: str | None,
+    ):
+        """Send notification to lecturer when a mark is flagged"""
+        subject = f"Mark Flagged for Review – {course_code}"
+        score_display = f"{raw_score}/{max_score}" if raw_score is not None and max_score else "—"
+        html = f"""
+        <h2 style="color:#0F172A;">Mark Flagged for Review</h2>
+        <p>Hi {lecturer_name},</p>
+        <p>A mark has been flagged for your attention:</p>
+        <table style="border-collapse:collapse;width:100%;max-width:480px;margin:16px 0;">
+            <tr style="background:#F3F4F6;">
+                <td style="padding:8px 12px;font-weight:bold;border:1px solid #E5E7EB;">Course</td>
+                <td style="padding:8px 12px;border:1px solid #E5E7EB;">{course_code} – {course_name}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 12px;font-weight:bold;border:1px solid #E5E7EB;">Student</td>
+                <td style="padding:8px 12px;border:1px solid #E5E7EB;">{student_name}</td>
+            </tr>
+            <tr style="background:#FFF1F2;">
+                <td style="padding:8px 12px;font-weight:bold;border:1px solid #E5E7EB;">Assessment</td>
+                <td style="padding:8px 12px;border:1px solid #E5E7EB;">{assessment_name}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 12px;font-weight:bold;border:1px solid #E5E7EB;">Score</td>
+                <td style="padding:8px 12px;border:1px solid #E5E7EB;color:#C90031;font-weight:bold;">{score_display}</td>
+            </tr>
+        </table>
+        {f'<p><strong>Flag Reason:</strong> {flag_reason}</p>' if flag_reason else ''}
+        <p style="margin:24px 0;">
+            <a href="http://localhost:3000/flagged-marks"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                Review Flagged Marks
+            </a>
+        </p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)
 
-            resend.api_key = email_config.resend_api_key
-
-            subject = "Reset Your CMMS Password"
-            html_content = f"""
-            <h2>Password Reset Request</h2>
-            <p>You requested a password reset for your CMMS account.</p>
-            <p>Click the button below to set a new password. This link expires in <strong>30 minutes</strong>.</p>
-            <p style="margin: 24px 0;">
-                <a href="{reset_link}"
-                   style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
-                          text-decoration:none;font-weight:bold;display:inline-block;">
-                    Reset My Password
-                </a>
-            </p>
-            <p style="font-size:13px;color:#555;">
-                Or copy this link into your browser:<br/>
-                <code style="word-break:break-all;">{reset_link}</code>
-            </p>
-            <p>If you did not request a password reset, please ignore this email.</p>
-            <hr/>
-            <p style="font-size:12px;color:#666;">
-                Carry Mark Management System (CMMS)<br/>
-                Universiti Teknologi Malaysia
-            </p>
-            """
-
-            resend.Emails().send({
-                "from": f"{email_config.email_from_name} <{email_config.email_from_address}>",
-                "to": email,
-                "subject": subject,
-                "html": html_content,
-            })
-
-            logger.info(f"Password reset email sent to {email}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to send password reset email to {email}: {str(e)}")
-            return False
+    @staticmethod
+    async def send_query_response_notification(
+        email: str,
+        student_name: str,
+        lecturer_name: str,
+        course_code: str,
+        course_name: str,
+        response_text: str,
+    ):
+        """Send notification to student when lecturer responds to their query"""
+        subject = f"Response to Your Query – {course_code}"
+        html = f"""
+        <h2 style="color:#0F172A;">Your Query Has Been Answered</h2>
+        <p>Hi {student_name},</p>
+        <p><strong>{lecturer_name}</strong> has responded to your query about <strong>{course_code} – {course_name}</strong>:</p>
+        <div style="background:#F9FAFB;border-left:4px solid #C90031;padding:12px;margin:16px 0;border-radius:4px;">
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.5;">{response_text}</p>
+        </div>
+        <p style="margin:24px 0;">
+            <a href="http://localhost:3000/queries"
+               style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+                View Your Queries
+            </a>
+        </p>
+        {_FOOTER}
+        """
+        return await _send(email, subject, html)

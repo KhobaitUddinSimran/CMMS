@@ -6,6 +6,7 @@ export interface MarkData {
   id: string
   student_id: string
   student_name?: string
+  matric_number?: string
   assessment_id: string
   assessment_name?: string
   score?: number | null        // normalised field used by frontend
@@ -298,5 +299,13 @@ export async function getFlaggedMarks(courseId?: string): Promise<{ flagged_mark
  */
 export async function unflagMark(markId: string): Promise<FlaggedMark> {
   const { data } = await apiClient.post(`/marks/${markId}/unflag`)
+  return data
+}
+
+/**
+ * Send flagged mark notification email to lecturer
+ */
+export async function sendFlagEmail(markId: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post(`/marks/${markId}/send-flag-email`)
   return data
 }

@@ -100,10 +100,10 @@ export async function getLecturers(): Promise<{ lecturers: any[] }> {
  */
 export async function assignLecturer(
   courseId: string,
-  lecturerId: string
+  lecturerId: string | null | undefined
 ): Promise<CourseData> {
   const response = await apiClient.post(`/courses/${courseId}/lecturer`, {
-    lecturer_id: lecturerId,
+    lecturer_id: lecturerId || null,
   })
   return response.data
 }

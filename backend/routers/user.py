@@ -1,12 +1,9 @@
 """User endpoints"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from ..db.database import get_db
-from ..schemas.user import UserResponse
 from ..dependencies.auth import get_current_user
 from ..core.security import hash_password, verify_password
+from ..core.config import supabase
 import logging
 
 logger = logging.getLogger(__name__)
@@ -95,18 +92,15 @@ class ChangePasswordRequest(BaseModel):
 @router.get("/me")
 async def get_current_user_info(
     current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    """Get current user information — tries Supabase REST, then SQLAlchemy, then mock fallback."""
+    """Get current user information from Supabase."""
     user_id = current_user["user_id"]
     role_from_token = current_user.get("role", "student")
     special_roles_from_token = current_user.get("special_roles", [])
 
-    # Supabase lookup by canonical UUID
-    from ..core.config import supabase as _sb
-    if _sb:
+    if supabase:
         try:
-            resp = _sb.table("users").select(
+            resp = supabase.table("users").select(
                 "id, email, full_name, role, is_active, email_verified, approval_status, created_at"
             ).eq("id", user_id).execute()
             if resp.data:
@@ -138,11 +132,13 @@ async def get_current_user_info(
 async def update_profile(
     request: UpdateProfileRequest,
     current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
 ):
     """Update user profile"""
     try:
         user_id = current_user["user_id"]
+        
+        if not supabase:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         
         # Validate input
         if request.full_name is None:
@@ -151,39 +147,28 @@ async def update_profile(
                 detail="At least one field is required to update"
             )
         
-        # Check if user exists
-        result = await db.execute(
-            text("SELECT id FROM users WHERE email = :email"),
-            {"email": user_id}
-        )
-        user = result.fetchone()
+        # Update profile
+        resp = supabase.table("users").update(
+            {"full_name": request.full_name}
+        ).eq("id", user_id).execute()
         
-        if not user:
+        if not resp.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
         
-        # Update profile
-        if request.full_name:
-            await db.execute(
-                text("UPDATE users SET full_name = :full_name WHERE email = :email"),
-                {"full_name": request.full_name, "email": user_id}
-            )
-        
-        await db.commit()
         logger.info(f"User {user_id} profile updated")
         
         return {
             "message": "Profile updated successfully",
-            "email": user_id,
+            "id": user_id,
             "full_name": request.full_name
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        await db.rollback()
         logger.error(f"Error updating profile for user {current_user.get('user_id')}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -194,11 +179,13 @@ async def update_profile(
 async def change_password(
     request: ChangePasswordRequest,
     current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
 ):
     """Change password"""
     try:
         user_id = current_user["user_id"]
+        
+        if not supabase:
+            raise HTTPException(status_code=503, detail="Database unavailable")
         
         # Validate input
         if not request.old_password:
@@ -226,20 +213,17 @@ async def change_password(
             )
         
         # Get user from database
-        result = await db.execute(
-            text("SELECT id, password_hash FROM users WHERE email = :email"),
-            {"email": user_id}
-        )
-        user = result.fetchone()
-        
-        if not user:
+        resp = supabase.table("users").select("id, password_hash").eq("id", user_id).execute()
+        if not resp.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
         
+        user = resp.data[0]
+        
         # Verify old password
-        if not verify_password(request.old_password, user[1]):
+        if not verify_password(request.old_password, user.get("password_hash", "")):
             logger.warning(f"Failed password change attempt for {user_id} - incorrect old password")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -250,12 +234,10 @@ async def change_password(
         new_password_hash = hash_password(request.new_password)
         
         # Update password in database
-        await db.execute(
-            text("UPDATE users SET password_hash = :password_hash WHERE email = :email"),
-            {"password_hash": new_password_hash, "email": user_id}
-        )
+        supabase.table("users").update(
+            {"password_hash": new_password_hash}
+        ).eq("id", user_id).execute()
         
-        await db.commit()
         logger.info(f"Password changed for user {user_id}")
         
         return {"message": "Password changed successfully"}
@@ -263,7 +245,6 @@ async def change_password(
     except HTTPException:
         raise
     except Exception as e:
-        await db.rollback()
         logger.error(f"Error changing password for user {current_user.get('user_id')}: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

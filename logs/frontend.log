@@ -2,32 +2,38 @@
 > cmms-web@1.0.0 dev
 > next dev
 
- ⚠ Port 3000 is in use, trying 3001 instead.
   ▲ Next.js 14.2.35
-  - Local:        http://localhost:3001
+  - Local:        http://localhost:3000
   - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 1274ms
- ✓ Compiled /middleware in 264ms (72 modules)
+ ✓ Ready in 1438ms
+ ✓ Compiled /middleware in 178ms (72 modules)
  ○ Compiling / ...
- ✓ Compiled / in 1156ms (716 modules)
- GET / 200 in 1286ms
- GET / 200 in 26ms
- ✓ Compiled in 740ms (716 modules)
- ✓ Compiled in 162ms (325 modules)
- ✓ Compiled /login in 377ms (722 modules)
- ✓ Compiled /dashboard in 189ms (772 modules)
- ✓ Compiled /dashboard/student in 93ms (786 modules)
- ✓ Compiled /_not-found in 133ms (789 modules)
- GET /dashboard/my-marks 404 in 63ms
- GET /login?role=student 200 in 39ms
- GET /login?role=student 200 in 20ms
- GET /dashboard/my-courses 404 in 18ms
- GET /login?role=student 200 in 14ms
- ✓ Compiled in 267ms (72 modules)
- ✓ Compiled in 694ms (869 modules)
- ✓ Compiled in 547ms (365 modules)
- ✓ Compiled in 583ms (869 modules)
- ✓ Compiled in 163ms (365 modules)
-[?25h
+ ✓ Compiled / in 1691ms (730 modules)
+ GET / 200 in 1944ms
+ ✓ Compiled /auth/login in 319ms (794 modules)
+ ✓ Compiled /auth/signup in 272ms (800 modules)
+(node:8399) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ Compiled /auth/verify-email in 377ms (797 modules)
+ GET /auth/verify-email?token=bvpE4cO899dXAxXJiF0emoJCC54QrffEPiAVbwbMrzc 200 in 494ms
+ GET /auth/login 200 in 53ms
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 502ms (865 modules)
+ GET /dashboard 200 in 584ms
+ ✓ Compiled /dashboard/student in 276ms (881 modules)
+ ✓ Compiled /queries in 396ms (909 modules)
+ ✓ Compiled in 1363ms (919 modules)
+ ✓ Compiled in 398ms (919 modules)
+ ○ Compiling /auth/password-reset ...
+ ✓ Compiled /auth/password-reset in 588ms (925 modules)
+ GET /auth/password-reset?token=ABNPYvAOTz0VrRBSg92-bjKC35Vd8JLfCAHsi5UqZyo 200 in 114ms
+ ✓ Compiled /dashboard in 193ms (500 modules)
+ GET /dashboard 200 in 301ms
+ ○ Compiling /marks ...
+ ✓ Compiled /marks in 678ms (925 modules)
+ ✓ Compiled /courses in 339ms (943 modules)
+ ✓ Compiled / in 160ms (523 modules)
+ GET /auth/login 200 in 265ms
+ GET /auth/login?redirect=%2Fcourses 200 in 36ms

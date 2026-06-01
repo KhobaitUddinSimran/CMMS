@@ -29,6 +29,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [createdUserId, setCreatedUserId] = useState<string | null>(null)
+  const [createdUserEmail, setCreatedUserEmail] = useState<string>('')
 
   // Password strength indicator
   const calculatePasswordStrength = (pwd: string) => {
@@ -123,6 +124,7 @@ export default function SignupPage() {
     try {
       const response = await signup(email, fullName, selectedRole, password, matricNumber)
       setCreatedUserId(response.user_id)
+      setCreatedUserEmail(email)
       setStep('success')
     } catch (err: any) {
       console.error('Signup error:', err)
@@ -336,6 +338,8 @@ export default function SignupPage() {
   }
 
   // Step 4: Success
+  const isStudent = selectedRole === 'student'
+
   return (
     <AuthLayout title="Account Created!" subtitle="Welcome to CMMS">
       <div className="text-center space-y-6 py-4">
@@ -351,30 +355,56 @@ export default function SignupPage() {
         {/* Message */}
         <div>
           <p className="text-gray-700 mb-2">Your account has been created successfully!</p>
-          <p className="text-sm text-gray-600">
-            Your application is now pending admin approval. You&apos;ll receive an email once it&apos;s reviewed.
-          </p>
+          {isStudent ? (
+            <p className="text-sm text-gray-600">
+              Please check your email (<strong>{createdUserEmail}</strong>) and click the verification link to activate your account.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600">
+              Your application is now pending admin approval. You&apos;ll receive an email once it&apos;s reviewed.
+            </p>
+          )}
         </div>
 
         {/* What's Next */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
           <p className="text-sm font-semibold text-blue-900 mb-2">What&apos;s Next?</p>
           <ul className="text-sm text-blue-800 space-y-1">
-            <li>✓ Your account details have been submitted</li>
-            <li>✓ An administrator will review your application</li>
-            <li>✓ You&apos;ll receive a confirmation email</li>
-            <li>✓ You can then log in with your credentials</li>
+            {isStudent ? (
+              <>
+                <li>✓ Your account details have been submitted</li>
+                <li>✓ A verification email has been sent to your inbox</li>
+                <li>✓ Click the verification link to activate your account</li>
+                <li>✓ You can then log in with your credentials</li>
+              </>
+            ) : (
+              <>
+                <li>✓ Your account details have been submitted</li>
+                <li>✓ An administrator will review your application</li>
+                <li>✓ You&apos;ll receive a confirmation email</li>
+                <li>✓ You can then log in with your credentials</li>
+              </>
+            )}
           </ul>
         </div>
 
         {/* Buttons */}
         <div className="space-y-3">
-          <button
-            onClick={() => router.push(`/auth/pending-approval?user_id=${createdUserId}`)}
-            className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Check Approval Status
-          </button>
+          {isStudent ? (
+            <button
+              onClick={() => router.push(`/auth/verify-email?email=${encodeURIComponent(createdUserEmail)}`)}
+              className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              I Already Verified My Email
+            </button>
+          ) : (
+            <button
+              onClick={() => router.push(`/auth/pending-approval?user_id=${createdUserId}`)}
+              className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Check Approval Status
+            </button>
+          )}
           <Link
             href="/auth/login"
             className="block text-center py-2 px-4 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"

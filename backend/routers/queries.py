@@ -2,6 +2,7 @@
 Real DB table: course_queries
 New columns: is_read_by_lecturer, is_read_by_student (Sprint 5)
 """
+import asyncio
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -10,6 +11,7 @@ from typing import Optional
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
+from ..services.email_service import EmailService
 
 router = APIRouter(prefix="/api/queries", tags=["queries"])
 logger = logging.getLogger(__name__)
@@ -119,6 +121,29 @@ async def create_query(
             raise HTTPException(status_code=500, detail="Failed to submit query")
 
         AuditService.log("QUERY_SUBMITTED", current_user["user_id"], resp.data[0].get("id"))
+
+        # Notify lecturer — resolve: assessment → course → lecturer
+        try:
+            a_resp = supabase.table("assessments").select("id, course_id, name").eq("id", data.assessment_id).execute()
+            if a_resp.data:
+                course_id = a_resp.data[0].get("course_id")
+                assessment_name = a_resp.data[0].get("name", "")
+                c_resp = supabase.table("courses").select("name, code, lecturer_id").eq("id", course_id).execute()
+                if c_resp.data and c_resp.data[0].get("lecturer_id"):
+                    lecturer_id = c_resp.data[0]["lecturer_id"]
+                    course_name = f"{c_resp.data[0].get('code', '')} – {c_resp.data[0].get('name', '')}"
+                    l_resp = supabase.table("users").select("email, full_name").eq("id", lecturer_id).execute()
+                    if l_resp.data:
+                        lecturer_email = l_resp.data[0]["email"]
+                        lecturer_name = l_resp.data[0].get("full_name", "Lecturer")
+                        student_name = current_user.get("full_name", "A student")
+                        asyncio.create_task(EmailService.send_query_submitted(
+                            lecturer_email, lecturer_name, student_name,
+                            course_name, data.query_text,
+                        ))
+        except Exception as email_err:
+            logger.warning(f"Query submitted email failed: {email_err}")
+
         return resp.data[0]
 
     except HTTPException:
@@ -252,10 +277,11 @@ async def respond_to_query(
         raise HTTPException(status_code=403, detail="Only lecturers and above can respond to queries")
 
     try:
-        qry_resp = supabase.table("course_queries").select("id").eq("id", query_id).execute()
+        qry_resp = supabase.table("course_queries").select("id, student_id, mark_id").eq("id", query_id).execute()
         if not qry_resp.data:
             raise HTTPException(status_code=404, detail="Query not found")
 
+        query_row = qry_resp.data[0]
         now = datetime.now(timezone.utc).isoformat()
         resp = supabase.table("course_queries").update({
             "lecturer_response": data.response,
@@ -267,6 +293,40 @@ async def respond_to_query(
             raise HTTPException(status_code=500, detail="Failed to save response")
 
         AuditService.log("QUERY_RESPONDED", current_user["user_id"], query_id)
+
+        # Notify student of response
+        try:
+            student_id = query_row.get("student_id")
+            mark_id = query_row.get("mark_id")
+            if student_id and mark_id:
+                s_resp = supabase.table("users").select("email, full_name").eq("id", student_id).execute()
+                m_resp = supabase.table("marks").select("assessment_id").eq("id", mark_id).execute()
+                if s_resp.data and m_resp.data:
+                    student_email = s_resp.data[0]["email"]
+                    student_name = s_resp.data[0].get("full_name", "Student")
+                    assessment_id = m_resp.data[0]["assessment_id"]
+                    a_resp = supabase.table("assessments").select("course_id, name").eq("id", assessment_id).execute()
+                    if a_resp.data:
+                        course_id = a_resp.data[0]["course_id"]
+                        c_resp = supabase.table("courses").select("name, code, lecturer_id").eq("id", course_id).execute()
+                        if c_resp.data:
+                            course_code = c_resp.data[0].get("code", "")
+                            course_name = c_resp.data[0].get("name", "")
+                            lecturer_id = c_resp.data[0].get("lecturer_id")
+                            if lecturer_id:
+                                l_resp = supabase.table("users").select("full_name").eq("id", lecturer_id).execute()
+                                lecturer_name = l_resp.data[0].get("full_name", "Lecturer") if l_resp.data else "Lecturer"
+                                asyncio.create_task(EmailService.send_query_response_notification(
+                                    email=student_email,
+                                    student_name=student_name,
+                                    lecturer_name=lecturer_name,
+                                    course_code=course_code,
+                                    course_name=course_name,
+                                    response_text=data.response,
+                                ))
+        except Exception as email_err:
+            logger.warning(f"Query responded email failed: {email_err}")
+
         result = resp.data[0]
         result["status"] = "RESOLVED"
         return result
@@ -323,3 +383,80 @@ async def update_query_status(
     except Exception as e:
         logger.error(f"Error updating query status {query_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update query status")
+
+
+# ==================== Send Query Response Email ====================
+
+@router.post("/{query_id}/send-email")
+async def send_query_email(
+    query_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Manually resend query response email to student"""
+    _require_supabase()
+
+    if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers and above can send emails")
+
+    try:
+        qry_resp = supabase.table("course_queries").select(
+            "id, student_id, mark_id, lecturer_response"
+        ).eq("id", query_id).execute()
+        if not qry_resp.data:
+            raise HTTPException(status_code=404, detail="Query not found")
+
+        query_row = qry_resp.data[0]
+        if not query_row.get("lecturer_response"):
+            raise HTTPException(status_code=400, detail="No response to send yet")
+
+        student_id = query_row.get("student_id")
+        mark_id = query_row.get("mark_id")
+
+        # Fetch student, mark, assessment, course, and lecturer info
+        s_resp = supabase.table("users").select("email, full_name").eq("id", student_id).execute()
+        m_resp = supabase.table("marks").select("assessment_id").eq("id", mark_id).execute()
+
+        if not s_resp.data or not m_resp.data:
+            raise HTTPException(status_code=400, detail="Student or mark not found")
+
+        student_email = s_resp.data[0]["email"]
+        student_name = s_resp.data[0].get("full_name", "Student")
+        assessment_id = m_resp.data[0]["assessment_id"]
+
+        a_resp = supabase.table("assessments").select("course_id").eq("id", assessment_id).execute()
+        if not a_resp.data:
+            raise HTTPException(status_code=400, detail="Assessment not found")
+
+        course_id = a_resp.data[0]["course_id"]
+        c_resp = supabase.table("courses").select("name, code, lecturer_id").eq("id", course_id).execute()
+
+        if not c_resp.data:
+            raise HTTPException(status_code=400, detail="Course not found")
+
+        course_code = c_resp.data[0].get("code", "")
+        course_name = c_resp.data[0].get("name", "")
+        lecturer_id = c_resp.data[0].get("lecturer_id")
+
+        if not lecturer_id:
+            raise HTTPException(status_code=400, detail="No lecturer assigned to course")
+
+        l_resp = supabase.table("users").select("full_name").eq("id", lecturer_id).execute()
+        lecturer_name = l_resp.data[0].get("full_name", "Lecturer") if l_resp.data else "Lecturer"
+
+        # Send email
+        await EmailService.send_query_response_notification(
+            email=student_email,
+            student_name=student_name,
+            lecturer_name=lecturer_name,
+            course_code=course_code,
+            course_name=course_name,
+            response_text=query_row.get("lecturer_response", ""),
+        )
+
+        return {"message": "Email sent successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending query email for {query_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to send email")
