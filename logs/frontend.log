@@ -37,3 +37,6 @@
  ✓ Compiled / in 160ms (523 modules)
  GET /auth/login 200 in 265ms
  GET /auth/login?redirect=%2Fcourses 200 in 36ms
+ ✓ Compiled in 592ms (441 modules)
+ ✓ Compiled in 209ms (441 modules)
+ ✓ Compiled in 205ms (441 modules)
