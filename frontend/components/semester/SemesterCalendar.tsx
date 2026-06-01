@@ -5,7 +5,7 @@ import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import {
   CalendarDays, ChevronLeft, ChevronRight,
-  BookOpen, AlertCircle, GraduationCap, Trash2, Plus,
+  AlertCircle, GraduationCap, Trash2, Plus,
 } from 'lucide-react'
 import type { SemesterTimeline } from '@/lib/api/semester'
 
@@ -42,10 +42,6 @@ function MiniCalendar({ year, month, timelines }: { year: number; month: number;
       const end   = parseDate(tl.end_date)
       if (start && sameDay(date, start)) dots.push({ color: 'bg-emerald-500', label: `Sem ${tl.semester} Start` })
       if (end   && sameDay(date, end))   dots.push({ color: 'bg-red-500',     label: `Sem ${tl.semester} End` })
-      if (tl.midterm_deadline) {
-        const md = parseDate(tl.midterm_deadline)
-        if (md && sameDay(date, md)) dots.push({ color: 'bg-amber-500', label: 'Midterm' })
-      }
       if (tl.grade_submission_deadline) {
         const gd = parseDate(tl.grade_submission_deadline)
         if (gd && sameDay(date, gd)) dots.push({ color: 'bg-purple-500', label: 'Grade Deadline' })
@@ -97,7 +93,6 @@ function TimelineBar({ tl }: { tl: SemesterTimeline }) {
     return Math.min(100, Math.max(0, (d.getTime() - start!.getTime()) / 86400000 / totalDays * 100))
   }
   const milestones = [
-    { date: parseDate(tl.midterm_deadline),          color: 'bg-amber-400',  label: 'Midterm' },
     { date: parseDate(tl.grade_submission_deadline), color: 'bg-purple-500', label: 'Grades Due' },
   ].filter(m => m.date !== null)
   const today = new Date()
@@ -192,11 +187,6 @@ export function SemesterCalendar({ timelines, loading, onAdd, onEdit, onDelete }
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 mt-3">
-                {tl.midterm_deadline && (
-                  <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200">
-                    <BookOpen className="w-3 h-3" /> Midterm: {tl.midterm_deadline}
-                  </span>
-                )}
                 {tl.grade_submission_deadline && (
                   <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-purple-50 text-purple-700 rounded-full border border-purple-200">
                     <AlertCircle className="w-3 h-3" /> Grades Due: {tl.grade_submission_deadline}
