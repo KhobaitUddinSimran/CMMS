@@ -1,5 +1,6 @@
 """Mark endpoints - Supabase Edition"""
 import logging
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from pydantic import BaseModel
@@ -9,6 +10,7 @@ import openpyxl
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
+from ..services.email_service import EmailService
 from ..utils.session import is_grade_window_closed
 
 
@@ -393,7 +395,7 @@ async def get_flagged_marks(
         # Single query with embedded joins — eliminates N+1 round trips
         select_expr = (
             "*, "
-            "users!marks_student_id_fkey(id, full_name, email), "
+            "users!marks_student_id_fkey(id, full_name, email, matric_number), "
             "assessments!marks_assessment_id_fkey(id, name, type, max_score, weight_percentage, "
             "courses!assessments_course_id_fkey(id, code, name))"
         )
@@ -721,10 +723,19 @@ async def flag_mark(
         raise HTTPException(status_code=403, detail="Only lecturers and admins can flag marks")
 
     try:
-        mark_resp = supabase.table("marks").select("id").eq("id", mark_id).execute()
+        # Fetch mark with related data
+        mark_resp = (
+            supabase.table("marks")
+            .select("*, assessments(name, max_score), courses(code, name), users(full_name, email, matric_number)")
+            .eq("id", mark_id)
+            .execute()
+        )
         if not mark_resp.data:
             raise HTTPException(status_code=404, detail="Mark not found")
 
+        mark = mark_resp.data[0]
+        
+        # Update mark
         resp = (
             supabase.table("marks")
             .update({"is_flagged": True, "flag_note": reason})
@@ -734,6 +745,38 @@ async def flag_mark(
         if not resp.data:
             raise HTTPException(status_code=500, detail="Failed to flag mark")
 
+        # Send email to course lecturer (fire-and-forget)
+        try:
+            course_lecturer = (
+                supabase.table("courses")
+                .select("lecturer_id")
+                .eq("id", mark.get("assessment_id"))
+                .execute()
+            )
+            if course_lecturer.data:
+                lecturer_id = course_lecturer.data[0].get("lecturer_id")
+                if lecturer_id:
+                    lecturer = supabase.table("users").select("email, full_name").eq("id", lecturer_id).execute()
+                    if lecturer.data:
+                        lecturer_email = lecturer.data[0].get("email")
+                        lecturer_name = lecturer.data[0].get("full_name", "Lecturer")
+                        if lecturer_email:
+                            asyncio.create_task(
+                                EmailService.send_flagged_mark_notification(
+                                    email=lecturer_email,
+                                    lecturer_name=lecturer_name,
+                                    student_name=mark.get("users", {}).get("full_name", "Student"),
+                                    course_code=mark.get("courses", {}).get("code", ""),
+                                    course_name=mark.get("courses", {}).get("name", ""),
+                                    assessment_name=mark.get("assessments", {}).get("name", ""),
+                                    raw_score=mark.get("raw_score"),
+                                    max_score=mark.get("assessments", {}).get("max_score"),
+                                    flag_reason=reason,
+                                )
+                            )
+        except Exception as e:
+            logger.warning(f"Failed to send flag email for mark {mark_id}: {e}")
+
         return resp.data[0]
 
     except HTTPException:
@@ -741,6 +784,65 @@ async def flag_mark(
     except Exception as e:
         logger.error(f"Error flagging mark {mark_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to flag mark")
+
+
+@router.post("/{mark_id}/send-flag-email")
+async def send_flag_email(
+    mark_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Resend flagged mark notification email"""
+    _require_supabase()
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers and admins can send emails")
+
+    try:
+        # Fetch mark with related data
+        mark_resp = (
+            supabase.table("marks")
+            .select("*, assessments(name, max_score), courses(code, name, lecturer_id), users(full_name, email, matric_number)")
+            .eq("id", mark_id)
+            .execute()
+        )
+        if not mark_resp.data:
+            raise HTTPException(status_code=404, detail="Mark not found")
+
+        mark = mark_resp.data[0]
+        if not mark.get("is_flagged"):
+            raise HTTPException(status_code=400, detail="Mark is not flagged")
+
+        # Get lecturer info
+        lecturer_id = mark.get("courses", {}).get("lecturer_id")
+        if not lecturer_id:
+            raise HTTPException(status_code=400, detail="No lecturer assigned to this course")
+
+        lecturer = supabase.table("users").select("email, full_name").eq("id", lecturer_id).execute()
+        if not lecturer.data:
+            raise HTTPException(status_code=400, detail="Lecturer not found")
+
+        lecturer_email = lecturer.data[0].get("email")
+        lecturer_name = lecturer.data[0].get("full_name", "Lecturer")
+
+        # Send email
+        await EmailService.send_flagged_mark_notification(
+            email=lecturer_email,
+            lecturer_name=lecturer_name,
+            student_name=mark.get("users", {}).get("full_name", "Student"),
+            course_code=mark.get("courses", {}).get("code", ""),
+            course_name=mark.get("courses", {}).get("name", ""),
+            assessment_name=mark.get("assessments", {}).get("name", ""),
+            raw_score=mark.get("raw_score"),
+            max_score=mark.get("assessments", {}).get("max_score"),
+            flag_reason=mark.get("flag_note"),
+        )
+
+        return {"message": "Email sent successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending flag email for mark {mark_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to send email")
 
 
 # ==================== Student Course Grade ====================

@@ -3,7 +3,7 @@ export type UserRole = 'student' | 'lecturer' | 'admin' | 'coordinator' | 'hod'
 export type LoginRole = 'student' | 'lecturer' | 'admin' // Only these can login/signup directly
 export type BaseRole = 'student' | 'lecturer' | 'admin'
 export type SpecialRole = 'coordinator' | 'hod' // Assigned to lecturers by admin
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
+export type ApprovalStatus = 'pending' | 'pending_verification' | 'approved' | 'rejected'
 
 export interface AuthUser {
   id: string

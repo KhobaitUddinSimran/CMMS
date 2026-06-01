@@ -83,3 +83,11 @@ export async function updateQueryStatus(queryId: string, status: string): Promis
   const { data } = await apiClient.patch(`/queries/${queryId}/status`, { status })
   return data
 }
+
+/**
+ * Send query response email to student
+ */
+export async function sendQueryEmail(queryId: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post(`/queries/${queryId}/send-email`)
+  return data
+}

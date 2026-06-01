@@ -93,6 +93,14 @@ export async function resendVerificationEmail(email: string): Promise<{ message:
   return data
 }
 
+/**
+ * Verify email with magic link token
+ */
+export async function verifyEmailWithToken(token: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await authApiClient.post('/auth/verify-email', { token })
+  return data
+}
+
 export interface RejectSignupRequest {
   reason: string
 }

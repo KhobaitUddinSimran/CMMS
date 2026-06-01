@@ -2,9 +2,11 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
+import asyncio
 from ..core.config import supabase
 from ..dependencies.auth import require_role, require_effective_role, invalidate_role_cache
 from ..services.audit_service import AuditService
+from ..services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +37,20 @@ async def approve_user(request: ApproveUserRequest, current_user=Depends(require
     if not supabase:
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
-        resp = supabase.table("users").select("id").ilike("email", email).execute()
+        resp = supabase.table("users").select("id, full_name").ilike("email", email).execute()
         if not resp.data:
             raise HTTPException(status_code=404, detail="User not found")
         user_id = resp.data[0]["id"]
+        full_name = resp.data[0].get("full_name", "")
         supabase.table("users").update({
             "is_active": True, "approval_status": "approved", "approved_by": admin_id,
         }).eq("id", user_id).execute()
         AuditService.log("USER_APPROVED", admin_id, user_id, {"email": email})
         logger.info(f"User {email} approved by admin {admin_id}")
+        try:
+            asyncio.create_task(EmailService.send_approval_email(email, full_name))
+        except Exception as email_err:
+            logger.warning(f"Approval email failed for {email}: {email_err}")
         return {"message": "User approved successfully and can now login", "email": email, "status": "approved"}
     except HTTPException:
         raise
@@ -54,21 +61,49 @@ async def approve_user(request: ApproveUserRequest, current_user=Depends(require
 
 @router.post("/reject-user")
 async def reject_user(request: RejectUserRequest, current_user=Depends(require_role("admin"))):
-    """Reject a pending user signup (Admin only)."""
+    """Reject and delete a pending user signup (Admin only).
+    User is completely removed from the database so they can sign up again."""
     email = request.email.lower()
+    admin_id = current_user.get("user_id")
     if not supabase:
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
-        resp = supabase.table("users").select("id").ilike("email", email).execute()
+        resp = supabase.table("users").select("id, full_name, role").ilike("email", email).execute()
         if not resp.data:
             raise HTTPException(status_code=404, detail="User not found")
         user_id = resp.data[0]["id"]
-        supabase.table("users").update({
-            "approval_status": "rejected", "is_active": False,
-            "rejection_reason": request.reason or "",
-        }).eq("id", user_id).execute()
-        AuditService.log("USER_REJECTED", current_user.get("user_id"), user_id, {"email": email, "reason": request.reason})
-        return {"message": "User rejected successfully", "email": email, "status": "rejected"}
+        full_name = resp.data[0].get("full_name", "")
+        user_role = resp.data[0].get("role", "")
+
+        # Send rejection email BEFORE deleting the user
+        try:
+            asyncio.create_task(EmailService.send_rejection_email(
+                email, full_name, request.reason or "Your application was not approved"
+            ))
+        except Exception as email_err:
+            logger.warning(f"Rejection email failed for {email}: {email_err}")
+
+        # Delete related audit logs first (to avoid FK constraint)
+        try:
+            supabase.table("audit_logs").delete().eq("user_id", user_id).execute()
+        except Exception as audit_err:
+            logger.warning(f"Failed to delete audit logs for {email}: {audit_err}")
+
+        # Delete the user completely
+        supabase.table("users").delete().eq("id", user_id).execute()
+
+        AuditService.log("USER_REJECTED", admin_id, None, {
+            "email": email,
+            "role": user_role,
+            "reason": request.reason,
+            "deleted": True
+        })
+        logger.info(f"User {email} rejected and deleted by admin {admin_id}")
+        return {
+            "message": "User rejected and removed from system. They can sign up again if needed.",
+            "email": email,
+            "status": "rejected_and_deleted"
+        }
     except HTTPException:
         raise
     except Exception as e:

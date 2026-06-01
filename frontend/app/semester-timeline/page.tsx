@@ -11,7 +11,7 @@ import {
 } from '@/lib/api/semester'
 import {
   CalendarDays, Plus, Trash2, ChevronLeft, ChevronRight,
-  GraduationCap, BookOpen, AlertCircle, X,
+  GraduationCap, AlertCircle, X,
 } from 'lucide-react'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -58,10 +58,6 @@ function MiniCalendar({ year, month, timelines }: MiniCalendarProps) {
       const end   = parseDate(tl.end_date)
       if (start && sameDay(date, start)) dots.push({ color: 'bg-emerald-500', label: `Sem ${tl.semester} Start` })
       if (end   && sameDay(date, end))   dots.push({ color: 'bg-red-500',     label: `Sem ${tl.semester} End` })
-      if (tl.midterm_deadline) {
-        const md = parseDate(tl.midterm_deadline)
-        if (md && sameDay(date, md)) dots.push({ color: 'bg-amber-500', label: 'Midterm' })
-      }
       if (tl.grade_submission_deadline) {
         const gd = parseDate(tl.grade_submission_deadline)
         if (gd && sameDay(date, gd)) dots.push({ color: 'bg-purple-500', label: 'Grade Deadline' })
@@ -134,7 +130,6 @@ function TimelineBar({ tl }: { tl: SemesterTimeline }) {
   }
 
   const milestones = [
-    { date: parseDate(tl.midterm_deadline),            color: 'bg-amber-400',  label: 'Midterm' },
     { date: parseDate(tl.grade_submission_deadline),   color: 'bg-purple-500', label: 'Grades Due' },
   ].filter(m => m.date !== null)
 
@@ -185,7 +180,6 @@ const EMPTY_FORM: SemesterTimelineInput = {
   semester: 1,
   start_date: '',
   end_date: '',
-  midterm_deadline: '',
   grade_submission_deadline: '',
   notes: '',
 }
@@ -222,7 +216,6 @@ export default function SemesterTimelinePage() {
         semester: tl.semester,
         start_date: tl.start_date,
         end_date: tl.end_date,
-        midterm_deadline: tl.midterm_deadline || '',
         grade_submission_deadline: tl.grade_submission_deadline || '',
         notes: tl.notes || '',
       })
@@ -346,11 +339,6 @@ export default function SemesterTimelinePage() {
 
                 {/* Deadline badges */}
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {tl.midterm_deadline && (
-                    <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200">
-                      <BookOpen className="w-3 h-3" /> Midterm: {tl.midterm_deadline}
-                    </span>
-                  )}
                   {tl.grade_submission_deadline && (
                     <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-purple-50 text-purple-700 rounded-full border border-purple-200">
                       <AlertCircle className="w-3 h-3" /> Grades Due: {tl.grade_submission_deadline}
@@ -391,7 +379,6 @@ export default function SemesterTimelinePage() {
               {[
                 { color: 'bg-emerald-500', label: 'Semester Start' },
                 { color: 'bg-red-500',     label: 'Semester End' },
-                { color: 'bg-amber-500',   label: 'Midterm Deadline' },
                 { color: 'bg-purple-500',  label: 'Grade Submission' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-2">
@@ -464,7 +451,6 @@ export default function SemesterTimelinePage() {
                 <p className="text-[12px] font-semibold text-[#9CA3AF] uppercase tracking-wide mb-3">Coursework Deadlines</p>
                 <div className="space-y-3">
                   {[
-                    { key: 'midterm_deadline',          label: 'Midterm Deadline' },
                     { key: 'grade_submission_deadline', label: 'Grade Submission Deadline' },
                   ].map(({ key, label }) => (
                     <div key={key}>

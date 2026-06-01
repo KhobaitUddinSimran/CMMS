@@ -1,71 +1,118 @@
-INFO:     Will watch for changes in these directories: ['/Users/khobaituddinsimran/Desktop/ACTIVE WORK/CMMS/apps/backend']
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [21101] using StatReload
-INFO:     Started server process [21103]
+INFO:     Will watch for changes in these directories: ['/Users/khobaituddinsimran/Desktop/ACTIVE WORK/CMMS']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [8184] using WatchFiles
+INFO:     Started server process [8187]
 INFO:     Waiting for application startup.
+2026-06-01 16:25:24 - backend.main - INFO - [main.py:22] - 🚀 Starting CMMS application...
 INFO:     Application startup complete.
-INFO:     127.0.0.1:64492 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64509 - "GET /docs HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64512 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64548 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64548 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64562 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64563 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64562 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64563 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64585 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64588 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64588 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64588 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64673 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64693 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64693 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64693 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64695 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64693 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64695 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64705 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64735 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64735 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64800 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64854 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64870 - "OPTIONS /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64870 - "POST /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64983 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:64983 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64985 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:64996 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65028 - "POST /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65046 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65099 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65100 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65099 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65100 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:65149 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65270 - "OPTIONS /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65270 - "POST /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65272 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:65272 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49235 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49235 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49351 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49352 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49351 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49352 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49354 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49354 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49362 - "OPTIONS /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49362 - "POST /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49375 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49419 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49419 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49422 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49437 - "POST /api/auth/logout HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49793 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:49798 - "POST /api/auth/password-reset?email=uddinsimran%40graduate.utm.my HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:49800 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49800 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49800 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49800 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49800 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
-INFO:     127.0.0.1:49800 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+2026-06-01 16:26:29 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id&email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+2026-06-01 16:26:29 - httpx - INFO - [_client.py:1038] - HTTP Request: POST https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/rpc/signup_student "HTTP/2 200 OK"
+2026-06-01 16:26:29 - backend.routers.auth - INFO - [auth.py:243] - New student signup simran@graduate.utm.my - verification email sent
+INFO:     ::1:0 - "POST /auth/signup HTTP/1.1" 202 Accepted
+2026-06-01 16:26:33 - backend.services.email_service - INFO - [email_service.py:59] - Email 'Verify Your CMMS Student Account' sent to simran@graduate.utm.my
+2026-06-01 16:27:23 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps?select=%2A&code=eq.bvpE4cO899dXAxXJiF0emoJCC54QrffEPiAVbwbMrzc&otp_type=eq.email_verification&limit=1 "HTTP/2 200 OK"
+2026-06-01 16:27:23 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id%2C%20full_name%2C%20role&email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+2026-06-01 16:27:23 - httpx - INFO - [_client.py:1038] - HTTP Request: PATCH https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+2026-06-01 16:27:24 - httpx - INFO - [_client.py:1038] - HTTP Request: PATCH https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps?id=eq.6742f1f4-e69c-4b3e-b8fd-3218440ac4ef "HTTP/2 200 OK"
+2026-06-01 16:27:24 - backend.routers.auth - INFO - [auth.py:546] - Email verified and account activated for simran@graduate.utm.my
+INFO:     ::1:0 - "POST /auth/verify-email HTTP/1.1" 200 OK
+2026-06-01 16:27:24 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps?select=%2A&code=eq.bvpE4cO899dXAxXJiF0emoJCC54QrffEPiAVbwbMrzc&otp_type=eq.email_verification&limit=1 "HTTP/2 200 OK"
+INFO:     ::1:0 - "POST /auth/verify-email HTTP/1.1" 400 Bad Request
+2026-06-01 16:27:27 - backend.services.email_service - INFO - [email_service.py:59] - Email 'Your CMMS Account Has Been Approved!' sent to simran@graduate.utm.my
+2026-06-01 16:28:21 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=%2A&email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+2026-06-01 16:28:21 - backend.routers.auth - INFO - [auth.py:134] - User simran@graduate.utm.my logged in (id=a806077a-cf1f-4547-901b-655b9cc8c10b, role=student, special=[])
+INFO:     ::1:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-06-01 16:28:22 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=role%2C%20special_roles%2C%20is_active&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&limit=1 "HTTP/2 200 OK"
+2026-06-01 16:28:22 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:28:22 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:28:23 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:28:23 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:28:23 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:28:23 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:28:33 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id%2C%20email%2C%20full_name%2C%20role%2C%20is_active%2C%20email_verified%2C%20approval_status%2C%20created_at&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/users/me HTTP/1.1" 200 OK
+2026-06-01 16:28:33 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:28:33 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id%2C%20email%2C%20full_name%2C%20role%2C%20is_active%2C%20email_verified%2C%20approval_status%2C%20created_at&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/users/me HTTP/1.1" 200 OK
+2026-06-01 16:28:33 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:28:33 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:28:33 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:28:35 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 100
+2026-06-01 16:28:35 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses HTTP/1.1" 200 OK
+2026-06-01 16:30:27 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps?select=%2A&code=eq.bvpE4cO899dXAxXJiF0emoJCC54QrffEPiAVbwbMrzc&otp_type=eq.email_verification&limit=1 "HTTP/2 200 OK"
+INFO:     ::1:0 - "POST /auth/verify-email HTTP/1.1" 400 Bad Request
+2026-06-01 16:31:50 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id&email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+2026-06-01 16:31:50 - httpx - INFO - [_client.py:1038] - HTTP Request: DELETE https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps?email=eq.simran%40graduate.utm.my&otp_type=eq.password_reset&is_used=eq.False "HTTP/2 200 OK"
+2026-06-01 16:31:51 - httpx - INFO - [_client.py:1038] - HTTP Request: POST https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps "HTTP/2 201 Created"
+2026-06-01 16:31:54 - backend.services.email_service - INFO - [email_service.py:59] - Email 'Reset Your CMMS Password' sent to simran@graduate.utm.my
+INFO:     ::1:0 - "POST /auth/password-reset HTTP/1.1" 200 OK
+2026-06-01 16:32:23 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps?select=%2A&code=eq.ABNPYvAOTz0VrRBSg92-bjKC35Vd8JLfCAHsi5UqZyo&otp_type=eq.password_reset&limit=1 "HTTP/2 200 OK"
+2026-06-01 16:32:23 - httpx - INFO - [_client.py:1038] - HTTP Request: PATCH https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/otps?id=eq.5f8965d4-e2f2-4b4c-a436-1ffae23101fa "HTTP/2 200 OK"
+2026-06-01 16:32:23 - httpx - INFO - [_client.py:1038] - HTTP Request: PATCH https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+2026-06-01 16:32:23 - backend.routers.auth - INFO - [auth.py:478] - Password reset successful for simran@graduate.utm.my
+INFO:     ::1:0 - "POST /auth/reset-password HTTP/1.1" 200 OK
+2026-06-01 16:32:42 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=%2A&email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+2026-06-01 16:32:42 - backend.routers.auth - INFO - [auth.py:134] - User simran@graduate.utm.my logged in (id=a806077a-cf1f-4547-901b-655b9cc8c10b, role=student, special=[])
+INFO:     ::1:0 - "POST /auth/login HTTP/1.1" 200 OK
+2026-06-01 16:32:42 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=role%2C%20special_roles%2C%20is_active&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&limit=1 "HTTP/2 200 OK"
+2026-06-01 16:32:42 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:32:42 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:32:43 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:32:43 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:32:43 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:32:43 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:32:45 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:32:45 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:32:45 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:32:45 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id%2C%20email%2C%20full_name%2C%20role%2C%20is_active%2C%20email_verified%2C%20approval_status%2C%20created_at&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/users/me HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/marks?select=%2A%2C%20assessments%28id%2C%20name%2C%20max_score%2C%20weight_percentage%2C%20type%2C%20course_id%29&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.published "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/marks/student/a806077a-cf1f-4547-901b-655b9cc8c10b/summary HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id%2C%20email%2C%20full_name%2C%20role%2C%20is_active%2C%20email_verified%2C%20approval_status%2C%20created_at&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/users/me HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/marks?select=%2A%2C%20assessments%28id%2C%20name%2C%20max_score%2C%20weight_percentage%2C%20type%2C%20course_id%29&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.published "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/marks/student/a806077a-cf1f-4547-901b-655b9cc8c10b/summary HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 500
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses?limit=500 HTTP/1.1" 200 OK
+2026-06-01 16:32:49 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:32:50 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id%2C%20email%2C%20full_name%2C%20role%2C%20is_active%2C%20email_verified%2C%20approval_status%2C%20created_at&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/users/me HTTP/1.1" 200 OK
+2026-06-01 16:32:50 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:32:50 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 100
+2026-06-01 16:32:50 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses HTTP/1.1" 200 OK
+2026-06-01 16:32:50 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=id%2C%20email%2C%20full_name%2C%20role%2C%20is_active%2C%20email_verified%2C%20approval_status%2C%20created_at&id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/users/me HTTP/1.1" 200 OK
+2026-06-01 16:32:50 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/course_queries?select=%2A&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&order=created_at.desc "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/queries HTTP/1.1" 200 OK
+2026-06-01 16:32:50 - backend.routers.courses - INFO - [courses.py:38] - Listing courses - user: a806077a-cf1f-4547-901b-655b9cc8c10b, role: student, skip: 0, limit: 100
+2026-06-01 16:32:50 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/enrollments?select=course_id&student_id=eq.a806077a-cf1f-4547-901b-655b9cc8c10b&status=eq.active "HTTP/2 200 OK"
+INFO:     ::1:0 - "GET /api/courses HTTP/1.1" 200 OK
+2026-06-01 16:32:51 - backend.routers.auth - INFO - [auth.py:301] - User a806077a-cf1f-4547-901b-655b9cc8c10b logged out
+INFO:     ::1:0 - "POST /auth/logout HTTP/1.1" 200 OK
+2026-06-01 16:33:00 - httpx - INFO - [_client.py:1038] - HTTP Request: GET https://dvrvotajdelswvdxkuyt.supabase.co/rest/v1/users?select=%2A&email=ilike.simran%40graduate.utm.my "HTTP/2 200 OK"
+INFO:     ::1:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized

@@ -28,9 +28,11 @@ def _require_supabase():
 async def list_courses(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    timeline_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
 ):
-    """List all courses with pagination using Supabase"""
+    """List all courses with pagination using Supabase.
+    Pass timeline_id to restrict to courses selected for that semester."""
     _require_supabase()
     try:
         logger.info(
@@ -91,6 +93,19 @@ async def list_courses(
             if not is_elevated:
                 query = query.eq("lecturer_id", user_id)
 
+            # Optional: filter by semester timeline course selection
+            if timeline_id:
+                sel_resp = (
+                    supabase.table("semester_course_selections")
+                    .select("course_id")
+                    .eq("timeline_id", timeline_id)
+                    .execute()
+                )
+                selected_ids = [r["course_id"] for r in (sel_resp.data or [])]
+                if not selected_ids:
+                    return {"data": [], "total": 0, "skip": skip, "limit": limit}
+                query = query.in_("id", selected_ids)
+
             # Query Supabase for courses with pagination
             response = query.range(skip, skip + limit - 1).execute()
             courses = response.data if response.data else []
@@ -99,6 +114,10 @@ async def list_courses(
             count_query = supabase.table("courses").select("id", count="exact").is_("archived_at", "null")
             if not is_elevated:
                 count_query = count_query.eq("lecturer_id", user_id)
+            if timeline_id:
+                sel_ids = [r["course_id"] for r in (sel_resp.data or [])]  # type: ignore[possibly-undefined]
+                if sel_ids:
+                    count_query = count_query.in_("id", sel_ids)
             count_response = count_query.execute()
             total = count_response.count if hasattr(count_response, "count") else 0
 
@@ -456,9 +475,7 @@ async def assign_lecturer(
             detail="Only coordinators, HODs, and admins can assign lecturers"
         )
 
-    lecturer_id = data.get("lecturer_id")
-    if not lecturer_id:
-        raise HTTPException(status_code=400, detail="lecturer_id is required")
+    lecturer_id = data.get("lecturer_id") or None  # treat empty string as None (unassign)
 
     try:
         # Verify course exists
@@ -466,6 +483,22 @@ async def assign_lecturer(
         if not course_resp.data:
             raise HTTPException(status_code=404, detail="Course not found")
 
+        course = course_resp.data[0]
+        old_lecturer_id = course.get("lecturer_id")
+
+        # ── UNASSIGN ──────────────────────────────────────────────────────────
+        if lecturer_id is None:
+            resp = supabase.table("courses").update({"lecturer_id": None}).eq("id", course_id).execute()
+            if not resp.data:
+                raise HTTPException(status_code=500, detail="Failed to unassign lecturer")
+            logger.info(f"Lecturer unassigned from course {course_id} by {current_user.get('user_id')}")
+            AuditService.log(
+                "LECTURER_UNASSIGNED", current_user.get("user_id"), course_id,
+                metadata={"old_lecturer_id": old_lecturer_id},
+            )
+            return resp.data[0]
+
+        # ── ASSIGN ────────────────────────────────────────────────────────────
         # Verify lecturer exists and has lecturer role
         lecturer_resp = supabase.table("users").select("*").eq("id", lecturer_id).execute()
         if not lecturer_resp.data:
@@ -476,7 +509,6 @@ async def assign_lecturer(
             raise HTTPException(status_code=400, detail="User is not a teaching staff member")
 
         # Enforce per-lecturer credit cap (users.max_teaching_credits; no enforcement if NULL)
-        course = course_resp.data[0]
         override = bool(data.get("override")) and has_effective_role(current_user, "hod", "admin")
         override_reason = (data.get("override_reason") or "").strip()
         if course.get("lecturer_id") != lecturer_id:
@@ -508,8 +540,6 @@ async def assign_lecturer(
             if cap is not None and override and used_credits + course_credits > cap and not override_reason:
                 raise HTTPException(status_code=400, detail="override_reason is required when overriding the credit cap")
 
-        # Update course
-        old_lecturer_id = course.get("lecturer_id")
         resp = supabase.table("courses").update({"lecturer_id": lecturer_id}).eq("id", course_id).execute()
         if not resp.data:
             raise HTTPException(status_code=500, detail="Failed to assign lecturer")

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, BarChart3, Users, ClipboardList, Download, ExternalLink, Flag,
+  ArrowLeft, BarChart3, Users, ClipboardList, Download, ExternalLink,
 } from 'lucide-react'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
@@ -12,20 +12,18 @@ import { useToastStore } from '@/stores/toastStore'
 import { listCourses } from '@/lib/api/courses'
 import { getEnrolledStudents } from '@/lib/api/enrollments'
 import { listAssessments } from '@/lib/api/assessments'
-import { getFlaggedMarks } from '@/lib/api/marks'
 import { downloadCsv, dateStamp } from '@/lib/utils/csv'
 
 interface Totals {
   courses: number
   enrollments: number
   assessments: number
-  flagged: number
 }
 
 export default function ReportsPage() {
   const router = useRouter()
   const { addToast } = useToastStore()
-  const [totals, setTotals] = useState<Totals>({ courses: 0, enrollments: 0, assessments: 0, flagged: 0 })
+  const [totals, setTotals] = useState<Totals>({ courses: 0, enrollments: 0, assessments: 0 })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -36,7 +34,7 @@ export default function ReportsPage() {
         const cRes = await listCourses({ limit: 500 })
         const courses = cRes.data || (cRes as any) || []
 
-        const [enrCounts, assCounts, flaggedRes] = await Promise.all([
+        const [enrCounts, assCounts] = await Promise.all([
           Promise.all(courses.map(async (c: any) => {
             try {
               const s = await getEnrolledStudents(c.id)
@@ -49,7 +47,6 @@ export default function ReportsPage() {
               return (a.data || []).length
             } catch { return 0 }
           })),
-          getFlaggedMarks().catch(() => ({ count: 0, flagged_marks: [] })),
         ])
 
         if (cancelled) return
@@ -57,7 +54,6 @@ export default function ReportsPage() {
           courses: courses.length,
           enrollments: enrCounts.reduce((a: number, b: number) => a + b, 0),
           assessments: assCounts.reduce((a: number, b: number) => a + b, 0),
-          flagged: flaggedRes.count || 0,
         })
       } catch (err) {
         if (!cancelled) addToast('Failed to load report totals', 'error')
@@ -96,34 +92,7 @@ export default function ReportsPage() {
     }
   }
 
-  // ── Report 2: Performance Report (flagged marks across all courses) ───────
-  async function downloadPerformanceReport() {
-    setBusy('perf')
-    try {
-      const res = await getFlaggedMarks()
-      const headers = [
-        'Course Code', 'Course Name', 'Assessment', 'Type',
-        'Student Email', 'Student Name',
-        'Raw Score', 'Max Score', 'Weight %', 'Flag Reason', 'Updated At',
-      ]
-      const rows = (res.flagged_marks || []).map((m: any) => [
-        m.courses?.code || '', m.courses?.name || '',
-        m.assessments?.name || '', m.assessments?.type || '',
-        m.student?.email || '', m.student?.full_name || '',
-        m.raw_score ?? '', m.assessments?.max_score ?? '',
-        m.assessments?.weight_percentage ?? '',
-        m.flag_note || '', m.updated_at || '',
-      ])
-      downloadCsv(`flagged_marks_${dateStamp()}.csv`, headers, rows)
-      addToast(`Exported ${rows.length} flagged marks`, 'success')
-    } catch {
-      addToast('Failed to generate performance report', 'error')
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  // ── Report 3: Assessment Report ───────────────────────────────────────────
+  // ── Report 2: Assessment Report ───────────────────────────────────────────
   async function downloadAssessmentReport() {
     setBusy('assess')
     try {
@@ -174,7 +143,6 @@ export default function ReportsPage() {
           { label: 'Courses', value: totals.courses, color: 'text-[#C90031]' },
           { label: 'Enrollments', value: totals.enrollments, color: 'text-[#3B82F6]' },
           { label: 'Assessments', value: totals.assessments, color: 'text-[#7C3AED]' },
-          { label: 'Flagged Marks', value: totals.flagged, color: 'text-[#F59E0B]' },
         ].map((s) => (
           <Card key={s.label}>
             <p className="text-[12px] font-medium text-[#6B7280] uppercase tracking-wide">{s.label}</p>
@@ -186,7 +154,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Report cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* 1. Enrollment Report */}
         <Card className="hover:shadow-md transition-shadow">
           <div className="w-12 h-12 rounded-lg bg-[#FEE2E2] flex items-center justify-center mb-4">
@@ -213,33 +181,7 @@ export default function ReportsPage() {
           </div>
         </Card>
 
-        {/* 2. Performance / Flagged Report */}
-        <Card className="hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 rounded-lg bg-[#FEF3C7] flex items-center justify-center mb-4">
-            <Flag className="w-6 h-6 text-[#F59E0B]" />
-          </div>
-          <h3 className="font-bold text-[#111827]">Flagged Marks Report</h3>
-          <p className="text-[13px] text-[#6B7280] mt-1.5 mb-4">
-            All marks flagged for review with student, course, score, and reason.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={downloadPerformanceReport}
-              disabled={busy === 'perf'}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-[#C90031] text-white rounded-lg text-sm font-medium hover:bg-[#A80028] disabled:opacity-50 transition-colors"
-            >
-              {busy === 'perf' ? <Spinner size="sm" /> : <Download className="w-4 h-4" />} CSV
-            </button>
-            <button
-              onClick={() => router.push('/flagged-marks')}
-              className="inline-flex items-center justify-center gap-1 px-3 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm font-medium hover:bg-[#F9FAFB] transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" /> View
-            </button>
-          </div>
-        </Card>
-
-        {/* 3. Assessment Report */}
+        {/* 2. Assessment Report */}
         <Card className="hover:shadow-md transition-shadow">
           <div className="w-12 h-12 rounded-lg bg-[#F5F3FF] flex items-center justify-center mb-4">
             <ClipboardList className="w-6 h-6 text-[#7C3AED]" />
