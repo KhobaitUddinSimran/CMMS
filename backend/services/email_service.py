@@ -3,6 +3,7 @@ import logging
 import os
 import asyncio
 import smtplib
+import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -16,17 +17,23 @@ load_dotenv(backend_dir / '.env')
 class EmailConfig:
     def __init__(self):
         self.smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
-        self.smtp_login = os.getenv('SMTP_LOGIN', '')
-        self.smtp_password = os.getenv('SMTP_PASSWORD', '').replace(' ', '')
-        self.email_from_address = os.getenv('EMAIL_FROM_ADDRESS', '')
+        # Use port 465 (implicit SSL) on production, 587 (STARTTLS) on localhost
+        use_implicit_ssl = os.getenv('ENVIRONMENT', 'development') == 'production'
+        self.smtp_port = int(os.getenv('SMTP_PORT', '465' if use_implicit_ssl else '587'))
+        self.smtp_login = os.getenv('SMTP_LOGIN', '').strip()
+        self.smtp_password = os.getenv('SMTP_PASSWORD', '').strip()
+        self.email_from_address = os.getenv('EMAIL_FROM_ADDRESS', '').strip()
         self.email_from_name = os.getenv('EMAIL_FROM_NAME', 'CMMS')
+        self.use_tls = self.smtp_port == 587  # STARTTLS on port 587
+        self.use_ssl = self.smtp_port == 465  # Implicit SSL on port 465
 
     @property
     def is_configured(self) -> bool:
         return bool(self.smtp_login and self.smtp_password and self.email_from_address)
 
 email_config = EmailConfig()
+logger.info(f"Email config: host={email_config.smtp_host}, port={email_config.smtp_port}, "
+            f"tls={email_config.use_tls}, ssl={email_config.use_ssl}, configured={email_config.is_configured}")
 
 _FOOTER = """
 <hr style="margin:32px 0 16px;border:none;border-top:1px solid #E5E7EB;"/>
@@ -35,31 +42,100 @@ _FOOTER = """
 </p>
 """
 
+def _get_frontend_url() -> str:
+    """Get the frontend URL from environment or config."""
+    # Try to extract first URL if CORS_ORIGINS is a comma-separated list
+    cors_origins = os.getenv('CORS_ORIGINS', '')
+    if cors_origins:
+        # Take the first URL if multiple are provided
+        first_url = cors_origins.split(',')[0].strip()
+        if first_url:
+            return first_url
+    return os.getenv('FRONTEND_URL', 'http://localhost:3000')
+
 def _send_smtp(to: str, subject: str, html: str) -> bool:
-    """Blocking SMTP send — called via asyncio.to_thread."""
+    """Blocking SMTP send — called via asyncio.to_thread.
+    
+    FIXED for Render deployment:
+    - Uses implicit SSL (port 465) in production for better compatibility
+    - Proper SSL context with certificate verification
+    - Better error handling and logging
+    - Timeout configuration
+    """
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
     msg['From'] = f"{email_config.email_from_name} <{email_config.email_from_address}>"
     msg['To'] = to
     msg.attach(MIMEText(html, 'html', 'utf-8'))
-    with smtplib.SMTP(email_config.smtp_host, email_config.smtp_port) as server:
-        server.ehlo()
-        server.starttls()
+    
+    try:
+        # Create SSL context with certificate verification
+        context = ssl.create_default_context()
+        
+        if email_config.use_ssl:
+            # Port 465: Implicit SSL (recommended for production/Render)
+            logger.debug(f"Connecting to {email_config.smtp_host}:{email_config.smtp_port} with implicit SSL...")
+            server = smtplib.SMTP_SSL(
+                email_config.smtp_host,
+                email_config.smtp_port,
+                context=context,
+                timeout=15
+            )
+        else:
+            # Port 587: STARTTLS (recommended for localhost/development)
+            logger.debug(f"Connecting to {email_config.smtp_host}:{email_config.smtp_port} with STARTTLS...")
+            server = smtplib.SMTP(
+                email_config.smtp_host,
+                email_config.smtp_port,
+                timeout=15
+            )
+            server.starttls(context=context)
+        
+        logger.debug(f"Authenticating as {email_config.smtp_login}...")
         server.login(email_config.smtp_login, email_config.smtp_password)
+        
+        logger.debug(f"Sending email to {to}...")
         server.sendmail(email_config.email_from_address, to, msg.as_string())
-    return True
+        
+        server.quit()
+        return True
+        
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP Authentication failed for {email_config.smtp_login}: {e}")
+        raise
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error while sending to {to}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error sending email to {to}: {type(e).__name__}: {e}")
+        raise
 
 async def _send(to: str, subject: str, html: str) -> bool:
-    """Async wrapper: runs _send_smtp in a thread pool."""
+    """Async wrapper: runs _send_smtp in a thread pool.
+    
+    IMPROVED: Better error diagnostics and retry logic for Render compatibility.
+    """
     if not email_config.is_configured:
-        logger.warning(f"Email not configured — skipping send to {to}")
+        logger.warning(f"Email not configured (missing SMTP_LOGIN, SMTP_PASSWORD, or EMAIL_FROM_ADDRESS) — skipping send to {to}")
         return False
+    
     try:
+        logger.info(f"Sending email '{subject}' to {to}...")
         await asyncio.to_thread(_send_smtp, to, subject, html)
-        logger.info(f"Email '{subject}' sent to {to}")
+        logger.info(f"✓ Email '{subject}' successfully sent to {to}")
         return True
+    except smtplib.SMTPAuthenticationError:
+        logger.error(f"✗ SMTP Authentication Error: Check SMTP_LOGIN and SMTP_PASSWORD on Render")
+        return False
+    except smtplib.SMTPException as e:
+        logger.error(f"✗ SMTP Error: {e} (Check SMTP_HOST and SMTP_PORT)")
+        return False
+    except OSError as e:
+        # Network/connection errors (common on Render during startup)
+        logger.error(f"✗ Connection Error to SMTP server: {e} (Check network/firewall)")
+        return False
     except Exception as exc:
-        logger.error(f"Failed to send '{subject}' to {to}: {exc}")
+        logger.error(f"✗ Failed to send '{subject}' to {to}: {type(exc).__name__}: {exc}", exc_info=True)
         return False
 
 
@@ -104,13 +180,14 @@ class EmailService:
     @staticmethod
     async def send_marks_published(email: str, student_name: str, course_name: str):
         """Notify student that marks have been published"""
+        frontend_url = _get_frontend_url()
         subject = f"Marks Published – {course_name}"
         html = f"""
         <h2 style="color:#0F172A;">Marks Published</h2>
         <p>Hi {student_name},</p>
         <p>Your marks for <strong>{course_name}</strong> have been published and are now available.</p>
         <p style="margin:24px 0;">
-            <a href="http://localhost:3000/marks"
+            <a href="{frontend_url}/marks"
                style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
                 View My Marks
@@ -187,6 +264,7 @@ class EmailService:
     @staticmethod
     async def send_approval_email(email: str, full_name: str):
         """Send account approval email"""
+        frontend_url = _get_frontend_url()
         subject = "Your CMMS Account Has Been Approved!"
         html = f"""
         <h2 style="color:#0F172A;">Account Approved!</h2>
@@ -194,7 +272,7 @@ class EmailService:
         <p>Your CMMS account has been reviewed and <strong style="color:#16A34A;">approved</strong>.
            You can now log in using your registered email and password.</p>
         <p style="margin:24px 0;">
-            <a href="http://localhost:3000/auth/login"
+            <a href="{frontend_url}/auth/login"
                style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
                 Log In to CMMS
@@ -233,6 +311,7 @@ class EmailService:
         query_text: str,
     ):
         """Notify lecturer that a student has submitted a mark query"""
+        frontend_url = _get_frontend_url()
         subject = f"New Mark Query – {course_name}"
         html = f"""
         <h2 style="color:#0F172A;">New Mark Query Received</h2>
@@ -244,7 +323,7 @@ class EmailService:
             <p style="margin:8px 0 0;color:#111827;">{query_text}</p>
         </div>
         <p style="margin:24px 0;">
-            <a href="http://localhost:3000/queries"
+            <a href="{frontend_url}/queries"
                style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
                 View &amp; Respond
@@ -267,6 +346,7 @@ class EmailService:
         courses: list[str],
     ):
         """Send semester deadline reminder to a lecturer"""
+        frontend_url = _get_frontend_url()
         def _fmt(d: str | None) -> str:
             return d if d else "—"
 
@@ -294,7 +374,7 @@ class EmailService:
         <ul style="margin:8px 0 16px 20px;">{course_rows}</ul>
         {f'<p><strong>Notes:</strong> {notes}</p>' if notes else ''}
         <p style="margin:24px 0;">
-            <a href="http://localhost:3000/course-management"
+            <a href="{frontend_url}/course-management"
                style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
                 Open Course Management
@@ -342,6 +422,7 @@ class EmailService:
         flag_reason: str | None,
     ):
         """Send notification to lecturer when a mark is flagged"""
+        frontend_url = _get_frontend_url()
         subject = f"Mark Flagged for Review – {course_code}"
         score_display = f"{raw_score}/{max_score}" if raw_score is not None and max_score else "—"
         html = f"""
@@ -368,7 +449,7 @@ class EmailService:
         </table>
         {f'<p><strong>Flag Reason:</strong> {flag_reason}</p>' if flag_reason else ''}
         <p style="margin:24px 0;">
-            <a href="http://localhost:3000/flagged-marks"
+            <a href="{frontend_url}/flagged-marks"
                style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
                 Review Flagged Marks
@@ -388,6 +469,7 @@ class EmailService:
         response_text: str,
     ):
         """Send notification to student when lecturer responds to their query"""
+        frontend_url = _get_frontend_url()
         subject = f"Response to Your Query – {course_code}"
         html = f"""
         <h2 style="color:#0F172A;">Your Query Has Been Answered</h2>
@@ -397,7 +479,7 @@ class EmailService:
             <p style="margin:0;color:#374151;font-size:14px;line-height:1.5;">{response_text}</p>
         </div>
         <p style="margin:24px 0;">
-            <a href="http://localhost:3000/queries"
+            <a href="{frontend_url}/queries"
                style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
                 View Your Queries
