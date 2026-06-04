@@ -1,15 +1,15 @@
 # API routers
-from . import auth
-from . import user
-from . import courses
-from . import assessments
-from . import enrollments
-from . import marks
-from . import admin
-from . import health
-from . import queries
-from . import semester
-from . import messages
+from routers import auth
+from routers import user
+from routers import courses
+from routers import assessments
+from routers import enrollments
+from routers import marks
+from routers import admin
+from routers import health
+from routers import queries
+from routers import semester
+from routers import messages
 
 __all__ = [
     "auth",

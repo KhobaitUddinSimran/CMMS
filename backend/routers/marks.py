@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from typing import Optional, List
 import io
 import openpyxl
-from ..core.config import supabase
-from ..dependencies.auth import get_current_user, has_effective_role
-from ..services.audit_service import AuditService
-from ..services.email_service import EmailService
-from ..utils.session import is_grade_window_closed
+from core.config import supabase
+from dependencies.auth import get_current_user, has_effective_role
+from services.audit_service import AuditService
+from services.email_service import EmailService
+from utils.session import is_grade_window_closed
 
 
 # ==================== Letter-grade mapping (UTM standard) ====================

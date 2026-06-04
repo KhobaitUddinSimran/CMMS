@@ -2,9 +2,9 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
-from ..core.config import supabase
-from ..dependencies.auth import get_current_user, has_effective_role
-from ..services.audit_service import AuditService
+from core.config import supabase
+from dependencies.auth import get_current_user, has_effective_role
+from services.audit_service import AuditService
 from typing import Optional
 
 

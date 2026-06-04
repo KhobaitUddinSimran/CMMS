@@ -1,7 +1,7 @@
 """Global exception handlers"""
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
-from ..core.exceptions import CMSSException
+from core.exceptions import CMSSException
 
 def setup_exception_handlers(app: FastAPI):
     @app.exception_handler(CMSSException)

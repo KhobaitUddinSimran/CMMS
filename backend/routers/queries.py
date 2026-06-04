@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from typing import Optional
-from ..core.config import supabase
-from ..dependencies.auth import get_current_user, has_effective_role
-from ..services.audit_service import AuditService
-from ..services.email_service import EmailService
+from core.config import supabase
+from dependencies.auth import get_current_user, has_effective_role
+from services.audit_service import AuditService
+from services.email_service import EmailService
 
 router = APIRouter(prefix="/api/queries", tags=["queries"])
 logger = logging.getLogger(__name__)

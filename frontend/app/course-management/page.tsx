@@ -397,6 +397,17 @@ export default function CourseManagementPage() {
     })
   }, [courses, search, filterUnassigned, activeSemester, selectedCourseIds, loadingSelection])
 
+  const exportCourses = useMemo(() => {
+    if (!activeSemester) return courses
+    if (loadingSelection || selectedCourseIds.size === 0) return []
+    return courses.filter(course => selectedCourseIds.has(course.id))
+  }, [courses, activeSemester, loadingSelection, selectedCourseIds])
+
+  const exportScopeLabel = useMemo(() => {
+    if (!activeSemester) return 'All courses'
+    return `${activeSemester.academic_year} Sem ${activeSemester.semester}`
+  }, [activeSemester])
+
   const setupFilteredCourses = useMemo(() => {
     const q = courseSearchSetup.trim().toLowerCase()
     if (!q) return courses
@@ -452,12 +463,12 @@ export default function CourseManagementPage() {
           onClick={async () => {
             setDownloadingLoad(true)
             try {
-              const workloads = await getLecturerWorkloads()
-              await downloadTeachingLoad(activeSemester ? filtered : courses, workloads)
+              const workloads = await getLecturerWorkloads(activeSemester?.semester, activeSemester?.academic_year)
+              await downloadTeachingLoad(exportCourses, workloads, { scopeLabel: exportScopeLabel })
             } catch { addToast('Failed to generate export', 'error') }
             finally { setDownloadingLoad(false) }
           }}
-          disabled={loading || courses.length === 0 || downloadingLoad}
+          disabled={loading || downloadingLoad || exportCourses.length === 0}
           className="flex items-center gap-2 px-3 py-2 bg-[#166534] hover:bg-[#14532D] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition"
         >
           {downloadingLoad ? <><RefreshCw className="w-4 h-4 animate-spin" />Generating…</> : <><FileDown className="w-4 h-4" />Export Excel</>}
