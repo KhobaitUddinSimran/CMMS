@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from ..core.security import hash_password, verify_password, create_access_token
-from ..core.config import supabase
-from ..models.user import User
-from ..dependencies.auth import get_current_user
-from ..services.email_service import EmailService
+from core.security import hash_password, verify_password, create_access_token
+from core.config import supabase
+from models.user import User
+from dependencies.auth import get_current_user
+from services.email_service import EmailService
 from datetime import datetime, timedelta
 import uuid
 import os

@@ -1,39 +1,30 @@
 import ExcelJS from 'exceljs'
 import type { LecturerWorkload } from '@/lib/api/courses'
-
-interface CourseRow {
-  id: string
-  code: string
-  name?: string
-  section?: string
-  semester?: string
-  academic_year?: string
-  year?: string
-  credits?: number
-  lecturer_id?: string
-  lecturer_name?: string
-}
+import {
+  buildTeachingLoadReport,
+  type TeachingLoadCourseRow,
+} from '@/lib/utils/teachingLoadReport'
 
 function dateStamp(): string {
   const d = new Date()
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 }
 
-// ARGB fill helpers (ExcelJS uses ARGB with no # prefix)
-const FILL_HEADER:  ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }
+const FILL_HEADER: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }
 const FILL_SECTION: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBDD7EE' } }
 const FILL_ELECTIVE: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFD966' } }
-const FILL_CORE:    ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } }
+const FILL_CORE: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } }
 const FILL_AT_CAPACITY: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } }
 const FILL_HIGH_UTIL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF8DC' } }
+const FILL_MISMATCH: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFD7B5' } }
 const FILL_UNASSIGNED: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3E5F5' } }
 const FILL_STAT_HEADER: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF70AD47' } }
 
 const BORDER_THIN: Partial<ExcelJS.Borders> = {
-  top:    { style: 'thin', color: { argb: 'FFD1D5DB' } },
+  top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
   bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-  left:   { style: 'thin', color: { argb: 'FFD1D5DB' } },
-  right:  { style: 'thin', color: { argb: 'FFD1D5DB' } },
+  left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+  right: { style: 'thin', color: { argb: 'FFD1D5DB' } },
 }
 
 function applyRowFill(row: ExcelJS.Row, fill: ExcelJS.Fill, fontColor = '00000000', bold = false) {
@@ -46,125 +37,95 @@ function applyRowFill(row: ExcelJS.Row, fill: ExcelJS.Fill, fontColor = '0000000
 }
 
 export async function downloadTeachingLoad(
-  courses: CourseRow[],
-  workloads: LecturerWorkload[]
+  courses: TeachingLoadCourseRow[],
+  workloads: LecturerWorkload[],
+  options?: { scopeLabel?: string }
 ): Promise<void> {
-  // ── 1. Sorted lecturer name list ───────────────────────────────────────────
-  const lecturerNames: string[] = Array.from(
-    new Set(workloads.map((w) => w.full_name?.trim() || w.email).filter(Boolean))
-  ).sort()
+  const report = buildTeachingLoadReport(courses, workloads)
+  const scopeLabel = options?.scopeLabel || 'All courses'
 
-  // ── 2. Group courses by academic_year → semester ───────────────────────────
-  const grouped = new Map<string, CourseRow[]>()
-  for (const c of courses) {
-    const ay  = c.academic_year || c.year || '—'
-    const sem = c.semester || '—'
-    const key = `${ay}||${sem}`
-    if (!grouped.has(key)) grouped.set(key, [])
-    grouped.get(key)!.push(c)
-  }
-
-  const sortedGroups = Array.from(grouped.entries()).sort(([a], [b]) => {
-    const [ayA, semA] = a.split('||')
-    const [ayB, semB] = b.split('||')
-    return ayB !== ayA ? ayB.localeCompare(ayA) : semA.localeCompare(semB)
-  })
-
-  // ── 3. Calculate statistics ────────────────────────────────────────────────
-  const lecturerTotals: Record<string, number> = {}
-  const lecturerCourses: Record<string, CourseRow[]> = {}
-  const unassignedCourses: CourseRow[] = []
-  let totalAssignedCredits = 0
-  let totalCourses = 0
-
-  for (const c of courses) {
-    totalCourses++
-    const name = c.lecturer_name?.trim()
-    if (name) {
-      totalAssignedCredits += c.credits ?? 0
-      lecturerTotals[name] = (lecturerTotals[name] || 0) + (c.credits ?? 0)
-      if (!lecturerCourses[name]) lecturerCourses[name] = []
-      lecturerCourses[name].push(c)
-    } else {
-      unassignedCourses.push(c)
-    }
-  }
-
-  const unassignedCredits = unassignedCourses.reduce((sum, c) => sum + (c.credits ?? 0), 0)
-
-  // ── 4. Build workbook ──────────────────────────────────────────────────────
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CMMS Teaching Load Report'
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // SHEET 1: Lecturer Workload Summary with Assigned Courses
-  // ════════════════════════════════════════════════════════════════════════════
-  const summaryWs = wb.addWorksheet('Summary', { views: [{ state: 'frozen', ySplit: 1 }] })
+  const summaryWs = wb.addWorksheet('Summary', { views: [{ state: 'frozen', ySplit: 2 }] })
   summaryWs.columns = [
     { width: 30 },
-    { width: 20 },
+    { width: 16 },
+    { width: 18 },
+    { width: 12 },
     { width: 18 },
     { width: 16 },
     { width: 16 },
     { width: 15 },
     { width: 50 },
+    { width: 14 },
   ]
+
+  const summaryTitleRow = summaryWs.addRow([`TEACHING LOAD SUMMARY - ${scopeLabel}`, '', '', '', '', '', '', '', '', ''])
+  summaryTitleRow.height = 24
+  applyRowFill(summaryTitleRow, FILL_STAT_HEADER, 'FFFFFFFF', true)
+  summaryWs.mergeCells(summaryTitleRow.number, 1, summaryTitleRow.number, 10)
 
   const summaryHeaderRow = summaryWs.addRow([
     'Lecturer Name',
-    'Total Credits',
+    'Backend Credits',
+    'Recomputed Credits',
+    'Delta',
     'Max Capacity',
     'Remaining',
     'Utilization %',
     'Status',
-    'Assigned Courses (Code - Name - Credits)'
+    'Assigned Courses (Code - Name - Credits)',
+    'Check',
   ])
   summaryHeaderRow.height = 24
   applyRowFill(summaryHeaderRow, FILL_HEADER, 'FFFFFFFF', true)
 
-  for (const lecturer of lecturerNames) {
-    const workload = workloads.find((w) => w.full_name?.trim() === lecturer || w.email === lecturer)
-    const totalAssigned = lecturerTotals[lecturer] || 0
-    const maxCapacity = workload?.max_credits || null
-    const remaining = maxCapacity ? Math.max(0, maxCapacity - totalAssigned) : null
-    const utilizationPercent = maxCapacity ? Math.round((totalAssigned / maxCapacity) * 100) : 'N/A'
-    const isAtCapacity = workload?.is_full ?? false
-    const status = isAtCapacity ? '🔴 AT CAPACITY' : '🟢 Available'
+  for (const lecturer of report.lecturer_summaries) {
+    const maxCapacity = lecturer.max_credits
+    const remaining = lecturer.remaining_credits
+    const utilizationPercent = maxCapacity ? Math.round((lecturer.backend_credits / maxCapacity) * 100) : 'N/A'
+    const status = lecturer.mismatch
+      ? '🟠 REVIEW NEEDED'
+      : lecturer.is_full
+        ? '🔴 AT CAPACITY'
+        : '🟢 Available'
 
-    // Build course list
-    const assignedCoursesText = (lecturerCourses[lecturer] || [])
-      .map(c => `${c.code} - ${c.name || '—'} (${c.credits}cr)`)
+    const assignedCoursesText = lecturer.assigned_courses
+      .map((course) => `${course.code} - ${course.name || '—'} (${course.credits}cr)`)
       .join('\n')
 
     const summaryRow = summaryWs.addRow([
-      lecturer,
-      totalAssigned,
-      maxCapacity || 'Unlimited',
-      remaining || 'Unlimited',
+      lecturer.full_name,
+      lecturer.backend_credits,
+      lecturer.recomputed_credits,
+      lecturer.delta_credits,
+      maxCapacity ?? 'Unlimited',
+      remaining ?? 'Unlimited',
       `${utilizationPercent}%`,
       status,
-      assignedCoursesText || 'No courses assigned'
+      assignedCoursesText || 'No courses assigned',
+      lecturer.mismatch ? 'Mismatch' : 'OK',
     ])
     summaryRow.height = Math.max(18, (assignedCoursesText.match(/\n/g) || []).length * 15 + 18)
 
     let fillColor = FILL_CORE
-    if (isAtCapacity) {
-      fillColor = FILL_AT_CAPACITY
-    } else if (typeof utilizationPercent === 'number' && utilizationPercent >= 67) {
-      fillColor = FILL_HIGH_UTIL
-    }
+    if (lecturer.mismatch) fillColor = FILL_MISMATCH
+    else if (lecturer.is_full) fillColor = FILL_AT_CAPACITY
+    else if (typeof utilizationPercent === 'number' && utilizationPercent >= 67) fillColor = FILL_HIGH_UTIL
     applyRowFill(summaryRow, fillColor, 'FF111827', false)
 
     summaryRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }
     summaryRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
     summaryRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' }
     summaryRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' }
-    summaryRow.getCell(7).alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+    summaryRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' }
+    summaryRow.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' }
+    summaryRow.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' }
+    summaryRow.getCell(9).alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+    summaryRow.getCell(10).alignment = { horizontal: 'center', vertical: 'middle' }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // SHEET 2: Course Details (By Semester)
-  // ════════════════════════════════════════════════════════════════════════════
   const courseWs = wb.addWorksheet('Course Details', { views: [{ state: 'frozen', ySplit: 1 }] })
   courseWs.columns = [
     { width: 14 },
@@ -174,6 +135,7 @@ export async function downloadTeachingLoad(
     { width: 12 },
     { width: 12 },
     { width: 40 },
+    { width: 12 },
     { width: 16 },
   ]
 
@@ -185,39 +147,41 @@ export async function downloadTeachingLoad(
     'Credits',
     'Type',
     'Assigned Lecturer',
-    'Lecturer Total'
+    'Match Source',
+    'Lecturer Total',
   ])
   courseHeaderRow.height = 22
   applyRowFill(courseHeaderRow, FILL_HEADER, 'FFFFFFFF', true)
 
-  for (const [groupKey, groupCourses] of sortedGroups) {
-    const [ay, sem] = groupKey.split('||')
-
-    const sectionRow = courseWs.addRow([`${ay}  —  Semester ${sem}`, '', '', '', '', '', '', ''])
+  for (const group of report.groups) {
+    const sectionRow = courseWs.addRow([`${group.academic_year}  —  Semester ${group.semester}`, '', '', '', '', '', '', '', ''])
     sectionRow.height = 18
     applyRowFill(sectionRow, FILL_SECTION, 'FF1E3A5F', true)
-    courseWs.mergeCells(sectionRow.number, 1, sectionRow.number, 8)
+    courseWs.mergeCells(sectionRow.number, 1, sectionRow.number, 9)
 
-    for (const course of groupCourses) {
-      const assignedName = course.lecturer_name?.trim() || ''
+    for (const course of group.courses) {
       const isElective = course.code.toUpperCase().startsWith('U')
       const courseType = isElective ? 'Elective' : 'Core'
-      const totalCredits = assignedName ? lecturerTotals[assignedName] || 0 : '—'
+      const matchSource = report.course_assignment_source_by_id[course.id] ?? 'unassigned'
+      const lecturerSummary = report.lecturer_summaries.find((entry) =>
+        entry.assigned_courses.some((assignedCourse) => assignedCourse.id === course.id)
+      )
 
       const dataRow = courseWs.addRow([
-        ay,
-        sem,
+        group.academic_year,
+        group.semester,
         course.code,
         course.name || '',
         course.credits || 0,
         courseType,
-        assignedName || '❌ Unassigned',
-        totalCredits,
+        course.lecturer_name?.trim() || (matchSource === 'unassigned' ? '❌ Unassigned' : '—'),
+        matchSource === 'unmatched' ? 'Unmatched' : matchSource === 'name' ? 'Name' : matchSource === 'id' ? 'ID' : 'Missing',
+        lecturerSummary?.backend_credits ?? '—',
       ])
       dataRow.height = 16
       applyRowFill(
         dataRow,
-        !assignedName ? FILL_UNASSIGNED : (isElective ? FILL_ELECTIVE : FILL_CORE),
+        matchSource === 'missing' ? FILL_UNASSIGNED : (isElective ? FILL_ELECTIVE : FILL_CORE),
         'FF111827',
         false
       )
@@ -225,12 +189,10 @@ export async function downloadTeachingLoad(
       dataRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' }
       dataRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' }
       dataRow.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' }
+      dataRow.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' }
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // SHEET 3: Per-Lecturer Detailed Courses
-  // ════════════════════════════════════════════════════════════════════════════
   const lecturerWs = wb.addWorksheet('Lecturer Courses', { views: [{ state: 'frozen', ySplit: 1 }] })
   lecturerWs.columns = [
     { width: 28 },
@@ -240,6 +202,8 @@ export async function downloadTeachingLoad(
     { width: 36 },
     { width: 12 },
     { width: 12 },
+    { width: 16 },
+    { width: 14 },
   ]
 
   const lecturerHeaderRow = lecturerWs.addRow([
@@ -249,60 +213,64 @@ export async function downloadTeachingLoad(
     'Course Code',
     'Course Name',
     'Credits',
-    'Type'
+    'Type',
+    'Backend Total',
+    'Match Source',
   ])
   lecturerHeaderRow.height = 22
   applyRowFill(lecturerHeaderRow, FILL_HEADER, 'FFFFFFFF', true)
 
-  for (const lecturer of lecturerNames) {
-    const courses = lecturerCourses[lecturer] || []
-    if (courses.length === 0) continue
+  for (const lecturer of report.lecturer_summaries) {
+    if (lecturer.assigned_courses.length === 0) continue
 
-    for (const course of courses) {
+    for (const course of lecturer.assigned_courses) {
       const isElective = course.code.toUpperCase().startsWith('U')
       const courseType = isElective ? 'Elective' : 'Core'
 
       const dataRow = lecturerWs.addRow([
-        lecturer,
+        lecturer.full_name,
         course.academic_year || course.year || '—',
         course.semester || '—',
         course.code,
         course.name || '',
         course.credits || 0,
         courseType,
+        lecturer.backend_credits,
+        report.course_assignment_source_by_id[course.id] === 'unmatched' ? 'Unmatched' : report.course_assignment_source_by_id[course.id] === 'name' ? 'Name' : 'ID',
       ])
       dataRow.height = 16
       applyRowFill(dataRow, isElective ? FILL_ELECTIVE : FILL_CORE, 'FF111827', false)
 
       dataRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' }
       dataRow.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' }
+      dataRow.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' }
+      dataRow.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' }
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // SHEET 4: Analytics & Statistics
-  // ════════════════════════════════════════════════════════════════════════════
   const analyticsWs = wb.addWorksheet('Analytics', { views: [{ state: 'frozen', ySplit: 2 }] })
   analyticsWs.columns = [{ width: 40 }, { width: 20 }]
 
-  // Header
-  const analyticsTitle = analyticsWs.addRow(['TEACHING LOAD ANALYTICS & STATISTICS', ''])
+  const analyticsTitle = analyticsWs.addRow([`TEACHING LOAD ANALYTICS & STATISTICS - ${scopeLabel}`, ''])
   analyticsTitle.height = 24
   applyRowFill(analyticsTitle, FILL_STAT_HEADER, 'FFFFFFFF', true)
 
-  // Key Metrics
   analyticsWs.addRow(['', ''])
   const metricsRow = analyticsWs.addRow(['KEY METRICS', ''])
   applyRowFill(metricsRow, FILL_HEADER, 'FFFFFFFF', true)
 
   const metrics = [
-    ['Total Lecturers', lecturerNames.length],
-    ['Total Courses', totalCourses],
-    ['Assigned Courses', totalCourses - unassignedCourses.length],
-    ['Unassigned Courses', unassignedCourses.length],
-    ['Total Credits Assigned', totalAssignedCredits],
-    ['Total Unassigned Credits', unassignedCredits],
-    ['Average Credits per Lecturer', lecturerNames.length > 0 ? (totalAssignedCredits / lecturerNames.length).toFixed(2) : 0],
+    ['Total Lecturers', report.metrics.lecturer_count],
+    ['Total Courses', report.metrics.total_courses],
+    ['Assigned Courses', report.metrics.assigned_courses],
+    ['Unassigned Courses', report.metrics.unassigned_courses],
+    ['Unmatched Assigned Courses', report.metrics.unmatched_assigned_courses],
+    ['Backend Assigned Credits', report.metrics.backend_assigned_credits],
+    ['Recomputed Assigned Credits', report.metrics.recomputed_assigned_credits],
+    ['Unassigned Credits', report.metrics.unassigned_credits],
+    ['Unmatched Assigned Credits', report.metrics.unmatched_assigned_credits],
+    ['Mismatch Lecturers', report.metrics.mismatch_count],
+    ['Average Backend Credits per Lecturer', report.metrics.lecturer_count > 0 ? (report.metrics.backend_assigned_credits / report.metrics.lecturer_count).toFixed(2) : 0],
   ]
 
   for (const [label, value] of metrics) {
@@ -315,7 +283,6 @@ export async function downloadTeachingLoad(
     row.getCell(2).border = BORDER_THIN
   }
 
-  // Workload Distribution
   analyticsWs.addRow(['', ''])
   const distributionRow = analyticsWs.addRow(['WORKLOAD DISTRIBUTION', ''])
   applyRowFill(distributionRow, FILL_HEADER, 'FFFFFFFF', true)
@@ -324,14 +291,17 @@ export async function downloadTeachingLoad(
   const capRow = analyticsWs.addRow(['Capacity Status', 'Count'])
   applyRowFill(capRow, FILL_SECTION, 'FF1E3A5F', true)
 
-  const atCapacity = workloads.filter(w => w.is_full).length
-  const highUtil = workloads.filter(w => !w.is_full && w.max_credits && w.used_credits / w.max_credits >= 0.67).length
-  const available = lecturerNames.length - atCapacity - highUtil
+  const atCapacity = report.lecturer_summaries.filter((summary) => summary.is_full && !summary.mismatch).length
+  const highUtil = report.lecturer_summaries.filter(
+    (summary) => !summary.is_full && !summary.mismatch && summary.max_credits && summary.backend_credits / summary.max_credits >= 0.67
+  ).length
+  const available = report.lecturer_summaries.length - atCapacity - highUtil - report.metrics.mismatch_count
 
   const statusData = [
     ['🟢 Available', available],
     ['🟡 High Utilization (67-99%)', highUtil],
     ['🔴 At Capacity', atCapacity],
+    ['🟠 Review Needed', report.metrics.mismatch_count],
   ]
 
   for (const [status, count] of statusData) {
@@ -342,10 +312,7 @@ export async function downloadTeachingLoad(
     row.getCell(2).border = BORDER_THIN
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // SHEET 5: Unassigned Courses
-  // ════════════════════════════════════════════════════════════════════════════
-  if (unassignedCourses.length > 0) {
+  if (report.unassigned_courses.length > 0) {
     const unassignedWs = wb.addWorksheet('Unassigned Courses', { views: [{ state: 'frozen', ySplit: 1 }] })
     unassignedWs.columns = [
       { width: 14 },
@@ -362,12 +329,12 @@ export async function downloadTeachingLoad(
       'Course Code',
       'Course Name',
       'Credits',
-      'Type'
+      'Type',
     ])
     unassignedHeaderRow.height = 22
     applyRowFill(unassignedHeaderRow, FILL_HEADER, 'FFFFFFFF', true)
 
-    for (const course of unassignedCourses) {
+    for (const course of report.unassigned_courses) {
       const isElective = course.code.toUpperCase().startsWith('U')
       const courseType = isElective ? 'Elective' : 'Core'
 
@@ -387,13 +354,50 @@ export async function downloadTeachingLoad(
     }
   }
 
-  // ── Download ───────────────────────────────────────────────────────────────
+  if (report.unmatched_assigned_courses.length > 0) {
+    const issueWs = wb.addWorksheet('Data Issues', { views: [{ state: 'frozen', ySplit: 1 }] })
+    issueWs.columns = [
+      { width: 14 },
+      { width: 10 },
+      { width: 14 },
+      { width: 40 },
+      { width: 12 },
+      { width: 28 },
+    ]
+
+    const issueHeaderRow = issueWs.addRow([
+      'Academic Year',
+      'Semester',
+      'Course Code',
+      'Course Name',
+      'Credits',
+      'Issue',
+    ])
+    issueHeaderRow.height = 22
+    applyRowFill(issueHeaderRow, FILL_HEADER, 'FFFFFFFF', true)
+
+    for (const course of report.unmatched_assigned_courses) {
+      const issueRow = issueWs.addRow([
+        course.academic_year || course.year || '—',
+        course.semester || '—',
+        course.code,
+        course.name || '',
+        course.credits || 0,
+        course.lecturer_id ? 'Lecturer ID not found in workload data' : 'Lecturer name not found in workload data',
+      ])
+      issueRow.height = 16
+      applyRowFill(issueRow, FILL_MISMATCH, 'FF111827', false)
+      issueRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' }
+      issueRow.getCell(6).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
+    }
+  }
+
   const buffer = await wb.xlsx.writeBuffer()
-  const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url    = URL.createObjectURL(blob)
-  const a      = document.createElement('a')
-  a.href       = url
-  a.download   = `teaching_load_${dateStamp()}.xlsx`
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `teaching_load_${dateStamp()}.xlsx`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

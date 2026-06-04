@@ -3,10 +3,10 @@ import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional
-from ..core.config import supabase
-from ..dependencies.auth import get_current_user, has_effective_role
-from ..models.user import User
-from ..services.audit_service import AuditService
+from core.config import supabase
+from dependencies.auth import get_current_user, has_effective_role
+from models.user import User
+from services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
 logger = logging.getLogger(__name__)

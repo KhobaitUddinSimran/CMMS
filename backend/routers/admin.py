@@ -3,10 +3,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 import asyncio
-from ..core.config import supabase
-from ..dependencies.auth import require_role, require_effective_role, invalidate_role_cache
-from ..services.audit_service import AuditService
-from ..services.email_service import EmailService
+from core.config import supabase
+from dependencies.auth import require_role, require_effective_role, invalidate_role_cache
+from services.audit_service import AuditService
+from services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
