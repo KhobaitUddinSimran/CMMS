@@ -10,12 +10,12 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
-from core.config import supabase
-from core.security import hash_password
-from dependencies.auth import get_current_user, has_effective_role
-from services.audit_service import AuditService
-from services.email_service import EmailService
-from utils.session import get_active_session
+from ..core.config import supabase
+from ..core.security import hash_password
+from ..dependencies.auth import get_current_user, has_effective_role
+from ..services.audit_service import AuditService
+from ..services.email_service import EmailService
+from ..utils.session import get_active_session
 
 router = APIRouter(prefix="/api/courses", tags=["enrollments"])
 logger = logging.getLogger(__name__)

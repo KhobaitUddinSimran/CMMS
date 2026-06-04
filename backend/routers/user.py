@@ -1,9 +1,9 @@
 """User endpoints"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from dependencies.auth import get_current_user
-from core.security import hash_password, verify_password
-from core.config import supabase
+from ..dependencies.auth import get_current_user
+from ..core.security import hash_password, verify_password
+from ..core.config import supabase
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ async def list_users(
     TEACHING_ROLES = ["lecturer", "coordinator", "hod"]
     is_teaching_filter = role in ("lecturer", "teaching")
 
-    from core.config import supabase
+    from ..core.config import supabase
     if not supabase:
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
@@ -52,7 +52,7 @@ async def set_teaching_credits(
 ):
     """Set or clear the per-semester teaching credit cap for a lecturer.
     Accessible by coordinator, hod, or admin only."""
-    from core.config import supabase
+    from ..core.config import supabase
     if not supabase:
         raise HTTPException(status_code=503, detail="Database unavailable")
 

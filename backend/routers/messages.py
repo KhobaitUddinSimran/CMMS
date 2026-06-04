@@ -4,9 +4,9 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from core.config import supabase
-from dependencies.auth import get_current_user
-from models.user import User
+from ..core.config import supabase
+from ..dependencies.auth import get_current_user
+from ..models.user import User
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 logger = logging.getLogger(__name__)

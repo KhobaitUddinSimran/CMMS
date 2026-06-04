@@ -12,7 +12,7 @@ import logging
 from datetime import date, datetime
 from typing import Optional
 
-from core.config import supabase
+from ..core.config import supabase
 
 logger = logging.getLogger(__name__)
 

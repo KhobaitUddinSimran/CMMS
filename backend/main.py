@@ -5,8 +5,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
-from routers import auth, health, user, admin, courses, assessments, enrollments, marks, queries, semester
-from core.config import settings
+from .routers import auth, health, user, admin, courses, assessments, enrollments, marks, queries, semester
+from .core.config import settings
 
 # Configure logging with more detailed format
 logging_format = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
