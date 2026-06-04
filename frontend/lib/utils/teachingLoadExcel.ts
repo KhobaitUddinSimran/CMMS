@@ -181,7 +181,7 @@ export async function downloadTeachingLoad(
       dataRow.height = 16
       applyRowFill(
         dataRow,
-        matchSource === 'missing' ? FILL_UNASSIGNED : (isElective ? FILL_ELECTIVE : FILL_CORE),
+        matchSource === 'unassigned' ? FILL_UNASSIGNED : (isElective ? FILL_ELECTIVE : FILL_CORE),
         'FF111827',
         false
       )
