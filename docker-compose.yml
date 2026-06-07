@@ -24,11 +24,11 @@ services:
     container_name: cmms_api
     environment:
       # Supabase Configuration (using remote Supabase instance)
-      SUPABASE_URL: https://dvrvotajdelswvdxkuyt.supabase.co
-      SUPABASE_KEY: sb_publishable_o0QSAC136pbITUn2R_dPwQ_TWxYfePY
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL in .env}
+      SUPABASE_KEY: ${SUPABASE_KEY:?Set SUPABASE_KEY in .env}
       
       # Database URL (Supabase PostgreSQL)
-      DATABASE_URL: postgresql+asyncpg://postgres:khubaibcmms@db.dvrvotajdelswvdxkuyt.supabase.co:5432/postgres
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       
       # JWT Configuration
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-change-in-production-min-32-chars}
@@ -75,8 +75,8 @@ services:
     container_name: cmms_web
     environment:
       NEXT_PUBLIC_API_URL: http://api:8000
-      NEXT_PUBLIC_SUPABASE_URL: https://dvrvotajdelswvdxkuyt.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_o0QSAC136pbITUn2R_dPwQ_TWxYfePY
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL in .env}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_KEY:?Set SUPABASE_KEY in .env}
     ports:
       - "3000:3000"
     volumes:

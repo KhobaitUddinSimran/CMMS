@@ -3,7 +3,6 @@ Handles student enrollment, roster upload, and add/drop operations.
 """
 import logging
 import io
-import random
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -28,8 +27,8 @@ class AddStudentRequest(BaseModel):
 
 # ==================== Helper Functions ====================
 def _generate_otp(length: int = 6) -> str:
-    """Generate a random numeric OTP (for email verification codes)."""
-    return ''.join(random.choices(string.digits, k=length))
+    """Generate a cryptographically secure random numeric OTP."""
+    return ''.join(secrets.choice(string.digits) for _ in range(length))
 
 
 def _generate_invitation_token() -> str:

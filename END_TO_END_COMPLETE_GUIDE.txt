@@ -79,7 +79,7 @@ BACKEND:
 
 DATABASE:
   • Engine: PostgreSQL (Supabase managed)
-  • URL: https://dvrvotajdelswvdxkuyt.supabase.co
+  • URL: https://<your-project-ref>.supabase.co
   • Security: Row-level security (RLS) enabled
   • Backups: Automatic daily
   • Replication: Real-time to replicas
@@ -227,7 +227,7 @@ Step 1: Backend Service
   • Environment Variables:
     - ENVIRONMENT=production
     - JWT_SECRET_KEY=<generate-32-char-secret>
-    - SUPABASE_URL=https://dvrvotajdelswvdxkuyt.supabase.co
+    - SUPABASE_URL=https://<your-project-ref>.supabase.co
     - SUPABASE_KEY=<service-role-key>
     - DATABASE_URL=<postgres-connection-string>
     - CORS_ORIGINS=https://<frontend-url>.onrender.com
@@ -247,8 +247,8 @@ Step 2: Frontend Service
   • Start Command: npm start
   • Environment Variables:
     - NEXT_PUBLIC_API_URL=https://<backend-url>.onrender.com
-    - NEXT_PUBLIC_SUPABASE_URL=https://dvrvotajdelswvdxkuyt.supabase.co
-    - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_o0QSAC136pbITUn2R_dPwQ_TWxYfePY
+    - NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
+    - NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
     - NODE_ENV=production
 
   Auto-redeploy: Enabled on GitHub push

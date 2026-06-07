@@ -2,6 +2,8 @@
 import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, constr
+from typing import Optional
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from ..core.config import supabase
@@ -9,6 +11,17 @@ from ..dependencies.auth import get_current_user
 from ..models.user import User
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
+
+
+class SendMessageRequest(BaseModel):
+    to_user_id: Optional[str] = None
+    to_user_ids: Optional[list[str]] = None
+    subject: Optional[str] = None
+    body: str
+    course_id: Optional[str] = None
+    parent_message_id: Optional[str] = None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -95,7 +108,7 @@ async def list_messages(current_user: User = Depends(get_current_user)):
 @limiter.limit("60/hour")
 async def send_message(
     request: Request,
-    data: dict,
+    data: SendMessageRequest,
     current_user: User = Depends(get_current_user),
 ):
     """Send a message to one or more recipients.
@@ -104,7 +117,7 @@ async def send_message(
     _require_supabase()
     uid = current_user.get("user_id")
 
-    body = (data.get("body") or "").strip()
+    body = data.body.strip()
     if not body:
         raise HTTPException(status_code=400, detail="Message body is required")
     if len(body) > 5000:
@@ -112,10 +125,10 @@ async def send_message(
 
     # Resolve recipients
     to_ids: list = []
-    if data.get("to_user_ids"):
-        to_ids = [str(i) for i in data["to_user_ids"] if i]
-    elif data.get("to_user_id"):
-        to_ids = [str(data["to_user_id"])]
+    if data.to_user_ids:
+        to_ids = [str(i) for i in data.to_user_ids if i]
+    elif data.to_user_id:
+        to_ids = [str(data.to_user_id)]
     if not to_ids:
         raise HTTPException(status_code=400, detail="At least one recipient is required")
     if len(to_ids) > 50:
@@ -138,7 +151,7 @@ async def send_message(
             )
 
     # Validate parent message (threading) if supplied
-    parent_id = data.get("parent_message_id") or None
+    parent_id = data.parent_message_id or None
     if parent_id:
         parent_resp = supabase.table("messages").select("id, from_user_id, to_user_id").eq("id", parent_id).execute()
         if not parent_resp.data:
@@ -152,9 +165,9 @@ async def send_message(
         {
             "from_user_id": uid,
             "to_user_id": tid,
-            "subject": (data.get("subject") or "").strip(),
+            "subject": (data.subject or "").strip(),
             "body": body,
-            "course_id": data.get("course_id") or None,
+            "course_id": data.course_id or None,
             "parent_message_id": parent_id,
         }
         for tid in to_ids

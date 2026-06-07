@@ -342,8 +342,13 @@ async def get_current_user_info(current_user=Depends(get_current_user)):
 
 # ==================== APPROVAL STATUS ENDPOINT ====================
 @router.get("/approval-status/{user_id}", response_model=ApprovalStatusResponse)
-async def check_approval_status(user_id: str):
-    """Check approval status — Supabase only."""
+async def check_approval_status(user_id: str, current_user=Depends(get_current_user)):
+    """Check approval status — requires authentication.
+    Users can only check their own status; admins can check any."""
+    caller_id = current_user.get("user_id")
+    caller_role = current_user.get("role")
+    if caller_id != user_id and caller_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot view another user's approval status")
     if not supabase:
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
