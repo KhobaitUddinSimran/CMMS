@@ -250,8 +250,8 @@ async def get_query(
             elif role != "student" and not qry.get("is_read_by_lecturer"):
                 supabase.table("course_queries").update({"is_read_by_lecturer": True}).eq("id", query_id).execute()
                 qry["is_read_by_lecturer"] = True
-        except Exception:
-            pass  # non-critical
+        except Exception as e:
+            logger.warning(f"Failed to auto-mark query {query_id} as read: {e}")
 
         return qry
 

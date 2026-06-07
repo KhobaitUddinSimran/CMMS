@@ -3,11 +3,13 @@ from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
 from typing import Optional
+import logging
 import time
 from ..core.config import settings
 from ..core.exceptions import InvalidTokenException
 from ..core.security import decode_token
-import logging
+
+logger = logging.getLogger(__name__)
 
 _supabase = None
 
@@ -27,8 +29,8 @@ def _get_supabase():
         try:
             from ..core.config import supabase
             _supabase = supabase
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to import Supabase client, role resolution will use JWT only: {e}")
     return _supabase
 
 
@@ -60,11 +62,10 @@ def _resolve_current_role(user_id: str, jwt_role: str, jwt_special: list) -> tup
                 return db_role, db_special
         except HTTPException:
             raise
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Role resolution failed for user {user_id}, falling back to JWT role: {e}")
     return jwt_role, jwt_special
 
-logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):

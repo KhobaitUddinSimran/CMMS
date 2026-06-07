@@ -115,6 +115,7 @@ def is_grade_window_closed(academic_year: str, semester: int, today: Optional[da
         return False
     try:
         deadline = datetime.fromisoformat(str(tl["grade_submission_deadline"])).date()
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to parse grade_submission_deadline for {academic_year}/S{semester}: {e}")
         return False
     return today > deadline

@@ -59,9 +59,9 @@ def _assert_grade_window_open(course_id: str):
             )
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         # fail-open — don't block grading because the timeline lookup hiccuped
-        pass
+        logger.warning(f"Grade window check failed for course {course_id}, allowing grading to proceed: {e}")
 
 router = APIRouter(prefix="/api/marks", tags=["marks"])
 logger = logging.getLogger(__name__)
