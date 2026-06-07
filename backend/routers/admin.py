@@ -7,6 +7,7 @@ from ..core.config import supabase
 from ..dependencies.auth import require_role, require_effective_role, invalidate_role_cache
 from ..services.audit_service import AuditService
 from ..services.email_service import EmailService
+from ..utils.shared import require_supabase
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,7 @@ async def approve_user(request: ApproveUserRequest, current_user=Depends(require
     """Approve a pending user signup (Admin only)."""
     email = request.email.lower()
     admin_id = current_user.get("user_id")
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
     try:
         resp = supabase.table("users").select("id, full_name").ilike("email", email).execute()
         if not resp.data:
@@ -65,8 +65,7 @@ async def reject_user(request: RejectUserRequest, current_user=Depends(require_r
     User is completely removed from the database so they can sign up again."""
     email = request.email.lower()
     admin_id = current_user.get("user_id")
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
     try:
         resp = supabase.table("users").select("id, full_name, role").ilike("email", email).execute()
         if not resp.data:
@@ -114,8 +113,7 @@ async def reject_user(request: RejectUserRequest, current_user=Depends(require_r
 @router.get("/pending-users")
 async def get_pending_users(current_user=Depends(require_role("admin"))):
     """Get list of pending user signups (Admin only)."""
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
     try:
         resp = supabase.table("users").select(
             "id, email, full_name, role, created_at"
@@ -360,9 +358,7 @@ async def toggle_user_active(
 ):
     """Enable or disable a user account (Admin only)"""
     target_email = request.email.lower()
-
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
     try:
         resp = supabase.table("users").select("id").ilike("email", target_email).execute()
         if not resp.data:

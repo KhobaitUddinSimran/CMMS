@@ -12,17 +12,10 @@ from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
 from ..services.email_service import EmailService
+from ..utils.shared import require_supabase
 
 router = APIRouter(prefix="/api/queries", tags=["queries"])
 logger = logging.getLogger(__name__)
-
-
-def _require_supabase():
-    if supabase is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database unavailable",
-        )
 
 
 def _enrich_queries(queries: list) -> list:
@@ -100,7 +93,7 @@ async def create_query(
     current_user=Depends(get_current_user),
 ):
     """Student submits a query about a specific mark."""
-    _require_supabase()
+    require_supabase()
     if current_user.get("role") != "student":
         raise HTTPException(status_code=403, detail="Only students can submit queries")
 
@@ -166,7 +159,7 @@ async def list_queries(
     - lecturer: queries for their course marks
     - coordinator / HOD / admin: all queries
     """
-    _require_supabase()
+    require_supabase()
 
     try:
         role = current_user.get("role")
@@ -228,7 +221,7 @@ async def get_query(
     current_user=Depends(get_current_user),
 ):
     """Get a single query with enriched mark/assessment/course data."""
-    _require_supabase()
+    require_supabase()
 
     try:
         resp = supabase.table("course_queries").select("*").eq("id", query_id).execute()
@@ -271,7 +264,7 @@ async def respond_to_query(
     current_user=Depends(get_current_user),
 ):
     """Lecturer / coordinator / admin responds — sets lecturer_response and resolved_at."""
-    _require_supabase()
+    require_supabase()
 
     if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and above can respond to queries")
@@ -347,7 +340,7 @@ async def update_query_status(
     current_user=Depends(get_current_user),
 ):
     """RESOLVED → set resolved_at; OPEN → clear resolved_at + lecturer_response (reopen)."""
-    _require_supabase()
+    require_supabase()
 
     new_status = data.status.upper()
     if new_status not in {"OPEN", "RESOLVED"}:
@@ -393,7 +386,7 @@ async def send_query_email(
     current_user=Depends(get_current_user),
 ):
     """Manually resend query response email to student"""
-    _require_supabase()
+    require_supabase()
 
     if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and above can send emails")

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
+from ..utils.shared import get_course_or_404, verify_course_access
 from typing import Optional
 
 
@@ -71,35 +72,9 @@ async def create_assessment(
         )
     
     try:
-        # Verify course exists
-        logger.info(f"Checking if course {course_id} exists...")
-        try:
-            course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
-            logger.info(f"Course query response type: {type(course_response)}, has data: {hasattr(course_response, 'data')}")
-            logger.info(f"Course query response: {course_response}")
-        except Exception as e:
-            logger.error(f"Error querying courses table: {type(e).__name__}: {str(e)}", exc_info=True)
-            raise
-        
-        if not course_response.data:
-            logger.warning(f"Course {course_id} not found - response.data is empty")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
-        
-        course = course_response.data[0]
-        assigned_lecturer_id = course.get("lecturer_id")
-        
-        logger.info(f"Course found - Assigned to lecturer: {assigned_lecturer_id}, Current user: {user_id}")
-        
-        # Verify lecturer is assigned to this course
-        if user_role == "lecturer" and assigned_lecturer_id != user_id:
-            logger.warning(f"Lecturer {user_id} not assigned to course {course_id} (assigned to {assigned_lecturer_id})")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"You are not assigned to this course. Course is assigned to {assigned_lecturer_id}, but you are {user_id}"
-            )
+        # Verify course exists and user has access
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
         
         # Get existing assessments to calculate total weight
         logger.info(f"Getting existing assessments for course {course_id}...")
@@ -171,13 +146,7 @@ async def list_course_assessments(
 ):
     """List assessments for a course"""
     try:
-        # Verify course exists
-        course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
-        if not course_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+        get_course_or_404(course_id)
         
         # Get assessments
         response = supabase.table("assessments").select("*").eq("course_id", course_id).range(skip, skip + limit - 1).execute()
@@ -228,22 +197,9 @@ async def update_assessment(
         
         assessment = assessment_response.data[0]
         
-        # Verify course exists
-        course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
-        if not course_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
-        
-        course = course_response.data[0]
-        
-        # Verify lecturer is assigned to the course
-        if current_user.get("role") == "lecturer" and course.get("lecturer_id") != current_user.get("user_id"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not assigned to this course"
-            )
+        # Verify course exists and user has access
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
         
         # Refuse any change to the assessment once it's locked. The only way
         # out is to explicitly unlock (separate endpoint) — which audits.
@@ -332,23 +288,9 @@ async def delete_assessment(
         )
     
     try:
-        # Verify course exists and user is assigned
-        course_response = supabase.table("courses").select("*").eq("id", course_id).execute()
-        if not course_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
-        
-        course = course_response.data[0]
-        assigned_lecturer_id = course.get("lecturer_id")
-        
-        # Verify lecturer is assigned to this course (if not admin)
-        if user_role == "lecturer" and assigned_lecturer_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not assigned to this course"
-            )
+        # Verify course exists and user has access
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
         
         # Get assessment to verify it belongs to this course
         assessment_response = supabase.table("assessments").select("*").eq("id", assessment_id).execute()
@@ -407,14 +349,9 @@ async def lock_assessment_schema(
         raise HTTPException(status_code=403, detail="Only lecturers, coordinators, and admins can lock schemas")
 
     try:
-        # Verify course
-        course_resp = supabase.table("courses").select("*").eq("id", course_id).execute()
-        if not course_resp.data:
-            raise HTTPException(status_code=404, detail="Course not found")
-
-        course = course_resp.data[0]
-        if user_role == "lecturer" and course.get("lecturer_id") != user_id:
-            raise HTTPException(status_code=403, detail="You are not assigned to this course")
+        # Verify course exists and user has access
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
 
         # Check cumulative weight equals 100%
         assessments_resp = supabase.table("assessments").select("weight_percentage").eq("course_id", course_id).execute()

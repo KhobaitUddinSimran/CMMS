@@ -6,20 +6,16 @@ from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..models.user import User
 from ..services.email_service import EmailService
+from ..utils.shared import require_supabase
 
 router = APIRouter(prefix="/api/semester-timelines", tags=["semester-timelines"])
 logger = logging.getLogger(__name__)
 
 
-def _require_supabase():
-    if supabase is None:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-
-
 @router.get("")
 async def list_timelines(current_user: User = Depends(get_current_user)):
     """Return all configured semester timelines, newest first."""
-    _require_supabase()
+    require_supabase()
     resp = (
         supabase.table("semester_timelines")
         .select("*")
@@ -33,7 +29,7 @@ async def list_timelines(current_user: User = Depends(get_current_user)):
 @router.post("", status_code=201)
 async def upsert_timeline(data: dict, current_user: User = Depends(get_current_user)):
     """Create or update a semester timeline (upserts on academic_year + semester)."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions to manage timelines")
 
@@ -141,7 +137,7 @@ async def _send_reminders_for_timeline(timeline: dict) -> dict:
 @router.post("/{timeline_id}/send-reminders")
 async def send_reminders(timeline_id: str, current_user: User = Depends(get_current_user)):
     """Manually trigger deadline reminder emails to all lecturers with assigned courses."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -159,7 +155,7 @@ async def send_reminders(timeline_id: str, current_user: User = Depends(get_curr
 @router.delete("/{timeline_id}", status_code=204)
 async def delete_timeline(timeline_id: str, current_user: User = Depends(get_current_user)):
     """Delete a semester timeline."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     supabase.table("semester_timelines").delete().eq("id", timeline_id).execute()
@@ -168,7 +164,7 @@ async def delete_timeline(timeline_id: str, current_user: User = Depends(get_cur
 @router.get("/{timeline_id}/courses")
 async def get_semester_courses(timeline_id: str, current_user: User = Depends(get_current_user)):
     """Return the list of course IDs selected for this semester timeline."""
-    _require_supabase()
+    require_supabase()
     resp = (
         supabase.table("semester_course_selections")
         .select("course_id")
@@ -187,7 +183,7 @@ async def set_semester_courses(
     """Replace the course selection for this semester timeline (bulk replace).
     Body: { "course_ids": ["<uuid>", ...] }
     Requires coordinator, hod, or admin."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 

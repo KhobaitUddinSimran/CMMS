@@ -4,12 +4,12 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from ..core.security import hash_password, verify_password, create_access_token
 from ..core.config import supabase
 from ..models.user import User
 from ..dependencies.auth import get_current_user
 from ..services.email_service import EmailService
+from ..utils.shared import require_supabase, get_rate_limit_key as _shared_rate_key
 from datetime import datetime, timedelta
 import uuid
 import os
@@ -18,20 +18,7 @@ import secrets
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
-def get_rate_limit_key(request: Request) -> str:
-    if os.getenv("ENVIRONMENT", "development") == "development":
-        return "dev-shared-key"
-    # When behind the Next.js proxy on Render, the real client IP is in
-    # X-Forwarded-For. Falling back to X-Real-IP, then the TCP peer address.
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-    return get_remote_address(request)
-
-limiter = Limiter(key_func=get_rate_limit_key)
+limiter = Limiter(key_func=_shared_rate_key)
 
 # ==================== Pydantic Models ====================
 class LoginRequest(BaseModel):
@@ -96,8 +83,7 @@ RESET_TOKENS: dict[str, dict] = {}
 async def login(request: Request, credentials: LoginRequest):
     """Login — Supabase only."""
     try:
-        if not supabase:
-            raise HTTPException(status_code=503, detail="Database unavailable")
+        require_supabase()
 
         resp = supabase.table("users").select("*").ilike("email", credentials.email.strip()).execute()
 
@@ -189,8 +175,7 @@ async def signup(request: Request, signup_data: SignupRequest):
         if signup_data.role == "student" and not signup_data.matric_number:
             raise HTTPException(status_code=400, detail="Matric number is required for students")
 
-        if not supabase:
-            raise HTTPException(status_code=503, detail="Database unavailable")
+        require_supabase()
 
         # Check duplicate (case-insensitive)
         existing = supabase.table("users").select("id").ilike("email", email_lc).execute()
@@ -344,8 +329,7 @@ async def get_current_user_info(current_user=Depends(get_current_user)):
 @router.get("/approval-status/{user_id}", response_model=ApprovalStatusResponse)
 async def check_approval_status(user_id: str):
     """Check approval status — Supabase only."""
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
     try:
         resp = supabase.table("users").select(
             "approval_status, approved_at, rejection_reason, approved_by"
@@ -461,9 +445,7 @@ async def reset_password(request: ResetPasswordRequest):
         RESET_TOKENS.pop(request.token, None)
 
     new_hash = hash_password(request.new_password)
-
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
 
     try:
         resp = supabase.table("users").update({"password_hash": new_hash}).ilike("email", email).execute()
@@ -490,8 +472,7 @@ class VerifyEmailResponse(BaseModel):
 @router.post("/verify-email", response_model=VerifyEmailResponse)
 async def verify_email(request: VerifyEmailRequest):
     """Verify email address using magic link token (for students)."""
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
 
     if not request.token:
         raise HTTPException(status_code=400, detail="Verification token is required")
@@ -564,8 +545,7 @@ class ResendVerificationResponse(BaseModel):
 @limiter.limit("5/1hour")
 async def resend_verification(request: Request, req_data: ResendVerificationRequest):
     """Resend email verification link (for students)."""
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
 
     email = req_data.email.lower().strip()
 

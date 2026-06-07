@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from ..dependencies.auth import get_current_user
 from ..core.security import hash_password, verify_password
 from ..core.config import supabase
+from ..utils.shared import require_supabase
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,9 +24,7 @@ async def list_users(
     TEACHING_ROLES = ["lecturer", "coordinator", "hod"]
     is_teaching_filter = role in ("lecturer", "teaching")
 
-    from ..core.config import supabase
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
     try:
         query = supabase.table("users").select("id, email, full_name, role, is_active")
         if is_teaching_filter:
@@ -52,9 +51,7 @@ async def set_teaching_credits(
 ):
     """Set or clear the per-semester teaching credit cap for a lecturer.
     Accessible by coordinator, hod, or admin only."""
-    from ..core.config import supabase
-    if not supabase:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    require_supabase()
 
     # Permission check
     role = current_user.get("role", "")
@@ -136,9 +133,7 @@ async def update_profile(
     """Update user profile"""
     try:
         user_id = current_user["user_id"]
-        
-        if not supabase:
-            raise HTTPException(status_code=503, detail="Database unavailable")
+        require_supabase()
         
         # Validate input
         if request.full_name is None:
@@ -183,9 +178,7 @@ async def change_password(
     """Change password"""
     try:
         user_id = current_user["user_id"]
-        
-        if not supabase:
-            raise HTTPException(status_code=503, detail="Database unavailable")
+        require_supabase()
         
         # Validate input
         if not request.old_password:
