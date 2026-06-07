@@ -282,7 +282,7 @@ async def get_admin_stats(
     }
 
     try:
-        users_resp = supabase.table("users").select("*").execute()
+        users_resp = supabase.table("users").select("id, role, is_active, approval_status, special_roles").execute()
         if users_resp.data:
             stats["total_users"] = len(users_resp.data)
             for u in users_resp.data:
@@ -325,7 +325,8 @@ async def list_all_users(
     users_list = []
 
     try:
-        query = supabase.table("users").select("*")
+        _SAFE_COLS = "id, email, full_name, role, is_active, email_verified, approval_status, special_roles, created_at, matric_number"
+        query = supabase.table("users").select(_SAFE_COLS)
         if role:
             query = query.eq("role", role)
         if user_status == "active":

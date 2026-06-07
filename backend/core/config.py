@@ -19,13 +19,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
     # JWT Configuration
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production-min-32-chars")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     
     # Application Configuration
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
     
     # Email Configuration
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
@@ -41,6 +41,21 @@ class Settings(BaseSettings):
         extra = "allow"
 
 settings = Settings()
+
+# --- Security gate: reject weak JWT secrets in production ---
+_INSECURE_DEFAULTS = {
+    "dev-secret-key-change-in-production",
+    "dev-secret-key-change-in-production-min-32-chars",
+    "your-secret-key-here-change-in-production-min-32-chars",
+}
+if settings.ENVIRONMENT != "development" and settings.JWT_SECRET_KEY in _INSECURE_DEFAULTS:
+    import sys
+    _msg = (
+        "FATAL: JWT_SECRET_KEY is set to an insecure default. "
+        "Set a strong, unique JWT_SECRET_KEY environment variable before running in production."
+    )
+    print(_msg, file=sys.stderr)
+    raise SystemExit(_msg)
 
 # Initialize Supabase client.
 # Prefer service_role key (bypasses RLS) for backend operations; fall back to anon key.

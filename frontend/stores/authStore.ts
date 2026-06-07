@@ -60,7 +60,8 @@ export const useAuthStore = create<AuthState>()(
             const exp = getTokenExpiry(token)
             const maxAge = exp ? exp - Math.floor(Date.now() / 1000) : 86400
             localStorage.setItem('token', token)
-            document.cookie = `token=${token}; path=/; max-age=${maxAge}; SameSite=Strict`
+            const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+            document.cookie = `token=${token}; path=/; max-age=${maxAge}; SameSite=Strict${secure}`
           } else {
             clearBrowserSession()
           }

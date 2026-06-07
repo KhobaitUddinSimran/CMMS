@@ -2,12 +2,25 @@
 import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from typing import Optional
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..models.user import User
 from ..services.email_service import EmailService
 
 router = APIRouter(prefix="/api/semester-timelines", tags=["semester-timelines"])
+
+
+class UpsertTimelineRequest(BaseModel):
+    academic_year: str
+    semester: int
+    start_date: str
+    end_date: str
+    grade_submission_deadline: Optional[str] = None
+    notes: Optional[str] = None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,24 +44,19 @@ async def list_timelines(current_user: User = Depends(get_current_user)):
 
 
 @router.post("", status_code=201)
-async def upsert_timeline(data: dict, current_user: User = Depends(get_current_user)):
+async def upsert_timeline(data: UpsertTimelineRequest, current_user: User = Depends(get_current_user)):
     """Create or update a semester timeline (upserts on academic_year + semester)."""
     _require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions to manage timelines")
 
-    required = ("academic_year", "semester", "start_date", "end_date")
-    for field in required:
-        if not data.get(field):
-            raise HTTPException(status_code=400, detail=f"{field} is required")
-
     payload = {
-        "academic_year": data["academic_year"],
-        "semester": int(data["semester"]),
-        "start_date": data["start_date"],
-        "end_date": data["end_date"],
-        "grade_submission_deadline": data.get("grade_submission_deadline") or None,
-        "notes": data.get("notes") or None,
+        "academic_year": data.academic_year,
+        "semester": data.semester,
+        "start_date": data.start_date,
+        "end_date": data.end_date,
+        "grade_submission_deadline": data.grade_submission_deadline or None,
+        "notes": data.notes or None,
     }
 
     try:
