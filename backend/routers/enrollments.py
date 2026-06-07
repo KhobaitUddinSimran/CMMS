@@ -16,6 +16,7 @@ from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
 from ..services.email_service import EmailService
 from ..utils.session import get_active_session
+from ..utils.shared import get_course_or_404, verify_course_access
 
 router = APIRouter(prefix="/api/courses", tags=["enrollments"])
 logger = logging.getLogger(__name__)
@@ -55,32 +56,6 @@ def _enrollment_session_fields(course: dict) -> dict:
     }
 
 
-def _verify_course_access(course: dict, current_user: dict):
-    """Verify user has access to the course.
-    Admins, coordinators, and HODs have full access.
-    Lecturers can only access courses they are assigned to.
-    """
-    user_role = current_user.get("role")
-    user_id = current_user.get("user_id")
-    special = set(current_user.get("special_roles", []) or [])
-    # Full access for elevated roles (check both role and special_roles for JWT compatibility)
-    if user_role in ("admin", "coordinator", "hod") or "coordinator" in special or "hod" in special:
-        return
-    # Lecturers: scope to their own assigned courses only
-    if user_role == "lecturer" and course.get("lecturer_id") != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not assigned to this course"
-        )
-
-
-def _get_course_or_404(course_id: str) -> dict:
-    """Fetch course from Supabase or raise 404"""
-    response = supabase.table("courses").select("*").eq("id", course_id).execute()
-    if not response.data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
-    return response.data[0]
-
 
 # ==================== List Enrolled Students ====================
 @router.get("/{course_id}/students")
@@ -90,8 +65,8 @@ async def list_enrolled_students(
 ):
     """Get all students enrolled in a course (joined with user info)"""
     try:
-        course = _get_course_or_404(course_id)
-        _verify_course_access(course, current_user)
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
 
         # Get enrollments for this course
         enroll_resp = (
@@ -136,8 +111,8 @@ async def get_course_enrollments(
 ):
     """List enrollments for a course with pagination"""
     try:
-        course = _get_course_or_404(course_id)
-        _verify_course_access(course, current_user)
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
 
         query = supabase.table("enrollments").select("*").eq("course_id", course_id)
         if status_filter:
@@ -174,8 +149,8 @@ async def add_student_to_course(
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     try:
-        course = _get_course_or_404(course_id)
-        _verify_course_access(course, current_user)
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
 
         # Find student by email
         user_resp = supabase.table("users").select("*").eq("email", data.student_email).execute()
@@ -239,8 +214,8 @@ async def drop_student_from_course(
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     try:
-        course = _get_course_or_404(course_id)
-        _verify_course_access(course, current_user)
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
 
         # Update enrollment status to dropped
         resp = (
@@ -276,8 +251,8 @@ async def preview_roster_upload(
         raise HTTPException(status_code=403, detail="Only lecturers, coordinators, and admins can upload rosters")
 
     try:
-        course = _get_course_or_404(course_id)
-        _verify_course_access(course, current_user)
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
 
         # Validate file
         if not file.filename or not file.filename.endswith(('.xlsx', '.xls')):
@@ -401,8 +376,8 @@ async def upload_roster(
         raise HTTPException(status_code=403, detail="Only lecturers, coordinators, and admins can upload rosters")
 
     try:
-        course = _get_course_or_404(course_id)
-        _verify_course_access(course, current_user)
+        course = get_course_or_404(course_id)
+        verify_course_access(course, current_user)
 
         # Validate and parse file
         if not file.filename or not file.filename.endswith(('.xlsx', '.xls')):

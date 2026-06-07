@@ -12,6 +12,7 @@ from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
 from ..services.email_service import EmailService
 from ..utils.session import is_grade_window_closed
+from ..utils.shared import require_supabase, get_course_or_404, verify_course_access
 
 
 # ==================== Letter-grade mapping (UTM standard) ====================
@@ -78,7 +79,7 @@ async def import_marks_excel(
     Expected columns: student_email (or matric_number), then one column per assessment name.
     Returns: { imported, skipped, errors }
     """
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -221,24 +222,6 @@ class MarkBulkCreateRequest(BaseModel):
     marks: List[dict]  # List of {student_id, score}
 
 
-# ==================== Helpers ====================
-def _require_supabase():
-    """Raise 503 if Supabase client is not initialised."""
-    if supabase is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database unavailable: Supabase not initialised. Check SUPABASE_URL and SUPABASE_SERVICE_KEY.",
-        )
-
-
-def _verify_lecturer_course(course: dict, current_user: dict):
-    """Verify lecturer is assigned to this course (skip check for elevated roles)"""
-    special = set(current_user.get("special_roles", []) or [])
-    is_elevated = current_user.get("role") in ("coordinator", "hod", "admin") or "coordinator" in special or "hod" in special
-    if not is_elevated and course.get("lecturer_id") != current_user.get("user_id"):
-        raise HTTPException(status_code=403, detail="You are not assigned to this course")
-
-
 # ==================== Get All Marks for a Course (Smart Grid) ====================
 @router.get("/course/{course_id}")
 async def get_all_course_marks(
@@ -246,7 +229,7 @@ async def get_all_course_marks(
     current_user=Depends(get_current_user),
 ):
     """Get all marks for all students in a course — used by the Smart Grid"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     try:
@@ -282,7 +265,7 @@ async def get_student_marks_summary(
     current_user=Depends(get_current_user),
 ):
     """Return published marks grouped by course with carry-total for a student."""
-    _require_supabase()
+    require_supabase()
     if current_user.get("role") == "student" and current_user.get("user_id") != student_id:
         raise HTTPException(status_code=403, detail="Cannot view other student's marks")
     try:
@@ -337,7 +320,7 @@ async def create_mark(
     current_user=Depends(get_current_user),
 ):
     """Create a new mark - requires lecturer or admin role"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can create marks")
 
@@ -350,10 +333,8 @@ async def create_mark(
         assessment = assessment_resp.data[0]
 
         # Verify course access
-        course_resp = supabase.table("courses").select("*").eq("id", assessment["course_id"]).execute()
-        if not course_resp.data:
-            raise HTTPException(status_code=404, detail="Course not found")
-        _verify_lecturer_course(course_resp.data[0], current_user)
+        course = get_course_or_404(assessment["course_id"])
+        verify_course_access(course, current_user)
 
         new_mark = {
             "student_id": data.student_id,
@@ -387,7 +368,7 @@ async def get_flagged_marks(
     current_user=Depends(get_current_user),
 ):
     """Return all flagged marks — coordinator / HOD / admin only"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -432,7 +413,7 @@ async def unflag_mark(
     current_user=Depends(get_current_user),
 ):
     """Clear flag on a mark — coordinator / HOD / admin only"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -467,7 +448,7 @@ async def get_mark(
     current_user=Depends(get_current_user),
 ):
     """Get a specific mark"""
-    _require_supabase()
+    require_supabase()
     try:
         resp = supabase.table("marks").select("*").eq("id", mark_id).execute()
         if not resp.data:
@@ -497,7 +478,7 @@ async def list_assessment_marks(
     current_user=Depends(get_current_user),
 ):
     """List marks for an assessment"""
-    _require_supabase()
+    require_supabase()
     try:
         # Verify assessment exists
         assessment_resp = supabase.table("assessments").select("*").eq("id", assessment_id).execute()
@@ -508,9 +489,8 @@ async def list_assessment_marks(
 
         # Verify access
         if current_user.get("role") == "lecturer":
-            course_resp = supabase.table("courses").select("*").eq("id", assessment["course_id"]).execute()
-            if course_resp.data:
-                _verify_lecturer_course(course_resp.data[0], current_user)
+            course = get_course_or_404(assessment["course_id"])
+            verify_course_access(course, current_user)
         elif current_user.get("role") == "student":
             raise HTTPException(status_code=403, detail="Students cannot view all marks for an assessment")
 
@@ -537,18 +517,15 @@ async def get_student_course_marks(
     current_user=Depends(get_current_user),
 ):
     """Get all marks for a student in a course"""
-    _require_supabase()
+    require_supabase()
     if current_user.get("role") == "student" and current_user.get("user_id") != student_id:
         raise HTTPException(status_code=403, detail="Cannot view other student's marks")
 
     try:
-        # Verify course exists
-        course_resp = supabase.table("courses").select("*").eq("id", course_id).execute()
-        if not course_resp.data:
-            raise HTTPException(status_code=404, detail="Course not found")
+        course = get_course_or_404(course_id)
 
         if current_user.get("role") == "lecturer":
-            _verify_lecturer_course(course_resp.data[0], current_user)
+            verify_course_access(course, current_user)
 
         # marks has no course_id — filter via assessments
         a_resp = supabase.table("assessments").select("id").eq("course_id", course_id).execute()
@@ -585,7 +562,7 @@ async def update_mark(
     current_user=Depends(get_current_user),
 ):
     """Update a mark - requires lecturer or admin role"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can update marks")
 
@@ -611,9 +588,8 @@ async def update_mark(
             a_resp = supabase.table("assessments").select("course_id").eq("id", mark["assessment_id"]).execute()
             if a_resp.data:
                 cid = a_resp.data[0].get("course_id")
-                course_resp = supabase.table("courses").select("*").eq("id", cid).execute()
-                if course_resp.data:
-                    _verify_lecturer_course(course_resp.data[0], current_user)
+                course = get_course_or_404(cid)
+                verify_course_access(course, current_user)
 
         # Use exclude_unset but keep explicit None/0 values (e.g. clearing a score)
         update_data = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
@@ -646,7 +622,7 @@ async def publish_marks(
     current_user=Depends(get_current_user),
 ):
     """Publish multiple marks - requires lecturer or admin role"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can publish marks")
 
@@ -681,7 +657,7 @@ async def unpublish_marks(
     """Revert published marks back to draft so they can be corrected and re-published.
     Only coordinators or admins can unpublish — lecturers must request it via
     a coordinator to create an audit trail of who reopened the grade."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only coordinators and admins can unpublish marks")
 
@@ -718,7 +694,7 @@ async def flag_mark(
     current_user=Depends(get_current_user),
 ):
     """Flag a mark for review"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can flag marks")
 
@@ -792,7 +768,7 @@ async def send_flag_email(
     current_user=Depends(get_current_user),
 ):
     """Resend flagged mark notification email"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
         raise HTTPException(status_code=403, detail="Only lecturers and admins can send emails")
 
@@ -853,7 +829,7 @@ async def get_student_course_grade(
     current_user=Depends(get_current_user),
 ):
     """Get final carry mark total for a student in a course"""
-    _require_supabase()
+    require_supabase()
     if current_user.get("role") == "student" and current_user.get("user_id") != student_id:
         raise HTTPException(status_code=403, detail="Cannot view other student's grades")
 

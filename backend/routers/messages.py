@@ -1,29 +1,17 @@
 """In-portal messaging — coordinators contact lecturers (and vice-versa)."""
 import logging
-import os
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from ..core.config import supabase
 from ..dependencies.auth import get_current_user
 from ..models.user import User
+from ..utils.shared import require_supabase, get_rate_limit_key as _shared_rate_key
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 logger = logging.getLogger(__name__)
 
 
-def _rate_key(request: Request) -> str:
-    if os.getenv("ENVIRONMENT", "development") == "development":
-        return "dev-shared-key"
-    return get_remote_address(request)
-
-
-limiter = Limiter(key_func=_rate_key)
-
-
-def _require_supabase():
-    if supabase is None:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+limiter = Limiter(key_func=_shared_rate_key)
 
 
 def _can_message(sender: dict, recipient_role: str) -> bool:
@@ -65,7 +53,7 @@ def _enrich_users(messages: list) -> list:
 @router.get("")
 async def list_messages(current_user: User = Depends(get_current_user)):
     """Return inbox + sent for the current user."""
-    _require_supabase()
+    require_supabase()
     uid = current_user.get("user_id")
 
     inbox = (
@@ -101,7 +89,7 @@ async def send_message(
     """Send a message to one or more recipients.
     Accepts either to_user_id (str) or to_user_ids (list of str) for bulk sending.
     Optional `parent_message_id` threads the new message under an existing one."""
-    _require_supabase()
+    require_supabase()
     uid = current_user.get("user_id")
 
     body = (data.get("body") or "").strip()
@@ -175,7 +163,7 @@ async def send_message(
 @router.post("/{message_id}/read")
 async def mark_read(message_id: str, current_user: User = Depends(get_current_user)):
     """Mark a received message as read."""
-    _require_supabase()
+    require_supabase()
     uid = current_user.get("user_id")
     supabase.table("messages").update({"is_read": True}).eq("id", message_id).eq("to_user_id", uid).execute()
     return {"ok": True}
@@ -184,7 +172,7 @@ async def mark_read(message_id: str, current_user: User = Depends(get_current_us
 @router.post("/read-all")
 async def mark_all_read(current_user: User = Depends(get_current_user)):
     """Mark all inbox messages as read."""
-    _require_supabase()
+    require_supabase()
     uid = current_user.get("user_id")
     supabase.table("messages").update({"is_read": True}).eq("to_user_id", uid).eq("is_read", False).execute()
     return {"ok": True}
@@ -193,7 +181,7 @@ async def mark_all_read(current_user: User = Depends(get_current_user)):
 @router.delete("/{message_id}", status_code=204)
 async def delete_message(message_id: str, current_user: User = Depends(get_current_user)):
     """Delete a message (sender or recipient can delete their copy)."""
-    _require_supabase()
+    require_supabase()
     uid = current_user.get("user_id")
     (
         supabase.table("messages")

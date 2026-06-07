@@ -7,21 +7,10 @@ from ..core.config import supabase
 from ..dependencies.auth import get_current_user, has_effective_role
 from ..models.user import User
 from ..services.audit_service import AuditService
+from ..utils.shared import require_supabase, get_course_or_404, is_elevated_role
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
 logger = logging.getLogger(__name__)
-
-
-def _require_supabase():
-    """Raise 503 if the Supabase client was not initialised (missing env vars)."""
-    if supabase is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "Database service unavailable: Supabase client not initialised. "
-                "Check SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables."
-            ),
-        )
 
 
 @router.get("")
@@ -33,7 +22,7 @@ async def list_courses(
 ):
     """List all courses with pagination using Supabase.
     Pass timeline_id to restrict to courses selected for that semester."""
-    _require_supabase()
+    require_supabase()
     try:
         logger.info(
             f"Listing courses - user: {current_user.get('user_id')}, "
@@ -45,8 +34,7 @@ async def list_courses(
         # Coordinators, HODs, admins: see all courses
         user_id = current_user.get("user_id")
         user_role = current_user.get("role", "")
-        special = set(current_user.get("special_roles", []) or [])
-        is_elevated = user_role in ("coordinator", "hod", "admin") or "coordinator" in special or "hod" in special
+        is_elevated = is_elevated_role(current_user)
         is_student = user_role == "student"
 
         # Validate UUID format before hitting the DB
@@ -145,7 +133,7 @@ async def get_lecturer_workloads(
 ):
     """Return current credit load per lecturer for a given semester/academic_year.
     Cap is per-lecturer (`users.max_teaching_credits`; advisory only if NULL)."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -210,17 +198,9 @@ async def get_course(
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific course by ID"""
-    _require_supabase()
+    require_supabase()
     try:
-        response = supabase.table("courses").select("*").eq("id", course_id).execute()
-
-        if not response.data or len(response.data) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
-
-        return response.data[0]
+        return get_course_or_404(course_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -237,7 +217,7 @@ async def create_course(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new course - requires coordinator or admin role"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -320,7 +300,7 @@ async def update_course(
     current_user: User = Depends(get_current_user),
 ):
     """Update a course - requires coordinator or admin role"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -364,7 +344,7 @@ async def delete_course(
 ):
     """Delete a course (admin only). Refuses when academic records exist;
     use POST /{course_id}/archive instead to preserve grade history."""
-    _require_supabase()
+    require_supabase()
     if current_user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -408,7 +388,7 @@ async def archive_course(
 ):
     """Archive a course — hides it from active listings while preserving all
     enrolments, assessments and marks. Reversible via unarchive."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Only coordinators/HODs/admins can archive courses")
 
@@ -439,7 +419,7 @@ async def unarchive_course(
     current_user: User = Depends(get_current_user),
 ):
     """Restore an archived course to active status."""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Only coordinators/HODs/admins can unarchive courses")
 
@@ -468,7 +448,7 @@ async def assign_lecturer(
     current_user: User = Depends(get_current_user),
 ):
     """Assign a lecturer to a course - requires coordinator, HOD, or admin role"""
-    _require_supabase()
+    require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
