@@ -32,5 +32,6 @@ class AuditService:
             supabase.table("audit_logs").insert(entry).execute()
             logger.debug(f"Audit: {action} by {actor_id}")
         except Exception as e:
-            # Never let audit logging break the main flow
-            logger.warning(f"Failed to write audit log ({action}): {e}")
+            # Never let audit logging break the main flow, but log at error
+            # level so failures are visible in monitoring/alerting.
+            logger.error(f"Failed to write audit log ({action}): {e}")

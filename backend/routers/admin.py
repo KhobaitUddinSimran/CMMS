@@ -308,8 +308,8 @@ async def get_admin_stats(
         stats["total_courses"] = courses_resp.count or 0
         return stats
     except Exception as e:
-        logger.warning(f"Stats query failed: {e}")
-    return stats
+        logger.error(f"Stats query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch admin stats")
 
 
 # ==================== ALL USERS MANAGEMENT ====================
@@ -411,9 +411,8 @@ async def get_audit_logs(
 
         return {"count": len(logs), "logs": logs}
     except Exception as e:
-        logger.warning(f"Supabase audit logs failed: {e}")
-
-    return {"count": 0, "logs": []}
+        logger.error(f"Supabase audit logs failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch audit logs")
 
 
 # ==================== HOD STATS ====================
@@ -446,6 +445,7 @@ async def get_hod_stats(
         mr = supabase.table("marks").select("id", count="exact").eq("is_flagged", True).execute()
         stats["flagged_marks"] = mr.count or 0
     except Exception as e:
-        logger.warning(f"HOD stats query failed: {e}")
+        logger.error(f"HOD stats query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch HOD stats")
 
     return stats

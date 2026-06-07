@@ -7,21 +7,26 @@ from ..dependencies.auth import get_current_user, has_effective_role
 from ..services.audit_service import AuditService
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 
 def _assessment_has_marks(assessment_id: str) -> bool:
     """True if any mark has been entered against this assessment.
     Once marks exist, the assessment's grading parameters (max_score,
     weight_percentage) are effectively frozen — changing them would
-    retroactively alter student grades."""
+    retroactively alter student grades.
+
+    Fails closed: returns True on DB errors so grading parameters
+    stay protected when the check cannot be performed."""
     try:
         resp = supabase.table("marks").select("id", count="exact").eq("assessment_id", assessment_id).limit(1).execute()
         return (resp.count or 0) > 0
-    except Exception:
-        return False
+    except Exception as e:
+        logger.warning(f"Failed to check marks for assessment {assessment_id}, assuming marks exist: {e}")
+        return True
 
 # Use prefix to avoid path duplication issues
 router = APIRouter(prefix="/api/courses", tags=["assessments"])
-logger = logging.getLogger(__name__)
 
 # Request models
 class AssessmentCreate(BaseModel):

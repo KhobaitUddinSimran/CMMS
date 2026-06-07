@@ -98,35 +98,35 @@ async def get_current_user_info(
     role_from_token = current_user.get("role", "student")
     special_roles_from_token = current_user.get("special_roles", [])
 
-    if supabase:
-        try:
-            resp = supabase.table("users").select(
-                "id, email, full_name, role, is_active, email_verified, approval_status, created_at"
-            ).eq("id", user_id).execute()
-            if resp.data:
-                u = resp.data[0]
-                db_role = u.get("role", role_from_token)
-                db_special = [db_role] if db_role in ("coordinator", "hod") else []
-                return {
-                    "id": u["id"],
-                    "email": u.get("email", ""),
-                    "full_name": u.get("full_name", ""),
-                    "role": db_role,
-                    "is_active": u.get("is_active", True),
-                    "email_verified": u.get("email_verified", False),
-                    "approval_status": u.get("approval_status", "approved"),
-                    "special_roles": db_special or special_roles_from_token,
-                    "created_at": u.get("created_at"),
-                }
-        except Exception as e:
-            logger.warning(f"Supabase /users/me lookup failed: {e}")
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
-    # JWT fallback
-    return {
-        "id": user_id, "email": "", "full_name": "",
-        "role": role_from_token, "is_active": True, "email_verified": True,
-        "approval_status": "approved", "special_roles": special_roles_from_token,
-    }
+    try:
+        resp = supabase.table("users").select(
+            "id, email, full_name, role, is_active, email_verified, approval_status, created_at"
+        ).eq("id", user_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        u = resp.data[0]
+        db_role = u.get("role", role_from_token)
+        db_special = [db_role] if db_role in ("coordinator", "hod") else []
+        return {
+            "id": u["id"],
+            "email": u.get("email", ""),
+            "full_name": u.get("full_name", ""),
+            "role": db_role,
+            "is_active": u.get("is_active", True),
+            "email_verified": u.get("email_verified", False),
+            "approval_status": u.get("approval_status", "approved"),
+            "special_roles": db_special or special_roles_from_token,
+            "created_at": u.get("created_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Supabase /users/me lookup failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch user profile")
 
 @router.put("/me")
 async def update_profile(

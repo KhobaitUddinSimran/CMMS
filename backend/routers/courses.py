@@ -129,6 +129,8 @@ async def list_courses(
             "skip": skip,
             "limit": limit,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error listing courses: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(

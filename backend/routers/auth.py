@@ -267,8 +267,8 @@ async def signup(request: Request, signup_data: SignupRequest):
                     "entity_id": user_id,
                     "new_values": {"email": email_lc, "role": signup_data.role},
                 }).execute()
-            except Exception:
-                pass
+            except Exception as audit_err:
+                logger.warning(f"Failed to write signup audit log for {email_lc}: {audit_err}")
 
             logger.info(f"New lecturer signup {email_lc} persisted to Supabase (pending admin approval)")
 
@@ -377,8 +377,8 @@ async def password_reset(request: PasswordResetRequest):
         try:
             r = supabase.table("users").select("id").ilike("email", email).execute()
             user_exists = bool(r.data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Password reset user lookup failed for {email}: {e}")
 
     if user_exists:
         token = secrets.token_urlsafe(32)
@@ -589,8 +589,8 @@ async def resend_verification(request: Request, req_data: ResendVerificationRequ
         # Invalidate old tokens
         try:
             supabase.table("otps").update({"is_used": True}).eq("email", email).eq("otp_type", "email_verification").eq("is_used", False).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to invalidate old verification tokens for {email}: {e}")
 
         # Generate new token
         verification_token = secrets.token_urlsafe(32)
