@@ -1,11 +1,7 @@
-"""Email service using Brevo SMTP (port 587, STARTTLS)"""
+"""Email service using Brevo HTTP API (HTTPS port 443 — works on Render free tier)"""
 import logging
 import os
 import asyncio
-import smtplib
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -14,31 +10,39 @@ logger = logging.getLogger(__name__)
 backend_dir = Path(__file__).parent.parent
 load_dotenv(backend_dir / '.env')
 
-_smtp_config: "SMTPConfig | None" = None
+_brevo_config: "BrevoConfig | None" = None
 
-class SMTPConfig:
+class BrevoConfig:
     def __init__(self):
-        self.host = os.getenv('SMTP_HOST', 'smtp-relay.brevo.com').strip()
-        self.port = int(os.getenv('SMTP_PORT', '587'))
-        self.login = os.getenv('SMTP_LOGIN', '').strip()
-        self.password = os.getenv('SMTP_PASSWORD', '').strip()
+        self.api_key = os.getenv('BREVO_API_KEY', '').strip()
         self.from_address = os.getenv('EMAIL_FROM_ADDRESS', '').strip()
         self.from_name = os.getenv('EMAIL_FROM_NAME', 'CMMS').strip()
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.login and self.password and self.from_address)
+        return bool(self.api_key and self.from_address)
 
-def _get_smtp_config() -> "SMTPConfig":
+def _get_brevo_config() -> "BrevoConfig":
     """Lazy singleton — reads env vars on first actual send."""
-    global _smtp_config
-    if _smtp_config is None:
-        _smtp_config = SMTPConfig()
+    global _brevo_config
+    if _brevo_config is None:
+        _brevo_config = BrevoConfig()
         logger.info(
-            f"SMTP config: host={_smtp_config.host}:{_smtp_config.port}, "
-            f"login={_smtp_config.login}, configured={_smtp_config.is_configured}"
+            f"Brevo config: from={_brevo_config.from_address}, "
+            f"configured={_brevo_config.is_configured}"
         )
-    return _smtp_config
+    return _brevo_config
+
+def _get_smtp_config():
+    """Compatibility shim for health check endpoint."""
+    cfg = _get_brevo_config()
+    class _Compat:
+        host = "api.brevo.com (HTTP API)"
+        port = 443
+        login = cfg.api_key[:12] + "..." if cfg.api_key else ""
+        from_address = cfg.from_address
+        is_configured = cfg.is_configured
+    return _Compat()
 
 _FOOTER = """
 <hr style="margin:32px 0 16px;border:none;border-top:1px solid #E5E7EB;"/>
@@ -58,35 +62,39 @@ def _get_frontend_url() -> str:
             return first_url
     return os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
-def _send_smtp(to: str, subject: str, html: str) -> bool:
-    """Blocking SMTP send via Brevo — runs in asyncio.to_thread."""
-    cfg = _get_smtp_config()
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = f"{cfg.from_name} <{cfg.from_address}>"
-    msg['To'] = to
-    msg.attach(MIMEText(html, 'html', 'utf-8'))
-    context = ssl.create_default_context()
-    with smtplib.SMTP(cfg.host, cfg.port, timeout=25) as server:
-        server.starttls(context=context)
-        server.login(cfg.login, cfg.password)
-        server.sendmail(cfg.from_address, to, msg.as_string())
+def _send_via_api(to: str, subject: str, html: str) -> bool:
+    """Blocking Brevo HTTP API call — runs in asyncio.to_thread."""
+    import requests
+    cfg = _get_brevo_config()
+    resp = requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={"api-key": cfg.api_key, "Content-Type": "application/json"},
+        json={
+            "sender": {"name": cfg.from_name, "email": cfg.from_address},
+            "to": [{"email": to}],
+            "subject": subject,
+            "htmlContent": html,
+        },
+        timeout=20,
+    )
+    resp.raise_for_status()
     return True
 
+def _send_smtp(to: str, subject: str, html: str) -> bool:
+    """Alias kept for health check endpoint compatibility."""
+    return _send_via_api(to, subject, html)
+
 async def _send(to: str, subject: str, html: str) -> bool:
-    """Async wrapper: runs _send_smtp in a thread pool."""
-    cfg = _get_smtp_config()
+    """Async wrapper: calls Brevo HTTP API in a thread pool."""
+    cfg = _get_brevo_config()
     if not cfg.is_configured:
-        logger.warning(f"SMTP not configured — skipping email to {to}")
+        logger.warning(f"BREVO_API_KEY or EMAIL_FROM_ADDRESS not set — skipping email to {to}")
         return False
     try:
         logger.info(f"Sending email '{subject}' to {to}...")
-        await asyncio.to_thread(_send_smtp, to, subject, html)
+        await asyncio.to_thread(_send_via_api, to, subject, html)
         logger.info(f"✓ Email '{subject}' sent to {to}")
         return True
-    except smtplib.SMTPAuthenticationError:
-        logger.error(f"✗ SMTP auth failed — check SMTP_LOGIN and SMTP_PASSWORD")
-        return False
     except Exception as exc:
         logger.error(f"✗ Failed to send '{subject}' to {to}: {type(exc).__name__}: {exc}", exc_info=True)
         return False
