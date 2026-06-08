@@ -58,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(queries.router)
     app.include_router(semester.router)
+    app.include_router(health.router)
     
     # Custom exception handler for rate limit errors
     @app.exception_handler(RateLimitExceeded)
@@ -91,9 +92,6 @@ def create_app() -> FastAPI:
                 content={"detail": "Internal server error"},
             )
     
-    @app.get("/health", tags=["Health"])
-    async def health_check():
-        return {"status": "healthy", "version": "1.0.0"}
     
     return app
 
