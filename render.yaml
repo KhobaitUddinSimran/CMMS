@@ -22,14 +22,8 @@ services:
       # Auth – auto-generated secure secret
       - key: JWT_SECRET_KEY
         generateValue: true
-      # Email (Brevo SMTP)
-      - key: SMTP_HOST
-        value: smtp-relay.brevo.com
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_LOGIN
-        sync: false
-      - key: SMTP_PASSWORD
+      # Email (Brevo HTTP API)
+      - key: BREVO_API_KEY
         sync: false
       - key: EMAIL_FROM_ADDRESS
         sync: false
