@@ -19,21 +19,14 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
-      # Database
-      - key: DATABASE_URL
-        sync: false
       # Auth – auto-generated secure secret
       - key: JWT_SECRET_KEY
         generateValue: true
-      # Email (Gmail SMTP)
-      # For Gmail: Use an App Password (https://myaccount.google.com/apppasswords)
-      # DO NOT use your regular Gmail password
+      # Email (Brevo SMTP)
       - key: SMTP_HOST
-        value: smtp.gmail.com
+        value: smtp-relay.brevo.com
       - key: SMTP_PORT
-        value: "465"
-      # Gmail App Password (https://myaccount.google.com/apppasswords)
-      # Fill these in Render Dashboard → cmms-backend → Environment
+        value: "587"
       - key: SMTP_LOGIN
         sync: false
       - key: SMTP_PASSWORD
@@ -41,7 +34,7 @@ services:
       - key: EMAIL_FROM_ADDRESS
         sync: false
       - key: EMAIL_FROM_NAME
-        value: CMMS – UTM
+        value: CMMS
       # App
       - key: ENVIRONMENT
         value: production
