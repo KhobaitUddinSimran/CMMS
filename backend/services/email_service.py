@@ -1,7 +1,11 @@
-"""Email service using Resend API"""
+"""Email service using Brevo SMTP (port 587, STARTTLS)"""
 import logging
 import os
 import asyncio
+import smtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -10,21 +14,31 @@ logger = logging.getLogger(__name__)
 backend_dir = Path(__file__).parent.parent
 load_dotenv(backend_dir / '.env')
 
-_resend_api_key: str | None = None
-_resend_from: str | None = None
+_smtp_config: "SMTPConfig | None" = None
 
-def _get_resend_config() -> tuple[str | None, str]:
-    """Lazy-load Resend config from env vars."""
-    global _resend_api_key, _resend_from
-    if _resend_api_key is None:
-        _resend_api_key = os.getenv('RESEND_API_KEY', '').strip() or None
-        _resend_from = os.getenv('RESEND_FROM_EMAIL', 'CMMS <onboarding@resend.dev>').strip()
-        logger.info(f"Resend config: from={_resend_from}, configured={bool(_resend_api_key)}")
-    return _resend_api_key, _resend_from or 'CMMS <onboarding@resend.dev>'
+class SMTPConfig:
+    def __init__(self):
+        self.host = os.getenv('SMTP_HOST', 'smtp-relay.brevo.com').strip()
+        self.port = int(os.getenv('SMTP_PORT', '587'))
+        self.login = os.getenv('SMTP_LOGIN', '').strip()
+        self.password = os.getenv('SMTP_PASSWORD', '').strip()
+        self.from_address = os.getenv('EMAIL_FROM_ADDRESS', '').strip()
+        self.from_name = os.getenv('EMAIL_FROM_NAME', 'CMMS').strip()
 
-def _is_configured() -> bool:
-    key, _ = _get_resend_config()
-    return bool(key)
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.login and self.password and self.from_address)
+
+def _get_smtp_config() -> "SMTPConfig":
+    """Lazy singleton — reads env vars on first actual send."""
+    global _smtp_config
+    if _smtp_config is None:
+        _smtp_config = SMTPConfig()
+        logger.info(
+            f"SMTP config: host={_smtp_config.host}:{_smtp_config.port}, "
+            f"login={_smtp_config.login}, configured={_smtp_config.is_configured}"
+        )
+    return _smtp_config
 
 _FOOTER = """
 <hr style="margin:32px 0 16px;border:none;border-top:1px solid #E5E7EB;"/>
@@ -44,29 +58,35 @@ def _get_frontend_url() -> str:
             return first_url
     return os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
-def _send_resend(to: str, subject: str, html: str) -> bool:
-    """Blocking Resend API call — runs in asyncio.to_thread."""
-    import resend as resend_sdk
-    api_key, from_addr = _get_resend_config()
-    resend_sdk.api_key = api_key
-    resend_sdk.Emails.send({
-        "from": from_addr,
-        "to": [to],
-        "subject": subject,
-        "html": html,
-    })
+def _send_smtp(to: str, subject: str, html: str) -> bool:
+    """Blocking SMTP send via Brevo — runs in asyncio.to_thread."""
+    cfg = _get_smtp_config()
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = f"{cfg.from_name} <{cfg.from_address}>"
+    msg['To'] = to
+    msg.attach(MIMEText(html, 'html', 'utf-8'))
+    context = ssl.create_default_context()
+    with smtplib.SMTP(cfg.host, cfg.port, timeout=25) as server:
+        server.starttls(context=context)
+        server.login(cfg.login, cfg.password)
+        server.sendmail(cfg.from_address, to, msg.as_string())
     return True
 
 async def _send(to: str, subject: str, html: str) -> bool:
-    """Async wrapper around Resend API send."""
-    if not _is_configured():
-        logger.warning(f"RESEND_API_KEY not set — skipping email to {to}")
+    """Async wrapper: runs _send_smtp in a thread pool."""
+    cfg = _get_smtp_config()
+    if not cfg.is_configured:
+        logger.warning(f"SMTP not configured — skipping email to {to}")
         return False
     try:
         logger.info(f"Sending email '{subject}' to {to}...")
-        await asyncio.to_thread(_send_resend, to, subject, html)
+        await asyncio.to_thread(_send_smtp, to, subject, html)
         logger.info(f"✓ Email '{subject}' sent to {to}")
         return True
+    except smtplib.SMTPAuthenticationError:
+        logger.error(f"✗ SMTP auth failed — check SMTP_LOGIN and SMTP_PASSWORD")
+        return False
     except Exception as exc:
         logger.error(f"✗ Failed to send '{subject}' to {to}: {type(exc).__name__}: {exc}", exc_info=True)
         return False
