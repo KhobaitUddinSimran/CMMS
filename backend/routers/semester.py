@@ -2,10 +2,10 @@
 import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
-from ..core.config import supabase
-from ..dependencies.auth import get_current_user, has_effective_role
-from ..models.user import User
-from ..services.email_service import EmailService
+from core.config import supabase
+from dependencies.auth import get_current_user, has_effective_role
+from models.user import User
+from services.email_service import EmailService
 
 router = APIRouter(prefix="/api/semester-timelines", tags=["semester-timelines"])
 logger = logging.getLogger(__name__)

@@ -52,7 +52,7 @@ async def set_teaching_credits(
 ):
     """Set or clear the per-semester teaching credit cap for a lecturer.
     Accessible by coordinator, hod, or admin only."""
-    from ..core.config import supabase
+    from core.config import supabase
     if not supabase:
         raise HTTPException(status_code=503, detail="Database unavailable")
 

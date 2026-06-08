@@ -1,7 +1,7 @@
 """Audit logging service - Supabase Edition"""
 import logging
 from typing import Optional
-from ..core.config import supabase
+from core.config import supabase
 
 logger = logging.getLogger(__name__)
 

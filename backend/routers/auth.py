@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from ..core.security import hash_password, verify_password, create_access_token
-from ..core.config import supabase
-from ..models.user import User
-from ..dependencies.auth import get_current_user
-from ..services.email_service import EmailService
+from core.security import hash_password, verify_password, create_access_token
+from core.config import supabase
+from models.user import User
+from dependencies.auth import get_current_user
+from services.email_service import EmailService
 from datetime import datetime, timedelta
 import uuid
 import os
@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 def get_rate_limit_key(request: Request) -> str:
     if os.getenv("ENVIRONMENT", "development") == "development":
-        return "dev-shared-key"
+        # Return unique key per request to disable rate limiting in development
+        return f"dev-{secrets.token_hex(8)}"
     # When behind the Next.js proxy on Render, the real client IP is in
     # X-Forwarded-For. Falling back to X-Real-IP, then the TCP peer address.
     forwarded_for = request.headers.get("X-Forwarded-For")
@@ -233,9 +234,9 @@ async def signup(request: Request, signup_data: SignupRequest):
 
             # Send verification email (after successful DB transaction)
             try:
-                asyncio.create_task(EmailService.send_verification_email(
+                await EmailService.send_verification_email(
                     email_lc, signup_data.full_name, verification_token
-                ))
+                )
             except Exception as email_err:
                 logger.warning(f"Verification email failed for {email_lc}: {email_err}")
                 # Note: User record exists but email failed. They can use resend verification.
@@ -274,9 +275,9 @@ async def signup(request: Request, signup_data: SignupRequest):
 
             # Send signup confirmation email (pending admin review)
             try:
-                asyncio.create_task(EmailService.send_signup_confirmation(
+                await EmailService.send_signup_confirmation(
                     email_lc, signup_data.full_name, signup_data.role
-                ))
+                )
             except Exception as email_err:
                 logger.warning(f"Signup confirmation email failed for {email_lc}: {email_err}")
 
@@ -539,7 +540,7 @@ async def verify_email(request: VerifyEmailRequest):
 
         # Send welcome email
         try:
-            asyncio.create_task(EmailService.send_approval_email(email, user.get("full_name", "")))
+            await EmailService.send_approval_email(email, user.get("full_name", ""))
         except Exception as email_err:
             logger.warning(f"Welcome email failed for {email}: {email_err}")
 
@@ -611,9 +612,9 @@ async def resend_verification(request: Request, req_data: ResendVerificationRequ
 
         # Send verification email
         try:
-            asyncio.create_task(EmailService.send_verification_email(
+            await EmailService.send_verification_email(
                 email, user.get("full_name", ""), verification_token
-            ))
+            )
             logger.info(f"Verification email resent to {email}")
         except Exception as email_err:
             logger.warning(f"Failed to resend verification email to {email}: {email_err}")
