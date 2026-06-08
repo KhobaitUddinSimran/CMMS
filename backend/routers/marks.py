@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from typing import Optional, List
 import io
 import openpyxl
-from ..core.config import supabase
-from ..dependencies.auth import get_current_user, has_effective_role
-from ..services.audit_service import AuditService
-from ..services.email_service import EmailService
-from ..utils.session import is_grade_window_closed
+from core.config import supabase
+from dependencies.auth import get_current_user, has_effective_role
+from services.audit_service import AuditService
+from services.email_service import EmailService
+from utils.session import is_grade_window_closed
 
 
 # ==================== Letter-grade mapping (UTM standard) ====================
@@ -639,6 +639,35 @@ async def update_mark(
         raise HTTPException(status_code=500, detail="Failed to update mark")
 
 
+async def _notify_students_published(published_marks: list):
+    """Fire-and-forget: email each unique student whose marks were just published."""
+    try:
+        notified: set = set()
+        for mark in published_marks:
+            student_id = mark.get("student_id")
+            assessment_id = mark.get("assessment_id")
+            if not student_id or student_id in notified:
+                continue
+            try:
+                s_resp = supabase.table("users").select("email, full_name").eq("id", student_id).execute()
+                a_resp = supabase.table("assessments").select("course_id").eq("id", assessment_id).execute()
+                if s_resp.data and a_resp.data:
+                    course_id = a_resp.data[0]["course_id"]
+                    c_resp = supabase.table("courses").select("name, code").eq("id", course_id).execute()
+                    if c_resp.data:
+                        course_name = f"{c_resp.data[0].get('code', '')} – {c_resp.data[0].get('name', '')}"
+                        await EmailService.send_marks_published(
+                            s_resp.data[0]["email"],
+                            s_resp.data[0].get("full_name", "Student"),
+                            course_name,
+                        )
+                        notified.add(student_id)
+            except Exception as e:
+                logger.warning(f"Could not send marks-published email for student {student_id}: {e}")
+    except Exception as e:
+        logger.warning(f"_notify_students_published failed: {e}")
+
+
 # ==================== Publish Marks ====================
 @router.post("/publish", status_code=status.HTTP_200_OK)
 async def publish_marks(
@@ -665,6 +694,12 @@ async def publish_marks(
             "MARKS_PUBLISHED", current_user.get("user_id"), None,
             metadata={"count": count, "mark_ids": request.mark_ids},
         )
+
+        # Notify each affected student that their marks are published
+        published_marks = resp.data or []
+        if published_marks:
+            asyncio.create_task(_notify_students_published(published_marks))
+
         return {"message": f"Published {count} marks", "count": count}
 
     except Exception as e:

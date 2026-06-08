@@ -31,9 +31,20 @@ class EmailConfig:
     def is_configured(self) -> bool:
         return bool(self.smtp_login and self.smtp_password and self.email_from_address)
 
-email_config = EmailConfig()
-logger.info(f"Email config: host={email_config.smtp_host}, port={email_config.smtp_port}, "
-            f"tls={email_config.use_tls}, ssl={email_config.use_ssl}, configured={email_config.is_configured}")
+_email_config: "EmailConfig | None" = None
+
+def _get_email_config() -> "EmailConfig":
+    """Lazy singleton — reads env vars on first actual send, not at import time.
+    This ensures Render-injected env vars are always picked up."""
+    global _email_config
+    if _email_config is None:
+        _email_config = EmailConfig()
+        logger.info(
+            f"Email config initialised: host={_email_config.smtp_host}, "
+            f"port={_email_config.smtp_port}, tls={_email_config.use_tls}, "
+            f"ssl={_email_config.use_ssl}, configured={_email_config.is_configured}"
+        )
+    return _email_config
 
 _FOOTER = """
 <hr style="margin:32px 0 16px;border:none;border-top:1px solid #E5E7EB;"/>
@@ -62,9 +73,10 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
     - Better error handling and logging
     - Timeout configuration
     """
+    cfg = _get_email_config()
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
-    msg['From'] = f"{email_config.email_from_name} <{email_config.email_from_address}>"
+    msg['From'] = f"{cfg.email_from_name} <{cfg.email_from_address}>"
     msg['To'] = to
     msg.attach(MIMEText(html, 'html', 'utf-8'))
     
@@ -72,36 +84,36 @@ def _send_smtp(to: str, subject: str, html: str) -> bool:
         # Create SSL context with certificate verification
         context = ssl.create_default_context()
         
-        if email_config.use_ssl:
+        if cfg.use_ssl:
             # Port 465: Implicit SSL (recommended for production/Render)
-            logger.debug(f"Connecting to {email_config.smtp_host}:{email_config.smtp_port} with implicit SSL...")
+            logger.debug(f"Connecting to {cfg.smtp_host}:{cfg.smtp_port} with implicit SSL...")
             server = smtplib.SMTP_SSL(
-                email_config.smtp_host,
-                email_config.smtp_port,
+                cfg.smtp_host,
+                cfg.smtp_port,
                 context=context,
-                timeout=15
+                timeout=25
             )
         else:
             # Port 587: STARTTLS (recommended for localhost/development)
-            logger.debug(f"Connecting to {email_config.smtp_host}:{email_config.smtp_port} with STARTTLS...")
+            logger.debug(f"Connecting to {cfg.smtp_host}:{cfg.smtp_port} with STARTTLS...")
             server = smtplib.SMTP(
-                email_config.smtp_host,
-                email_config.smtp_port,
-                timeout=15
+                cfg.smtp_host,
+                cfg.smtp_port,
+                timeout=25
             )
             server.starttls(context=context)
         
-        logger.debug(f"Authenticating as {email_config.smtp_login}...")
-        server.login(email_config.smtp_login, email_config.smtp_password)
+        logger.debug(f"Authenticating as {cfg.smtp_login}...")
+        server.login(cfg.smtp_login, cfg.smtp_password)
         
         logger.debug(f"Sending email to {to}...")
-        server.sendmail(email_config.email_from_address, to, msg.as_string())
+        server.sendmail(cfg.email_from_address, to, msg.as_string())
         
         server.quit()
         return True
         
     except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication failed for {email_config.smtp_login}: {e}")
+        logger.error(f"SMTP Authentication failed for {cfg.smtp_login}: {e}")
         raise
     except smtplib.SMTPException as e:
         logger.error(f"SMTP error while sending to {to}: {e}")
@@ -115,7 +127,8 @@ async def _send(to: str, subject: str, html: str) -> bool:
     
     IMPROVED: Better error diagnostics and retry logic for Render compatibility.
     """
-    if not email_config.is_configured:
+    cfg = _get_email_config()
+    if not cfg.is_configured:
         logger.warning(f"Email not configured (missing SMTP_LOGIN, SMTP_PASSWORD, or EMAIL_FROM_ADDRESS) — skipping send to {to}")
         return False
     

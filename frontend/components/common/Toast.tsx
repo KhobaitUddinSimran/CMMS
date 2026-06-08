@@ -1,6 +1,6 @@
 'use client'
 
-import { useToast } from '@/lib/contexts/toast-context'
+import { useToastStore } from '@/stores/toastStore'
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react'
 import type { ToastType } from '@/types'
 
@@ -28,7 +28,7 @@ const toastConfig: Record<ToastType, { bg: string; border: string; icon: React.R
 }
 
 export function ToastContainer() {
-  const { toasts, removeToast } = useToast()
+  const { toasts, removeToast } = useToastStore()
 
   if (toasts.length === 0) return null
 

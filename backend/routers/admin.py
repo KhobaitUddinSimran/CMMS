@@ -2,11 +2,10 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-import asyncio
-from ..core.config import supabase
-from ..dependencies.auth import require_role, require_effective_role, invalidate_role_cache
-from ..services.audit_service import AuditService
-from ..services.email_service import EmailService
+from core.config import supabase
+from dependencies.auth import require_role, require_effective_role, invalidate_role_cache
+from services.audit_service import AuditService
+from services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ async def approve_user(request: ApproveUserRequest, current_user=Depends(require
         AuditService.log("USER_APPROVED", admin_id, user_id, {"email": email})
         logger.info(f"User {email} approved by admin {admin_id}")
         try:
-            asyncio.create_task(EmailService.send_approval_email(email, full_name))
+            await EmailService.send_approval_email(email, full_name)
         except Exception as email_err:
             logger.warning(f"Approval email failed for {email}: {email_err}")
         return {"message": "User approved successfully and can now login", "email": email, "status": "approved"}
@@ -77,9 +76,9 @@ async def reject_user(request: RejectUserRequest, current_user=Depends(require_r
 
         # Send rejection email BEFORE deleting the user
         try:
-            asyncio.create_task(EmailService.send_rejection_email(
+            await EmailService.send_rejection_email(
                 email, full_name, request.reason or "Your application was not approved"
-            ))
+            )
         except Exception as email_err:
             logger.warning(f"Rejection email failed for {email}: {email_err}")
 

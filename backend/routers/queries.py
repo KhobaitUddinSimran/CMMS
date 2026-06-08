@@ -2,16 +2,15 @@
 Real DB table: course_queries
 New columns: is_read_by_lecturer, is_read_by_student (Sprint 5)
 """
-import asyncio
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from typing import Optional
-from ..core.config import supabase
-from ..dependencies.auth import get_current_user, has_effective_role
-from ..services.audit_service import AuditService
-from ..services.email_service import EmailService
+from core.config import supabase
+from dependencies.auth import get_current_user, has_effective_role
+from services.audit_service import AuditService
+from services.email_service import EmailService
 
 router = APIRouter(prefix="/api/queries", tags=["queries"])
 logger = logging.getLogger(__name__)
@@ -137,10 +136,10 @@ async def create_query(
                         lecturer_email = l_resp.data[0]["email"]
                         lecturer_name = l_resp.data[0].get("full_name", "Lecturer")
                         student_name = current_user.get("full_name", "A student")
-                        asyncio.create_task(EmailService.send_query_submitted(
+                        await EmailService.send_query_submitted(
                             lecturer_email, lecturer_name, student_name,
                             course_name, data.query_text,
-                        ))
+                        )
         except Exception as email_err:
             logger.warning(f"Query submitted email failed: {email_err}")
 
@@ -316,14 +315,14 @@ async def respond_to_query(
                             if lecturer_id:
                                 l_resp = supabase.table("users").select("full_name").eq("id", lecturer_id).execute()
                                 lecturer_name = l_resp.data[0].get("full_name", "Lecturer") if l_resp.data else "Lecturer"
-                                asyncio.create_task(EmailService.send_query_response_notification(
+                                await EmailService.send_query_response_notification(
                                     email=student_email,
                                     student_name=student_name,
                                     lecturer_name=lecturer_name,
                                     course_code=course_code,
                                     course_name=course_name,
                                     response_text=data.response,
-                                ))
+                                )
         except Exception as email_err:
             logger.warning(f"Query responded email failed: {email_err}")
 

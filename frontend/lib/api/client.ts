@@ -22,13 +22,13 @@ export function getTokenFromCache(): string | null {
 export const apiClient = axios.create({
   baseURL: `${BASE_URL}/api`,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000, // 15 second timeout
+  timeout: 30000, // 30 second timeout (handles Render cold starts)
 })
 
 export const authApiClient = axios.create({
   baseURL: `${BASE_URL}/api`,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 30000, // 30 second timeout (handles Render cold starts + SMTP send)
 })
 
 // Add token to requests
