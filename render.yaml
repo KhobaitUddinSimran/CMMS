@@ -7,14 +7,11 @@ services:
     runtime: python
     region: singapore
     plan: free
-    rootDir: .
+    rootDir: backend
     pythonVersion: "3.12"
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      # Python path so bare imports (from core.config, from routers, etc.) resolve
-      - key: PYTHONPATH
-        value: /opt/render/project/src/backend
       # Supabase – fill in from Supabase Dashboard → Project Settings → API
       - key: SUPABASE_URL
         sync: false

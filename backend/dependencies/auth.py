@@ -4,9 +4,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
 from typing import Optional
 import time
-from ..core.config import settings
-from ..core.exceptions import InvalidTokenException
-from ..core.security import decode_token
+from core.config import settings
+from core.exceptions import InvalidTokenException
+from core.security import decode_token
 import logging
 
 _supabase = None
@@ -25,7 +25,7 @@ def _get_supabase():
     global _supabase
     if _supabase is None:
         try:
-            from ..core.config import supabase
+            from core.config import supabase
             _supabase = supabase
         except Exception:
             pass
