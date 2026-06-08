@@ -405,7 +405,8 @@ async def password_reset(request: PasswordResetRequest):
                 logger.warning(f"Failed to persist reset token to DB, using in-memory fallback: {db_err}")
         if not stored_in_db:
             RESET_TOKENS[token] = {"email": email, "expires_at": datetime.now() + timedelta(minutes=30)}
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        cors_origins = os.getenv("CORS_ORIGINS", "")
+        frontend_url = cors_origins.split(",")[0].strip() if cors_origins else os.getenv("FRONTEND_URL", "http://localhost:3000")
         reset_link = f"{frontend_url}/auth/password-reset?token={token}"
         try:
             await EmailService.send_password_reset(email, reset_link)
