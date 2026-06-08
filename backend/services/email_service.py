@@ -1,11 +1,7 @@
-"""Email service using Gmail SMTP"""
+"""Email service using Resend API"""
 import logging
 import os
 import asyncio
-import smtplib
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -14,37 +10,21 @@ logger = logging.getLogger(__name__)
 backend_dir = Path(__file__).parent.parent
 load_dotenv(backend_dir / '.env')
 
-class EmailConfig:
-    def __init__(self):
-        self.smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-        # Use port 465 (implicit SSL) on production, 587 (STARTTLS) on localhost
-        use_implicit_ssl = os.getenv('ENVIRONMENT', 'development') == 'production'
-        self.smtp_port = int(os.getenv('SMTP_PORT', '465' if use_implicit_ssl else '587'))
-        self.smtp_login = os.getenv('SMTP_LOGIN', '').strip()
-        self.smtp_password = os.getenv('SMTP_PASSWORD', '').strip()
-        self.email_from_address = os.getenv('EMAIL_FROM_ADDRESS', '').strip()
-        self.email_from_name = os.getenv('EMAIL_FROM_NAME', 'CMMS')
-        self.use_tls = self.smtp_port == 587  # STARTTLS on port 587
-        self.use_ssl = self.smtp_port == 465  # Implicit SSL on port 465
+_resend_api_key: str | None = None
+_resend_from: str | None = None
 
-    @property
-    def is_configured(self) -> bool:
-        return bool(self.smtp_login and self.smtp_password and self.email_from_address)
+def _get_resend_config() -> tuple[str | None, str]:
+    """Lazy-load Resend config from env vars."""
+    global _resend_api_key, _resend_from
+    if _resend_api_key is None:
+        _resend_api_key = os.getenv('RESEND_API_KEY', '').strip() or None
+        _resend_from = os.getenv('RESEND_FROM_EMAIL', 'CMMS <onboarding@resend.dev>').strip()
+        logger.info(f"Resend config: from={_resend_from}, configured={bool(_resend_api_key)}")
+    return _resend_api_key, _resend_from or 'CMMS <onboarding@resend.dev>'
 
-_email_config: "EmailConfig | None" = None
-
-def _get_email_config() -> "EmailConfig":
-    """Lazy singleton — reads env vars on first actual send, not at import time.
-    This ensures Render-injected env vars are always picked up."""
-    global _email_config
-    if _email_config is None:
-        _email_config = EmailConfig()
-        logger.info(
-            f"Email config initialised: host={_email_config.smtp_host}, "
-            f"port={_email_config.smtp_port}, tls={_email_config.use_tls}, "
-            f"ssl={_email_config.use_ssl}, configured={_email_config.is_configured}"
-        )
-    return _email_config
+def _is_configured() -> bool:
+    key, _ = _get_resend_config()
+    return bool(key)
 
 _FOOTER = """
 <hr style="margin:32px 0 16px;border:none;border-top:1px solid #E5E7EB;"/>
@@ -64,89 +44,29 @@ def _get_frontend_url() -> str:
             return first_url
     return os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
-def _send_smtp(to: str, subject: str, html: str) -> bool:
-    """Blocking SMTP send — called via asyncio.to_thread.
-    
-    FIXED for Render deployment:
-    - Uses implicit SSL (port 465) in production for better compatibility
-    - Proper SSL context with certificate verification
-    - Better error handling and logging
-    - Timeout configuration
-    """
-    cfg = _get_email_config()
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = f"{cfg.email_from_name} <{cfg.email_from_address}>"
-    msg['To'] = to
-    msg.attach(MIMEText(html, 'html', 'utf-8'))
-    
-    try:
-        # Create SSL context with certificate verification
-        context = ssl.create_default_context()
-        
-        if cfg.use_ssl:
-            # Port 465: Implicit SSL (recommended for production/Render)
-            logger.debug(f"Connecting to {cfg.smtp_host}:{cfg.smtp_port} with implicit SSL...")
-            server = smtplib.SMTP_SSL(
-                cfg.smtp_host,
-                cfg.smtp_port,
-                context=context,
-                timeout=25
-            )
-        else:
-            # Port 587: STARTTLS (recommended for localhost/development)
-            logger.debug(f"Connecting to {cfg.smtp_host}:{cfg.smtp_port} with STARTTLS...")
-            server = smtplib.SMTP(
-                cfg.smtp_host,
-                cfg.smtp_port,
-                timeout=25
-            )
-            server.starttls(context=context)
-        
-        logger.debug(f"Authenticating as {cfg.smtp_login}...")
-        server.login(cfg.smtp_login, cfg.smtp_password)
-        
-        logger.debug(f"Sending email to {to}...")
-        server.sendmail(cfg.email_from_address, to, msg.as_string())
-        
-        server.quit()
-        return True
-        
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication failed for {cfg.smtp_login}: {e}")
-        raise
-    except smtplib.SMTPException as e:
-        logger.error(f"SMTP error while sending to {to}: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error sending email to {to}: {type(e).__name__}: {e}")
-        raise
+def _send_resend(to: str, subject: str, html: str) -> bool:
+    """Blocking Resend API call — runs in asyncio.to_thread."""
+    import resend as resend_sdk
+    api_key, from_addr = _get_resend_config()
+    resend_sdk.api_key = api_key
+    resend_sdk.Emails.send({
+        "from": from_addr,
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    })
+    return True
 
 async def _send(to: str, subject: str, html: str) -> bool:
-    """Async wrapper: runs _send_smtp in a thread pool.
-    
-    IMPROVED: Better error diagnostics and retry logic for Render compatibility.
-    """
-    cfg = _get_email_config()
-    if not cfg.is_configured:
-        logger.warning(f"Email not configured (missing SMTP_LOGIN, SMTP_PASSWORD, or EMAIL_FROM_ADDRESS) — skipping send to {to}")
+    """Async wrapper around Resend API send."""
+    if not _is_configured():
+        logger.warning(f"RESEND_API_KEY not set — skipping email to {to}")
         return False
-    
     try:
         logger.info(f"Sending email '{subject}' to {to}...")
-        await asyncio.to_thread(_send_smtp, to, subject, html)
-        logger.info(f"✓ Email '{subject}' successfully sent to {to}")
+        await asyncio.to_thread(_send_resend, to, subject, html)
+        logger.info(f"✓ Email '{subject}' sent to {to}")
         return True
-    except smtplib.SMTPAuthenticationError:
-        logger.error(f"✗ SMTP Authentication Error: Check SMTP_LOGIN and SMTP_PASSWORD on Render")
-        return False
-    except smtplib.SMTPException as e:
-        logger.error(f"✗ SMTP Error: {e} (Check SMTP_HOST and SMTP_PORT)")
-        return False
-    except OSError as e:
-        # Network/connection errors (common on Render during startup)
-        logger.error(f"✗ Connection Error to SMTP server: {e} (Check network/firewall)")
-        return False
     except Exception as exc:
         logger.error(f"✗ Failed to send '{subject}' to {to}: {type(exc).__name__}: {exc}", exc_info=True)
         return False
