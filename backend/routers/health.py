@@ -22,5 +22,11 @@ async def email_config_check():
 
 @router.post("/health/test-email")
 async def test_email(to: str):
-    result = await _send(to, "CMMS Email Test", "<p>Email system is working.</p>")
-    return {"sent": result}
+    import asyncio
+    from services.email_service import _send_smtp, _get_smtp_config
+    cfg = _get_smtp_config()
+    try:
+        await asyncio.to_thread(_send_smtp, to, "CMMS Email Test", "<p>Email system is working.</p>")
+        return {"sent": True}
+    except Exception as exc:
+        return {"sent": False, "error": type(exc).__name__, "detail": str(exc)}
