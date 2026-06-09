@@ -6,7 +6,7 @@ import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { useToastStore } from '@/stores/toastStore'
-import { listCourses, assignLecturer, getLecturerWorkloads, createCourse } from '@/lib/api/courses'
+import { listCourses, assignLecturer, getLecturerWorkloads, createCourse, getCourseEnrollmentCounts } from '@/lib/api/courses'
 import { listLecturers } from '@/lib/api/courses'
 import { updateTeachingCredits } from '@/lib/api/users'
 import { downloadTeachingLoad } from '@/lib/utils/teachingLoadExcel'
@@ -463,8 +463,15 @@ export default function CourseManagementPage() {
           onClick={async () => {
             setDownloadingLoad(true)
             try {
-              const workloads = await getLecturerWorkloads(activeSemester?.semester, activeSemester?.academic_year)
-              await downloadTeachingLoad(exportCourses, workloads, { scopeLabel: exportScopeLabel })
+              const [workloads, enrollCounts] = await Promise.all([
+                getLecturerWorkloads(activeSemester?.semester, activeSemester?.academic_year),
+                getCourseEnrollmentCounts(),
+              ])
+              const enrichedCourses = exportCourses.map(c => ({
+                ...c,
+                enrolled_count: enrollCounts[c.id] ?? 0,
+              }))
+              await downloadTeachingLoad(enrichedCourses, workloads, { scopeLabel: exportScopeLabel })
             } catch { addToast('Failed to generate export', 'error') }
             finally { setDownloadingLoad(false) }
           }}

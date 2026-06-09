@@ -27,6 +27,12 @@
       },
       "timeout": 30000,
       "disabled": false
+    },
+    "brevo": {
+      "url": "https://mcp.brevo.com/v1/brevo/mcp",
+      "headers": {
+        "Authorization": "Bearer ${BREVO_MCP_TOKEN}"
+      }
     }
   }
 }

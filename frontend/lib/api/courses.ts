@@ -15,6 +15,7 @@ export interface CourseData {
   lecturer_id?: string
   lecturer_name?: string
   coordinator_id?: string
+  max_students?: number
   created_at?: string
   updated_at?: string
 }
@@ -147,4 +148,13 @@ export async function getLecturerWorkloads(
   if (academic_year) params.academic_year = academic_year
   const response = await apiClient.get('/courses/lecturer-workloads', { params })
   return response.data || []
+}
+
+/**
+ * Get active enrollment counts for all courses as {courseId: count}.
+ * Single DB aggregation query — avoids N per-course requests.
+ */
+export async function getCourseEnrollmentCounts(): Promise<Record<string, number>> {
+  const response = await apiClient.get('/courses/enrollment-counts')
+  return response.data || {}
 }

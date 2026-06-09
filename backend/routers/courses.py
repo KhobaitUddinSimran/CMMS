@@ -204,6 +204,38 @@ async def get_lecturer_workloads(
         raise HTTPException(status_code=500, detail="Failed to get lecturer workloads")
 
 
+@router.get("/enrollment-counts")
+async def get_enrollment_counts(
+    current_user: User = Depends(get_current_user),
+):
+    """Return active enrollment counts for all courses as {course_id: count}.
+    Used by the teaching load export to populate the Enrolled column without
+    making N individual requests."""
+    _require_supabase()
+    if not has_effective_role(current_user, "coordinator", "hod", "admin", "lecturer"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        resp = (
+            supabase.table("enrollments")
+            .select("course_id")
+            .eq("status", "active")
+            .execute()
+        )
+        rows = resp.data or []
+        counts: dict[str, int] = {}
+        for row in rows:
+            cid = row.get("course_id")
+            if cid:
+                counts[cid] = counts.get(cid, 0) + 1
+        return counts
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting enrollment counts: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get enrollment counts")
+
+
 @router.get("/{course_id}")
 async def get_course(
     course_id: str,

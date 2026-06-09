@@ -1,4 +1,5 @@
 import type { LecturerWorkload } from '@/lib/api/courses'
+import { yearLevelFromCode } from '@/lib/data/mjiit-curriculum'
 
 export interface TeachingLoadCourseRow {
   id: string
@@ -11,6 +12,50 @@ export interface TeachingLoadCourseRow {
   credits?: number
   lecturer_id?: string
   lecturer_name?: string
+  enrolled_count?: number
+  max_students?: number
+}
+
+// ── Derivation helpers ────────────────────────────────────────────────────────
+
+/** Derive a human-readable course type from the UTM course code prefix. */
+export function getCourseType(code: string): string {
+  const upper = code.trim().toUpperCase().replace(/\s+/g, '')
+  if (/^SECJ|^SECV|^SECR|^SECD|^SECE|^SECF|^SECP|^SECI/.test(upper)) return 'SE Core'
+  if (/^SCSE|^SCSR|^SCST|^SCSI|^SCSD/.test(upper)) return 'Computing'
+  if (/^SMJ/.test(upper)) return 'ChE / MJIIT'
+  if (/^UHL[BMJ]|^SHLJ/.test(upper)) return 'Language'
+  if (/^UHIS|^UHMS|^ULRS|^UBSS|^UMJT|^SECD3761/.test(upper)) return 'University'
+  if (/^U/.test(upper)) return 'General Elective'
+  return 'Elective'
+}
+
+/** Map UTM code first-digit to "Year N" label; returns null if not determinable. */
+export function getYearLevelLabel(code: string): string {
+  const level = yearLevelFromCode(code)
+  if (level === null) return '—'
+  return `Year ${level}`
+}
+
+/** Compute fill percentage string; returns "N/A" if cap is falsy. */
+export function fillPct(enrolled: number, max?: number | null): string {
+  if (!max) return 'N/A'
+  return `${Math.min(100, Math.round((enrolled / max) * 100))}%`
+}
+
+/** Build a text progress bar for a 0–100 percentage value. */
+export function fillBar(pct: number, width = 10): string {
+  const filled = Math.round((pct / 100) * width)
+  return '█'.repeat(filled) + '░'.repeat(width - filled)
+}
+
+/** Section status label based on fill percentage. */
+export function sectionStatus(enrolled: number, max?: number | null): string {
+  if (!max) return '⚪ No Cap'
+  const pct = (enrolled / max) * 100
+  if (pct >= 95) return '🔴 Full'
+  if (pct >= 70) return '🟡 High'
+  return '🟢 Available'
 }
 
 export interface TeachingLoadLecturerSummary {
