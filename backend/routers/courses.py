@@ -278,7 +278,9 @@ async def create_course(
 
     # Build a clean payload matched to the actual Supabase courses schema:
     # id, code, name, description, credits, lecturer_id, department_id,
-    # semester, academic_year, max_students, created_at, updated_at
+    # semester, academic_year, max_students, section, year,
+    # category, coordinator_id, has_final_exam,
+    # lecture_hours, tutorial_hours, lab_hours, lab_name, special_notes
     payload = dict(course_data)
 
     # Required: code, name
@@ -307,20 +309,37 @@ async def create_course(
     if not payload.get("credits"):
         payload["credits"] = 3
 
-    # lecturer_id — keep NULL if not provided. Courses without an owner
-    # show up in Course Management as "Unassigned" so a coordinator can
-    # assign a real lecturer instead of the first random teaching-staff row.
+    # Default category
+    if not payload.get("category"):
+        payload["category"] = "engineering"
+
+    # lecturer_id — keep NULL if not provided
     if not payload.get("lecturer_id"):
         payload["lecturer_id"] = None
+
+    # coordinator_id — keep NULL if not provided
+    if not payload.get("coordinator_id"):
+        payload["coordinator_id"] = None
 
     # department_id — use provided value, else drop it (column should be nullable in DB)
     if not payload.get("department_id"):
         payload.pop("department_id", None)
 
+    # Cast integer hour fields
+    for hour_field in ("lecture_hours", "tutorial_hours", "lab_hours"):
+        val = payload.get(hour_field)
+        if val is not None and val != "":
+            try:
+                payload[hour_field] = int(val)
+            except (ValueError, TypeError):
+                payload.pop(hour_field, None)
+        else:
+            payload.pop(hour_field, None)
+
     actor_id = current_user.get("user_id")
 
-    # Strip columns that don't exist in the live schema
-    for col in ["coordinator_id", "created_by", "year", "section"]:
+    # Strip internal / non-schema columns
+    for col in ["created_by", "year"]:
         payload.pop(col, None)
 
     logger.info(f"Creating course with payload keys: {list(payload.keys())}")

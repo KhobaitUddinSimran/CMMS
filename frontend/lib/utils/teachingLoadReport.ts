@@ -1,4 +1,4 @@
-import type { LecturerWorkload } from '@/lib/api/courses'
+import type { LecturerWorkload, CourseCategory } from '@/lib/api/courses'
 import { yearLevelFromCode } from '@/lib/data/mjiit-curriculum'
 
 export interface TeachingLoadCourseRow {
@@ -12,14 +12,37 @@ export interface TeachingLoadCourseRow {
   credits?: number
   lecturer_id?: string
   lecturer_name?: string
+  coordinator_id?: string
+  coordinator_name?: string
   enrolled_count?: number
   max_students?: number
+  category?: CourseCategory
+  has_final_exam?: boolean
+  lecture_hours?: number
+  tutorial_hours?: number
+  lab_hours?: number
+  lab_name?: string
+  special_notes?: string
 }
 
 // ── Derivation helpers ────────────────────────────────────────────────────────
 
-/** Derive a human-readable course type from the UTM course code prefix. */
-export function getCourseType(code: string): string {
+/** Map DB category value to the CSV-style section header label. */
+export function categoryLabel(category?: CourseCategory | null): string {
+  switch (category) {
+    case 'mathematics': return 'MATHEMATICS COURSES'
+    case 'university':  return 'UNIVERSITY GENERAL COURSES'
+    case 'language':    return 'LANGUAGE COURSES'
+    default:            return 'ENGINEERING COURSES'
+  }
+}
+
+/** Derive a human-readable course type from the UTM course code prefix.
+ *  Accepts an optional DB category to use as the authoritative source. */
+export function getCourseType(code: string, category?: CourseCategory | null): string {
+  if (category === 'mathematics') return 'Mathematics'
+  if (category === 'university')  return 'University'
+  if (category === 'language')    return 'Language'
   const upper = code.trim().toUpperCase().replace(/\s+/g, '')
   if (/^SECJ|^SECV|^SECR|^SECD|^SECE|^SECF|^SECP|^SECI/.test(upper)) return 'SE Core'
   if (/^SCSE|^SCSR|^SCST|^SCSI|^SCSD/.test(upper)) return 'Computing'
@@ -27,7 +50,7 @@ export function getCourseType(code: string): string {
   if (/^UHL[BMJ]|^SHLJ/.test(upper)) return 'Language'
   if (/^UHIS|^UHMS|^ULRS|^UBSS|^UMJT|^SECD3761/.test(upper)) return 'University'
   if (/^U/.test(upper)) return 'General Elective'
-  return 'Elective'
+  return 'Engineering'
 }
 
 /** Map UTM code first-digit to "Year N" label; returns null if not determinable. */

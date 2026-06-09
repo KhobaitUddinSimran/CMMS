@@ -4,11 +4,13 @@ import {
   buildTeachingLoadReport,
   getCourseType,
   getYearLevelLabel,
+  categoryLabel,
   fillBar,
   fillPct,
   sectionStatus,
   type TeachingLoadCourseRow,
 } from '@/lib/utils/teachingLoadReport'
+import type { CourseCategory } from '@/lib/api/courses'
 
 function dateStamp(): string {
   const d = new Date()
@@ -84,7 +86,7 @@ export async function downloadTeachingLoad(
   const report    = buildTeachingLoadReport(courses, workloads)
   const scope     = options?.scopeLabel || 'All Courses'
   const generated = new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })
-  const COLS      = 13  // Sheet 1 column count
+  const COLS = 15  // Sheet 1 column count
 
   const wb = new ExcelJS.Workbook()
   wb.creator  = 'CMMS — Teaching Load Export'
@@ -92,7 +94,7 @@ export async function downloadTeachingLoad(
   wb.modified = new Date()
 
   // ════════════════════════════════════════════════════════════
-  //  SHEET 1 — Course Offer
+  //  SHEET 1 — Course Offer  (grouped by Category → Semester)
   // ════════════════════════════════════════════════════════════
   const ws1 = wb.addWorksheet('Course Offer', {
     views: [{ state: 'frozen', ySplit: 4 }],
@@ -106,12 +108,14 @@ export async function downloadTeachingLoad(
     { width: 9  },  // 5  Section
     { width: 16 },  // 6  Type
     { width: 7  },  // 7  Credits
-    { width: 32 },  // 8  Lecturer
-    { width: 10 },  // 9  Enrolled
-    { width: 10 },  // 10 Capacity
-    { width: 10 },  // 11 Fill %
-    { width: 18 },  // 12 Fill Bar
-    { width: 18 },  // 13 Status
+    { width: 14 },  // 8  Contact Hrs
+    { width: 8  },  // 9  Final Exam
+    { width: 32 },  // 10 Lecturer
+    { width: 10 },  // 11 Enrolled
+    { width: 10 },  // 12 Capacity
+    { width: 10 },  // 13 Fill %
+    { width: 18 },  // 14 Fill Bar
+    { width: 18 },  // 15 Status
   ]
 
   // Row 1 — Institution header
@@ -124,7 +128,7 @@ export async function downloadTeachingLoad(
   applyFill(r1, FILL_TITLE, 'FFFFFFFF', true, COLS)
   r1.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
 
-  // Row 2 — Sub-header: scope + generated
+  // Row 2 — Scope + generated
   const r2 = ws1.addRow([
     `Scope: ${scope}     |     Generated: ${generated}`,
     ...Array(COLS - 1).fill(''),
@@ -147,56 +151,104 @@ export async function downloadTeachingLoad(
   // Row 4 — Column headers
   const hdr = ws1.addRow([
     'No.', 'Code', 'Course Name', 'Year', 'Sec', 'Type', 'Cr',
-    'Assigned Lecturer', 'Enrolled', 'Capacity', 'Fill %', 'Fill Bar', 'Status',
+    'Contact Hrs', 'Final Exam', 'Assigned Lecturer',
+    'Enrolled', 'Capacity', 'Fill %', 'Fill Bar', 'Status',
   ])
   hdr.height = 22
   applyFill(hdr, FILL_COL_HDR, 'FFFFFFFF', true, COLS)
-  centre(hdr, 1, 4, 5, 6, 7, 9, 10, 11, 13)
+  centre(hdr, 1, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15)
   ws1.autoFilter = { from: { row: hdr.number, column: 1 }, to: { row: hdr.number, column: COLS } }
 
-  let rowNo = 0
+  // Group all courses by category, then by semester within each category
+  const CAT_ORDER: CourseCategory[] = ['engineering', 'mathematics', 'university', 'language']
+  const byCat = new Map<CourseCategory, typeof report.groups>()
+  for (const cat of CAT_ORDER) byCat.set(cat, [])
+
   for (const group of report.groups) {
-    // Semester group banner
-    const banner = ws1.addRow([
-      `  ${group.academic_year}   ·   Semester ${group.semester}`,
-      ...Array(COLS - 1).fill(''),
-    ])
-    banner.height = 18
-    ws1.mergeCells(banner.number, 1, banner.number, COLS)
-    applyFill(banner, FILL_GRP_HDR, 'FF1F3864', true, COLS)
+    for (const cat of CAT_ORDER) {
+      const catCourses = group.courses.filter(
+        (c) => (c.category ?? 'engineering') === cat
+      )
+      if (catCourses.length === 0) continue
+      const existing = byCat.get(cat)!
+      const existingGroup = existing.find(
+        (g) => g.academic_year === group.academic_year && g.semester === group.semester
+      )
+      if (existingGroup) {
+        existingGroup.courses.push(...catCourses)
+      } else {
+        existing.push({ ...group, courses: catCourses })
+      }
+    }
+  }
 
-    const sorted = [...group.courses].sort((a, b) => a.code.localeCompare(b.code))
+  let rowNo = 0
+  for (const cat of CAT_ORDER) {
+    const catGroups = byCat.get(cat)!
+    if (catGroups.every((g) => g.courses.length === 0)) continue
 
-    for (const course of sorted) {
-      rowNo++
-      const enrolled = course.enrolled_count ?? 0
-      const maxCap   = course.max_students ?? null
-      const type     = getCourseType(course.code)
-      const hasLect  = !!(course.lecturer_name?.trim())
-      const pctNum   = maxCap ? Math.min(100, Math.round((enrolled / maxCap) * 100)) : null
-      const barText  = pctNum !== null ? `${fillBar(pctNum)}  ${pctNum}%` : '— no cap'
-      const status   = hasLect
-        ? (maxCap ? sectionStatus(enrolled, maxCap) : '⚪ No Cap')
-        : '⚪ Unassigned'
+    // Category header — bold dark, full-width (matches CSV row structure)
+    const catRow = ws1.addRow([categoryLabel(cat), ...Array(COLS - 1).fill('')])
+    catRow.height = 20
+    ws1.mergeCells(catRow.number, 1, catRow.number, COLS)
+    applyFill(catRow, FILL_TITLE, 'FFFFFFFF', true, COLS)
+    catRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
+    catRow.getCell(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
 
-      const dr = ws1.addRow([
-        rowNo,
-        course.code,
-        course.name || '—',
-        getYearLevelLabel(course.code),
-        course.section || '—',
-        type,
-        course.credits ?? '—',
-        hasLect ? (course.lecturer_name!.trim()) : '⚠ Unassigned',
-        enrolled,
-        maxCap ?? '—',
-        maxCap ? fillPct(enrolled, maxCap) : '—',
-        barText,
-        status,
+    for (const group of catGroups) {
+      // Semester group banner
+      const banner = ws1.addRow([
+        `  ${group.academic_year}   ·   Semester ${group.semester}`,
+        ...Array(COLS - 1).fill(''),
       ])
-      dr.height = 16
-      applyFill(dr, rowFillForCourse(type, enrolled, maxCap, hasLect), 'FF111827', false, COLS)
-      centre(dr, 1, 4, 5, 6, 7, 9, 10, 11, 13)
+      banner.height = 18
+      ws1.mergeCells(banner.number, 1, banner.number, COLS)
+      applyFill(banner, FILL_GRP_HDR, 'FF1F3864', true, COLS)
+
+      const sorted = [...group.courses].sort((a, b) => a.code.localeCompare(b.code))
+
+      for (const course of sorted) {
+        rowNo++
+        const enrolled = course.enrolled_count ?? 0
+        const maxCap   = course.max_students ?? null
+        const type     = getCourseType(course.code, course.category)
+        const hasLect  = !!(course.lecturer_name?.trim())
+        const pctNum   = maxCap ? Math.min(100, Math.round((enrolled / maxCap) * 100)) : null
+        const barText  = pctNum !== null ? `${fillBar(pctNum)}  ${pctNum}%` : '— no cap'
+        const status   = hasLect
+          ? (maxCap ? sectionStatus(enrolled, maxCap) : '⚪ No Cap')
+          : '⚪ Unassigned'
+
+        const lh = course.lecture_hours ?? 0
+        const th = course.tutorial_hours ?? 0
+        const labH = course.lab_hours ?? 0
+        const contactHrs = [
+          lh  > 0 ? `${lh}L`   : '',
+          th  > 0 ? `${th}T`   : '',
+          labH > 0 ? `${labH}P` : '',
+        ].filter(Boolean).join('+') || '—'
+
+        const dr = ws1.addRow([
+          rowNo,
+          course.code,
+          course.name || '—',
+          getYearLevelLabel(course.code),
+          course.section || '—',
+          type,
+          course.credits ?? '—',
+          contactHrs,
+          course.has_final_exam ? 'YES' : 'NO',
+          hasLect ? (course.lecturer_name!.trim()) : '⚠ Unassigned',
+          enrolled,
+          maxCap ?? '—',
+          maxCap ? fillPct(enrolled, maxCap) : '—',
+          barText,
+          status,
+        ])
+        dr.height = 16
+        applyFill(dr, rowFillForCourse(type, enrolled, maxCap, hasLect), 'FF111827', false, COLS)
+        centre(dr, 1, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15)
+      }
     }
   }
 

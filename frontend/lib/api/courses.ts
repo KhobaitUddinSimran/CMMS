@@ -2,6 +2,8 @@
 import { apiClient } from './client'
 
 // ==================== Types ====================
+export type CourseCategory = 'engineering' | 'mathematics' | 'university' | 'language'
+
 export interface CourseData {
   name?: string
   academic_year?: string
@@ -15,7 +17,15 @@ export interface CourseData {
   lecturer_id?: string
   lecturer_name?: string
   coordinator_id?: string
+  coordinator_name?: string
   max_students?: number
+  category?: CourseCategory
+  has_final_exam?: boolean
+  lecture_hours?: number
+  tutorial_hours?: number
+  lab_hours?: number
+  lab_name?: string
+  special_notes?: string
   created_at?: string
   updated_at?: string
 }
@@ -27,8 +37,15 @@ export interface CourseFormData {
   year: string
   semester: string
   credits: number
+  category?: CourseCategory
   lecturer_id?: string
   coordinator_id?: string
+  has_final_exam?: boolean
+  lecture_hours?: number
+  tutorial_hours?: number
+  lab_hours?: number
+  lab_name?: string
+  special_notes?: string
 }
 
 export interface CourseListResponse {
