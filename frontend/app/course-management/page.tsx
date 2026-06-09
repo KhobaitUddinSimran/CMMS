@@ -66,9 +66,20 @@ interface CourseRow {
   section: string
   semester: string
   academic_year?: string
+  year?: string
   credits?: number
   lecturer_id?: string
   lecturer_name?: string
+  coordinator_id?: string
+  coordinator_name?: string
+  max_students?: number
+  category?: import('@/lib/api/courses').CourseCategory
+  has_final_exam?: boolean
+  lecture_hours?: number
+  tutorial_hours?: number
+  lab_hours?: number
+  lab_name?: string
+  special_notes?: string
 }
 
 interface LecturerOption {
