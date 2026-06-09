@@ -86,7 +86,7 @@ export async function downloadTeachingLoad(
   const report    = buildTeachingLoadReport(courses, workloads)
   const scope     = options?.scopeLabel || 'All Courses'
   const generated = new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })
-  const COLS = 15  // Sheet 1 column count
+  const COLS = 16  // Sheet 1 column count
 
   const wb = new ExcelJS.Workbook()
   wb.creator  = 'CMMS — Teaching Load Export'
@@ -110,12 +110,13 @@ export async function downloadTeachingLoad(
     { width: 7  },  // 7  Credits
     { width: 14 },  // 8  Contact Hrs
     { width: 8  },  // 9  Final Exam
-    { width: 32 },  // 10 Lecturer
-    { width: 10 },  // 11 Enrolled
-    { width: 10 },  // 12 Capacity
-    { width: 10 },  // 13 Fill %
-    { width: 18 },  // 14 Fill Bar
-    { width: 18 },  // 15 Status
+    { width: 32 },  // 10 Teaching Lecturer
+    { width: 26 },  // 11 Coordinator
+    { width: 10 },  // 12 Enrolled
+    { width: 10 },  // 13 Capacity
+    { width: 10 },  // 14 Fill %
+    { width: 18 },  // 15 Fill Bar
+    { width: 18 },  // 16 Status
   ]
 
   // Row 1 — Institution header
@@ -151,12 +152,12 @@ export async function downloadTeachingLoad(
   // Row 4 — Column headers
   const hdr = ws1.addRow([
     'No.', 'Code', 'Course Name', 'Year', 'Sec', 'Type', 'Cr',
-    'Contact Hrs', 'Final Exam', 'Assigned Lecturer',
+    'Contact Hrs', 'Final Exam', 'Teaching Lecturer', 'Coordinator',
     'Enrolled', 'Capacity', 'Fill %', 'Fill Bar', 'Status',
   ])
   hdr.height = 22
   applyFill(hdr, FILL_COL_HDR, 'FFFFFFFF', true, COLS)
-  centre(hdr, 1, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15)
+  centre(hdr, 1, 4, 5, 6, 7, 8, 9, 12, 13, 14, 16)
   ws1.autoFilter = { from: { row: hdr.number, column: 1 }, to: { row: hdr.number, column: COLS } }
 
   // Group all courses by category, then by semester within each category
@@ -228,6 +229,8 @@ export async function downloadTeachingLoad(
           labH > 0 ? `${labH}P` : '',
         ].filter(Boolean).join('+') || '—'
 
+        const coordinatorName = course.coordinator_name?.trim() || '—'
+
         const dr = ws1.addRow([
           rowNo,
           course.code,
@@ -239,6 +242,7 @@ export async function downloadTeachingLoad(
           contactHrs,
           course.has_final_exam ? 'YES' : 'NO',
           hasLect ? (course.lecturer_name!.trim()) : '⚠ Unassigned',
+          coordinatorName,
           enrolled,
           maxCap ?? '—',
           maxCap ? fillPct(enrolled, maxCap) : '—',
@@ -247,7 +251,7 @@ export async function downloadTeachingLoad(
         ])
         dr.height = 16
         applyFill(dr, rowFillForCourse(type, enrolled, maxCap, hasLect), 'FF111827', false, COLS)
-        centre(dr, 1, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15)
+        centre(dr, 1, 4, 5, 6, 7, 8, 9, 12, 13, 14, 16)
       }
     }
   }

@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card } from '@/components/common/Card'
 import { CourseForm, type CourseFormData } from '@/components/course/CourseForm'
 import { useToastStore } from '@/stores/toastStore'
-import { createCourse, type CourseData } from '@/lib/api/courses'
+import { createCourse, listLecturers, type CourseData } from '@/lib/api/courses'
+import type { StaffOption } from '@/components/course/CourseForm'
 import { ArrowLeft, CheckCircle, BookOpen, ArrowRight } from 'lucide-react'
 
 export default function CreateCoursePage() {
@@ -14,6 +15,13 @@ export default function CreateCoursePage() {
   const { addToast } = useToastStore()
   const [loading, setLoading] = useState(false)
   const [createdCourse, setCreatedCourse] = useState<CourseData | null>(null)
+  const [staffList, setStaffList] = useState<StaffOption[]>([])
+
+  useEffect(() => {
+    listLecturers()
+      .then(data => setStaffList(data))
+      .catch(() => {/* non-critical */})
+  }, [])
 
   const handleCreateCourse = async (data: CourseFormData) => {
     setLoading(true)
@@ -128,7 +136,7 @@ export default function CreateCoursePage() {
         ) : (
           /* Form Card */
           <Card className="w-full max-w-2xl">
-            <CourseForm onSubmit={handleCreateCourse} loading={loading} />
+            <CourseForm onSubmit={handleCreateCourse} loading={loading} staffList={staffList} />
           </Card>
         )}
       </div>

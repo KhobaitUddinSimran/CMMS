@@ -6,7 +6,7 @@ import { MainLayout } from '@/components/layout/MainLayout'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
-import { CourseForm, type CourseFormData } from '@/components/course/CourseForm'
+import { CourseForm, type CourseFormData, type StaffOption } from '@/components/course/CourseForm'
 import { LecturerSelector } from '@/components/course/LecturerSelector'
 import { useToastStore } from '@/stores/toastStore'
 import { getCourse, updateCourse, listLecturers, assignLecturer, getLecturerWorkloads, type LecturerWorkload } from '@/lib/api/courses'
@@ -19,12 +19,7 @@ interface CourseData extends Partial<CourseFormData> {
   year: string
   semester: string
   lecturer_id?: string
-}
-
-interface Lecturer {
-  id: string
-  email: string
-  full_name: string
+  coordinator_id?: string
 }
 
 export default function EditCoursePage() {
@@ -35,7 +30,7 @@ export default function EditCoursePage() {
 
   const [loading, setLoading] = useState(true)
   const [course, setCourse] = useState<CourseData | null>(null)
-  const [lecturers, setLecturers] = useState<Lecturer[]>([])
+  const [lecturers, setLecturers] = useState<StaffOption[]>([])
   const [selectedLecturer, setSelectedLecturer] = useState<string>('')
   const [loadingUpdate, setLoadingUpdate] = useState(false)
   const [assignSuccess, setAssignSuccess] = useState(false)
@@ -179,6 +174,7 @@ export default function EditCoursePage() {
                 onSubmit={handleUpdateCourse}
                 loading={loadingUpdate}
                 initialData={course}
+                staffList={lecturers}
               />
             </Card>
           </div>

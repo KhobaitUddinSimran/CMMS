@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
-import { BookOpen, FlaskConical, GraduationCap, ChevronDown } from 'lucide-react'
+import { BookOpen, FlaskConical, GraduationCap, ChevronDown, UserCog } from 'lucide-react'
 import type { CourseCategory } from '@/lib/api/courses'
 
 export interface CourseFormData {
@@ -14,6 +14,7 @@ export interface CourseFormData {
   semester: string
   credits: number
   category: CourseCategory
+  coordinator_id: string
   has_final_exam: boolean
   lecture_hours: number
   tutorial_hours: number
@@ -22,10 +23,17 @@ export interface CourseFormData {
   special_notes: string
 }
 
+export interface StaffOption {
+  id: string
+  email: string
+  full_name: string
+}
+
 interface CourseFormProps {
   onSubmit: (data: CourseFormData) => Promise<void>
   loading?: boolean
   initialData?: Partial<CourseFormData>
+  staffList?: StaffOption[]
 }
 
 const CATEGORY_OPTIONS: { value: CourseCategory; label: string }[] = [
@@ -40,7 +48,7 @@ const SELECT_CLS = (err?: string, disabled?: boolean) =>
    ${err ? 'border-[#EF4444]' : 'border-[#E5E7EB] focus:border-[#C90031] focus:border-2 focus:bg-[#F9FAFB]'}
    ${disabled ? 'bg-[#F3F4F6] cursor-not-allowed' : 'bg-white'}`
 
-export function CourseForm({ onSubmit, loading = false, initialData }: CourseFormProps) {
+export function CourseForm({ onSubmit, loading = false, initialData, staffList }: CourseFormProps) {
   const [formData, setFormData] = useState<CourseFormData>({
     code: '',
     name: '',
@@ -49,6 +57,7 @@ export function CourseForm({ onSubmit, loading = false, initialData }: CourseFor
     semester: '',
     credits: 3,
     category: 'engineering',
+    coordinator_id: '',
     has_final_exam: false,
     lecture_hours: 2,
     tutorial_hours: 0,
@@ -162,6 +171,29 @@ export function CourseForm({ onSubmit, loading = false, initialData }: CourseFor
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280]" />
         </div>
       </div>
+
+      {/* Course Coordinator (only shown when staffList is provided) */}
+      {staffList && staffList.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <UserCog className="w-4 h-4 text-[#6B7280]" />
+            <label className="text-[12px] text-[#111827]">Course Coordinator <span className="text-[#9CA3AF]">(optional)</span></label>
+          </div>
+          <div className="relative">
+            <select value={formData.coordinator_id} onChange={handleChange('coordinator_id')}
+              disabled={loading} className={SELECT_CLS(undefined, loading)}>
+              <option value="">— None / Not assigned —</option>
+              {staffList.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.full_name || s.email}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280]" />
+          </div>
+          <p className="text-[11px] text-[#6B7280]">Coordinator oversees all sections; may differ from the teaching lecturer.</p>
+        </div>
+      )}
 
       {/* Year / Semester */}
       <div className="grid grid-cols-2 gap-3">

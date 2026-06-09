@@ -478,9 +478,12 @@ export default function CourseManagementPage() {
                 getLecturerWorkloads(activeSemester?.semester, activeSemester?.academic_year),
                 getCourseEnrollmentCounts(),
               ])
+              const nameMap: Record<string, string> = {}
+              for (const l of lecturers) nameMap[l.id] = l.full_name
               const enrichedCourses = exportCourses.map(c => ({
                 ...c,
                 enrolled_count: enrollCounts[c.id] ?? 0,
+                coordinator_name: c.coordinator_id ? (nameMap[c.coordinator_id] ?? undefined) : undefined,
               }))
               await downloadTeachingLoad(enrichedCourses, workloads, { scopeLabel: exportScopeLabel })
             } catch { addToast('Failed to generate export', 'error') }
