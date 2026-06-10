@@ -48,6 +48,25 @@ services:
           property: url
 
   # ─────────────────────────────────────────────────
+  # Keep-alive cron — prevents Render free-tier hibernation
+  # Pings backend /health every 10 minutes
+  # ─────────────────────────────────────────────────
+  - type: cron
+    name: cmms-keepalive
+    runtime: python
+    region: singapore
+    plan: free
+    schedule: "*/10 * * * *"
+    buildCommand: pip install requests
+    startCommand: python -c "import requests,os,sys; r=requests.get(os.environ['BACKEND_URL']+'/health',timeout=10); sys.exit(0 if r.ok else 1)"
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          name: cmms-backend
+          type: web
+          property: url
+
+  # ─────────────────────────────────────────────────
   # Frontend  (Next.js / Node 20)
   # ─────────────────────────────────────────────────
   - type: web
