@@ -381,6 +381,30 @@ export default function CourseManagementPage() {
     setAssigning(courseId)
     try {
       await assignLecturer(courseId, lecturerId)
+
+      const course = courses.find(c => c.id === courseId)
+      const courseCredits = Number(course?.credits ?? 0)
+      const prevLecturerId = course?.lecturer_id
+
+      // Optimistically update workload numbers immediately
+      if (courseCredits > 0) {
+        setLecturers(prev => prev.map(l => {
+          if (l.id === prevLecturerId && prevLecturerId !== lecturerId) {
+            // Previous lecturer loses these credits
+            const newUsed = Math.max(0, l.used_credits - courseCredits)
+            const cap = l.max_credits || DEFAULT_MAX_CREDITS
+            return { ...l, used_credits: newUsed, remaining_credits: Math.max(0, cap - newUsed), is_full: newUsed >= cap }
+          }
+          if (!isUnassign && l.id === lecturerId) {
+            // New lecturer gains these credits
+            const newUsed = l.used_credits + courseCredits
+            const cap = l.max_credits || DEFAULT_MAX_CREDITS
+            return { ...l, used_credits: newUsed, remaining_credits: Math.max(0, cap - newUsed), is_full: newUsed >= cap }
+          }
+          return l
+        }))
+      }
+
       const lect = lecturers.find(l => l.id === lecturerId)
       setCourses(prev => prev.map(c =>
         c.id === courseId
@@ -388,7 +412,7 @@ export default function CourseManagementPage() {
           : c
       ))
       addToast(isUnassign ? 'Lecturer unassigned' : 'Lecturer assigned', 'success')
-      loadData()
+      loadData()  // background refresh for server-accurate totals
     } catch (e: any) {
       addToast(e?.response?.data?.detail || (isUnassign ? 'Failed to unassign lecturer' : 'Failed to assign lecturer'), 'error')
     } finally {
