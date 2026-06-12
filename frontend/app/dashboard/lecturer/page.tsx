@@ -6,12 +6,10 @@ import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses } from '@/lib/api/courses'
-import { getEnrolledStudents } from '@/lib/api/enrollments'
-import { listMessages } from '@/lib/api/messages'
 import {
   BookOpen, Users, Grid3x3, ClipboardList, Upload,
   ChevronRight, ArrowRight,
-  Shield, Mail
+  Shield
 } from 'lucide-react'
 
 interface CourseItem {
@@ -41,9 +39,7 @@ export default function LecturerDashboard() {
   const isHOD = specialRoles.includes('hod')
 
   const [loading, setLoading] = useState(true)
-  const [myCourses, setMyCourses] = useState<CourseItem[]>([])
-  const [totalStudents, setTotalStudents] = useState<number | null>(null)
-  const [unreadCount, setUnreadCount] = useState(0)
+  const [myCourses, setMyCourses] = useState<CourseItem[]>([])  
 
   useEffect(() => {
     loadData()
@@ -52,35 +48,11 @@ export default function LecturerDashboard() {
   const loadData = async () => {
     try {
       setLoading(true)
-      listMessages().then(d => setUnreadCount((d as any).unread_count || 0)).catch(() => {})
       const data = await listCourses({ limit: 500 })
       const list: CourseItem[] = data.data || (data as any)
-      // Backend already scopes GET /courses to the current lecturer's assigned
-      // courses, so the full list IS their courses.
       setMyCourses(list)
-
-      if (list.length > 0) {
-        let total = 0
-        for (const course of list.slice(0, 5)) {
-          try {
-            const students = await getEnrolledStudents(course.id)
-            const active = Array.isArray(students)
-              ? students.filter((s: any) => s.status === 'active' || s.status === 'ACTIVE').length
-              : 0
-            course.student_count = active
-            total += active
-          } catch {
-            course.student_count = 0
-          }
-        }
-        setMyCourses([...list])
-        setTotalStudents(total)
-      } else {
-        setTotalStudents(0)
-      }
     } catch {
       setMyCourses([])
-      setTotalStudents(0)
     } finally {
       setLoading(false)
     }
@@ -90,20 +62,6 @@ export default function LecturerDashboard() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-
-      {/* Unread Messages Banner */}
-      {unreadCount > 0 && (
-        <div
-          className="flex items-center gap-3 px-4 py-3 bg-[#FFF0F3] border border-[#FECDD3] rounded-xl cursor-pointer hover:bg-[#FFE4E6] transition-colors"
-          onClick={() => router.push('/messages')}
-        >
-          <Mail className="w-5 h-5 text-[#C90031] shrink-0" />
-          <p className="text-[14px] font-medium text-[#C90031]">
-            You have <span className="font-bold">{unreadCount}</span> unread {unreadCount === 1 ? 'message' : 'messages'}
-          </p>
-          <ChevronRight className="w-4 h-4 text-[#C90031] ml-auto" />
-        </div>
-      )}
 
       {/* Welcome + Role Badges */}
       <div className="pt-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -160,7 +118,7 @@ export default function LecturerDashboard() {
               <div>
                 <p className="text-sm text-[#6B7280]">Students Enrolled</p>
                 {loading ? <div className="mt-3"><Spinner /></div>
-                  : <p className="text-[28px] font-bold text-[#111827] mt-1.5">{totalStudents ?? '—'}</p>}
+                  : <p className="text-[28px] font-bold text-[#111827] mt-1.5">—</p>}
               </div>
               <div className="w-14 h-14 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
                 <Users className="w-7 h-7 text-[#10B981]" />

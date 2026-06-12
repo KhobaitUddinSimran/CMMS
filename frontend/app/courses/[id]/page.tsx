@@ -8,7 +8,7 @@ import { Spinner } from '@/components/common/Spinner'
 import { useAuth } from '@/lib/contexts/auth-context'
 import { useToastStore } from '@/stores/toastStore'
 import { getCourse } from '@/lib/api/courses'
-import { getEnrolledStudents } from '@/lib/api/enrollments'
+import { getEnrolledStudents, dropStudent, dropAllStudents } from '@/lib/api/enrollments'
 import { listAssessments } from '@/lib/api/assessments'
 import { getCourseAllMarks, getStudentMarksSummary } from '@/lib/api/marks'
 import {
@@ -25,6 +25,7 @@ import {
   ChevronRight,
   GraduationCap,
   RefreshCw,
+  UserMinus,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -104,6 +105,7 @@ function LecturerView({
   assessments,
   marks,
   loading,
+  marksLoading,
   onRefresh,
 }: {
   course: CourseInfo
@@ -111,6 +113,7 @@ function LecturerView({
   assessments: Assessment[]
   marks: MarkEntry[]
   loading: boolean
+  marksLoading: boolean
   onRefresh: () => void
 }) {
   const router = useRouter()
@@ -136,6 +139,29 @@ function LecturerView({
       }
     }
     return total.toFixed(1)
+  }
+
+  const handleUnenrollStudent = async (studentId: string, studentName: string) => {
+    if (!confirm(`Are you sure you want to unenroll ${studentName} from this course?`)) return
+    try {
+      await dropStudent(course.id, studentId)
+      alert(`${studentName} has been unenrolled.`)
+      onRefresh()
+    } catch {
+      alert(`Failed to unenroll ${studentName}.`)
+    }
+  }
+
+  const handleDropAllStudents = async () => {
+    if (activeStudents.length === 0) return
+    if (!confirm(`Are you sure you want to drop ALL ${activeStudents.length} students from this course? This cannot be undone.`)) return
+    try {
+      const result = await dropAllStudents(course.id)
+      alert(`${result.dropped} student(s) have been dropped from the course.`)
+      onRefresh()
+    } catch {
+      alert('Failed to drop all students.')
+    }
   }
 
   const TABS = [
@@ -232,14 +258,14 @@ function LecturerView({
                 <StatCard label="Assessments" value={assessments.length} />
                 <StatCard
                   label="Marks Entered"
-                  value={`${enteredCells} / ${totalCells}`}
-                  sub={`${progress}% complete`}
+                  value={marksLoading ? '…' : `${enteredCells} / ${totalCells}`}
+                  sub={marksLoading ? 'Loading…' : `${progress}% complete`}
                   color={progress === 100 ? 'text-green-600' : 'text-[#111827]'}
                 />
                 <StatCard
                   label="Published Marks"
-                  value={publishedCells}
-                  sub={`of ${totalCells} total`}
+                  value={marksLoading ? '…' : publishedCells}
+                  sub={marksLoading ? 'Loading…' : `of ${totalCells} total`}
                   color="text-blue-600"
                 />
               </div>
@@ -315,12 +341,22 @@ function LecturerView({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-[#6B7280]">{activeStudents.length} student{activeStudents.length !== 1 ? 's' : ''} enrolled</p>
-                <button
-                  onClick={() => router.push('/roster')}
-                  className="flex items-center gap-1.5 text-sm text-[#C90031] font-medium hover:underline"
-                >
-                  <Upload className="w-3.5 h-3.5" /> Upload Student List
-                </button>
+                <div className="flex items-center gap-3">
+                  {activeStudents.length > 0 && (
+                    <button
+                      onClick={handleDropAllStudents}
+                      className="flex items-center gap-1.5 text-sm text-[#DC2626] font-medium border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      <UserMinus className="w-3.5 h-3.5" /> Drop All Students
+                    </button>
+                  )}
+                  <button
+                    onClick={() => router.push('/roster')}
+                    className="flex items-center gap-1.5 text-sm text-[#C90031] font-medium hover:underline"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Upload Student List
+                  </button>
+                </div>
               </div>
               {activeStudents.length === 0 ? (
                 <Card>
@@ -350,6 +386,7 @@ function LecturerView({
                           ))}
                           <th className="text-center px-4 py-3 font-semibold text-[#C90031] min-w-[100px]">Carry %</th>
                           <th className="text-center px-4 py-3 font-semibold text-[#374151] w-10">Status</th>
+                          <th className="text-center px-4 py-3 font-semibold text-[#374151] w-24">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E5E7EB]">
@@ -397,6 +434,15 @@ function LecturerView({
                                 {allPublished
                                   ? <CheckCircle className="w-4 h-4 text-green-500 mx-auto" />
                                   : <Clock className="w-4 h-4 text-yellow-400 mx-auto" />}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  onClick={() => handleUnenrollStudent(s.id, s.full_name || s.email)}
+                                  className="p-1.5 text-[#9CA3AF] hover:text-[#DC2626] hover:bg-red-50 rounded transition-colors"
+                                  title="Unenroll student"
+                                >
+                                  <UserMinus className="w-4 h-4" />
+                                </button>
                               </td>
                             </tr>
                           )
@@ -655,6 +701,7 @@ export default function CourseDetailPage() {
   const [studentSummary, setStudentSummary] = useState<any[]>([])
   const [pageLoading, setPageLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
+  const [marksLoading, setMarksLoading] = useState(false)
 
   const role = user?.role
   const isStaff = role === 'lecturer' || role === 'coordinator' || role === 'admin' || role === 'hod'
@@ -674,17 +721,23 @@ export default function CourseDetailPage() {
 
   const loadStaffData = useCallback(async () => {
     setDataLoading(true)
-    const [studentsRes, assessmentsRes, marksRes] = await Promise.allSettled([
+    const [studentsRes, assessmentsRes] = await Promise.allSettled([
       getEnrolledStudents(courseId),
       listAssessments(courseId),
-      getCourseAllMarks(courseId),
     ])
     if (studentsRes.status === 'fulfilled') setStudents(studentsRes.value)
     else addToast('Could not load student list', 'error')
     if (assessmentsRes.status === 'fulfilled')
       setAssessments(Array.isArray(assessmentsRes.value) ? assessmentsRes.value : (assessmentsRes.value as any).data || [])
-    if (marksRes.status === 'fulfilled') setMarks(marksRes.value)
     setDataLoading(false)
+    setMarksLoading(true)
+    try {
+      const marksData = await getCourseAllMarks(courseId)
+      setMarks(marksData)
+    } catch {
+    } finally {
+      setMarksLoading(false)
+    }
   }, [courseId, addToast])
 
   const loadStudentData = useCallback(async () => {
@@ -758,6 +811,7 @@ export default function CourseDetailPage() {
             assessments={assessments}
             marks={marks}
             loading={dataLoading}
+            marksLoading={marksLoading}
             onRefresh={loadStaffData}
           />
         )}

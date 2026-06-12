@@ -60,6 +60,14 @@ export async function dropStudent(courseId: string, studentId: string): Promise<
 }
 
 /**
+ * Drop ALL active students from a course in one operation
+ */
+export async function dropAllStudents(courseId: string): Promise<{ message: string; dropped: number }> {
+  const response = await apiClient.delete(`/courses/${courseId}/enrollments`)
+  return response.data
+}
+
+/**
  * Get course enrollments with pagination
  */
 export async function getCourseEnrollments(
@@ -106,5 +114,19 @@ export async function confirmRosterImport(
   previewId: string
 ): Promise<RosterImportResult> {
   const response = await apiClient.post(`/courses/${courseId}/roster/confirm`, { preview_id: previewId })
+  return response.data
+}
+
+/**
+ * Invite a pending student by adding their email and sending invitation
+ */
+export async function invitePendingStudent(
+  courseId: string,
+  studentId: string,
+  email: string
+): Promise<{ success: boolean; message: string; student_id: string; email: string }> {
+  const response = await apiClient.post(`/courses/${courseId}/students/${studentId}/invite`, {
+    email,
+  })
   return response.data
 }

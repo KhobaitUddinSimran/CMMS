@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertCircle, CheckCircle, XCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { Modal } from '../common/Modal'
 import { Button } from '../common/Button'
 
@@ -9,7 +9,7 @@ interface Student {
   email: string
   first_name: string
   last_name: string
-  status: 'new' | 'existing' | 'error'
+  status: 'new' | 'existing' | 'pending_email' | 'error'
   error?: string
 }
 
@@ -19,6 +19,7 @@ interface RosterPreviewProps {
     students: Student[]
     new_count: number
     existing_count: number
+    pending_email_count?: number
     error_count: number
     summary: string
   } | null
@@ -42,6 +43,8 @@ export function RosterPreview({
         return <CheckCircle className="w-4 h-4 text-green-600" />
       case 'existing':
         return <AlertCircle className="w-4 h-4 text-blue-600" />
+      case 'pending_email':
+        return <Clock className="w-4 h-4 text-yellow-600" />
       case 'error':
         return <XCircle className="w-4 h-4 text-red-600" />
       default:
@@ -55,6 +58,8 @@ export function RosterPreview({
         return <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">New Account</span>
       case 'existing':
         return <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">Existing</span>
+      case 'pending_email':
+        return <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full font-medium">Pending Email</span>
       case 'error':
         return <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full font-medium">Error</span>
       default:
@@ -85,7 +90,7 @@ export function RosterPreview({
     >
       <div className="space-y-4">
         {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
             <div className="text-2xl font-bold text-green-700">{data.new_count}</div>
             <div className="text-xs text-green-600 font-medium">New Accounts</div>
@@ -93,6 +98,22 @@ export function RosterPreview({
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="text-2xl font-bold text-blue-700">{data.existing_count}</div>
             <div className="text-xs text-blue-600 font-medium">Existing Students</div>
+          </div>
+          <div className={`p-3 border rounded-lg ${
+            (data.pending_email_count || 0) > 0
+              ? 'bg-yellow-50 border-yellow-200'
+              : 'bg-gray-50 border-gray-200'
+          }`}>
+            <div className={`text-2xl font-bold ${
+              (data.pending_email_count || 0) > 0 ? 'text-yellow-700' : 'text-gray-700'
+            }`}>
+              {data.pending_email_count || 0}
+            </div>
+            <div className={`text-xs font-medium ${
+              (data.pending_email_count || 0) > 0 ? 'text-yellow-600' : 'text-gray-600'
+            }`}>
+              Pending Email
+            </div>
           </div>
           <div className={`p-3 border rounded-lg ${
             data.error_count > 0
@@ -124,6 +145,21 @@ export function RosterPreview({
           </div>
         )}
 
+        {/* Pending Email Warning */}
+        {(data.pending_email_count || 0) > 0 && (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex gap-2">
+              <Clock className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-700">
+                <p className="font-medium">{data.pending_email_count} student(s) will be created without email</p>
+                <p className="text-xs mt-1">
+                  You&apos;ll need to invite them manually from Roster Management, or they can self-register using their matric number.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Students Table */}
         <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
           <table className="w-full text-sm">
@@ -142,6 +178,8 @@ export function RosterPreview({
                     ? 'bg-red-50'
                     : student.status === 'existing'
                     ? 'bg-blue-50'
+                    : student.status === 'pending_email'
+                    ? 'bg-yellow-50'
                     : 'hover:bg-gray-50'
                 }>
                   <td className="px-4 py-3">

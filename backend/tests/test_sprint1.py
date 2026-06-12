@@ -1,30 +1,52 @@
-"""Sprint 1 Integration Tests"""
-
+"""Sprint 1 Integration Tests — live server required at localhost:8000."""
 import pytest
-from httpx import AsyncClient
-from backend.main import app
+import httpx
+
+BASE_URL = "http://localhost:8000"
 
 
-@pytest.mark.asyncio
-async def test_health_check():
-    """API health check"""
-    async with AsyncClient(app=app, base_url="http://localhost") as client:
-        response = await client.get("/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
+def test_health_check():
+    """API health check."""
+    resp = httpx.get(f"{BASE_URL}/health", timeout=10)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "healthy"
 
 
-@pytest.mark.asyncio  
-async def test_login_endpoint():
-    """Login endpoint"""
-    async with AsyncClient(app=app, base_url="http://localhost") as client:
-        response = await client.post(
-            "/auth/login",
-            json={
-                "email": "uddinsimran@graduate.utm.my",
-                "password": "password@cmms"
-            }
-        )
-        # Should not error out
-        assert response.status_code in [200, 401, 422]
+def test_login_student():
+    """Student can log in successfully."""
+    resp = httpx.post(
+        f"{BASE_URL}/auth/login",
+        json={"email": "student@graduate.utm.my", "password": "password@cmsss", "role": "student"},
+        timeout=10,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "token" in data
+    assert data["user"]["role"] == "student"
+
+
+def test_login_admin():
+    """Admin can log in successfully."""
+    resp = httpx.post(
+        f"{BASE_URL}/auth/login",
+        json={"email": "admin@utm.my", "password": "password@cmsss", "role": "admin"},
+        timeout=10,
+    )
+    assert resp.status_code == 200
+    assert "token" in resp.json()
+
+
+def test_login_wrong_password():
+    """Wrong password returns 401."""
+    resp = httpx.post(
+        f"{BASE_URL}/auth/login",
+        json={"email": "student@graduate.utm.my", "password": "wrong!", "role": "student"},
+        timeout=10,
+    )
+    assert resp.status_code == 401
+
+
+def test_login_missing_fields():
+    """Missing fields return 422."""
+    resp = httpx.post(f"{BASE_URL}/auth/login", json={}, timeout=10)
+    assert resp.status_code == 422

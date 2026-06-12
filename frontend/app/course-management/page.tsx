@@ -32,7 +32,7 @@ const EMPTY_TIMELINE_FORM: SemesterTimelineInput = {
   grade_submission_deadline: '', notes: '',
 }
 
-type ActiveTab = 'distribute' | 'setup' | 'calendar'
+type ActiveTab = 'distribute' | 'setup' | 'calendar' | 'workloads'
 
 /**
  * Derive the academic_year a course belongs to given a cohort intake year and
@@ -139,7 +139,7 @@ export default function CourseManagementPage() {
     try {
       const [courseRes, workloadRes, staffRes] = await Promise.allSettled([
         listCourses({ limit: 500 }),
-        getLecturerWorkloads(),
+        getLecturerWorkloads(activeSemester?.semester, activeSemester?.academic_year),
         listLecturers(),
       ])
 
@@ -189,7 +189,7 @@ export default function CourseManagementPage() {
     } finally {
       setLoading(false)
     }
-  }, [addToast])
+  }, [addToast, activeSemester])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -290,6 +290,8 @@ export default function CourseManagementPage() {
       await setSemesterCourses(activeSemester.id, Array.from(selectedCourseIds))
       setSelectionSaved(true)
       setTimeout(() => setSelectionSaved(false), 4000)
+      // Reload to show newly cloned courses for this academic year
+      await loadData()
     } catch {
       addToast('Failed to save course selection', 'error')
     } finally {
@@ -506,6 +508,7 @@ export default function CourseManagementPage() {
           { id: 'distribute', label: 'Distribute Lecturers', Icon: LayoutList },
           { id: 'setup',      label: 'Setup Timeline & Courses', Icon: Settings2 },
           { id: 'calendar',   label: 'Calendar View', Icon: CalendarDays },
+          { id: 'workloads',  label: 'Lecturer Workloads', Icon: Users },
         ] as const).map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -561,54 +564,6 @@ export default function CourseManagementPage() {
               </Card>
             ))}
           </div>
-
-          {/* Workload bars */}
-          {!loading && lecturers.length > 0 && (
-            <Card>
-              <h2 className="text-[15px] font-bold text-[#111827] mb-4 flex items-center gap-2">
-                <Users className="w-5 h-5 text-[#6B7280]" />
-                Lecturer Workloads <span className="text-[12px] font-normal text-[#6B7280]">(per-lecturer cap)</span>
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {lecturers.map(l => {
-                  const cap = l.max_credits || DEFAULT_MAX_CREDITS
-                  const pct = Math.min((l.used_credits / cap) * 100, 100)
-                  const barColor = l.is_full ? 'bg-[#EF4444]' : pct >= 67 ? 'bg-[#F59E0B]' : 'bg-[#10B981]'
-                  return (
-                    <div key={l.id} className="p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[13px] font-medium text-[#111827] truncate max-w-[140px]">{l.full_name}</span>
-                        {editingLecturer === l.id ? (
-                          <div className="flex items-center gap-1">
-                            <input autoFocus type="number" min={1} value={editCreditsValue}
-                              onChange={e => setEditCreditsValue(e.target.value)} placeholder="no limit"
-                              className="w-16 h-6 text-[12px] border border-[#C90031] rounded px-1.5 outline-none text-center"
-                              onKeyDown={e => { if (e.key === 'Enter') handleSetCredits(l.id); if (e.key === 'Escape') setEditingLecturer(null) }}
-                            />
-                            <span className="text-[11px] text-[#6B7280]">cr</span>
-                            <button onClick={() => handleSetCredits(l.id)} disabled={savingCredits}
-                              className="p-0.5 rounded bg-[#C90031] text-white hover:bg-[#A80028] disabled:opacity-50"><Check className="w-3 h-3" /></button>
-                            <button onClick={() => setEditingLecturer(null)}
-                              className="p-0.5 rounded border border-[#E5E7EB] text-[#6B7280] hover:bg-white"><X className="w-3 h-3" /></button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[12px] font-bold ${l.is_full ? 'text-[#EF4444]' : 'text-[#374151]'}`}>{l.used_credits}/{cap} cr</span>
-                            <button onClick={() => { setEditingLecturer(l.id); setEditCreditsValue(String(l.max_credits || '')) }}
-                              className="p-0.5 rounded text-[#D1D5DB] hover:text-[#C90031]" title="Edit credit limit"><Pencil className="w-3 h-3" /></button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
-                        <div className={`h-2 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-                      </div>
-                      {l.is_full && <p className="text-[11px] text-[#EF4444] mt-1 font-medium">Workload full</p>}
-                    </div>
-                  )
-                })}
-              </div>
-            </Card>
-          )}
 
           {/* Filters */}
           <div className="flex flex-wrap gap-3 items-center">
@@ -927,6 +882,92 @@ export default function CourseManagementPage() {
           onEdit={tl => { setActiveSemester(tl); setActiveTab('setup') }}
           onDelete={handleDeleteTimeline}
         />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          TAB 4 — LECTURER WORKLOADS
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'workloads' && (
+        <div className="space-y-5">
+          {/* Active semester banner */}
+          {activeSemester && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[14px]">
+                <span className="text-[#6B7280]">Showing workloads for:</span>
+                <span className="ml-2 font-semibold text-[#C90031]">{activeSemester.academic_year} · Semester {activeSemester.semester}</span>
+              </div>
+              <div className="text-[12px] text-[#6B7280]">
+                {lecturers.filter(l => l.is_full).length} of {lecturers.length} lecturers at full capacity
+              </div>
+            </div>
+          )}
+
+          {!activeSemester && (
+            <Card>
+              <div className="text-center py-10 text-[#9CA3AF]">
+                <Users className="w-10 h-10 mx-auto mb-3 text-[#D1D5DB]" />
+                <p className="font-medium">Select a semester timeline to view lecturer workloads</p>
+                <p className="text-[12px] mt-1">Workloads are scoped to the selected academic year and semester</p>
+              </div>
+            </Card>
+          )}
+
+          {loading ? (
+            <div className="flex justify-center py-10"><Spinner /></div>
+          ) : lecturers.length === 0 ? (
+            <Card>
+              <div className="text-center py-10 text-[#9CA3AF]">
+                <Users className="w-10 h-10 mx-auto mb-3 text-[#D1D5DB]" />
+                <p className="font-medium">No lecturer data available</p>
+              </div>
+            </Card>
+          ) : (
+            <Card>
+              <h2 className="text-[15px] font-bold text-[#111827] mb-4 flex items-center gap-2">
+                <Users className="w-5 h-5 text-[#6B7280]" />
+                Lecturer Workloads <span className="text-[12px] font-normal text-[#6B7280]">(per-lecturer cap)</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {lecturers.map(l => {
+                  const cap = l.max_credits || DEFAULT_MAX_CREDITS
+                  const pct = Math.min((l.used_credits / cap) * 100, 100)
+                  const barColor = l.is_full ? 'bg-[#EF4444]' : pct >= 67 ? 'bg-[#F59E0B]' : 'bg-[#10B981]'
+                  return (
+                    <div key={l.id} className="p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[13px] font-medium text-[#111827] truncate max-w-[140px]">{l.full_name}</span>
+                        {editingLecturer === l.id ? (
+                          <div className="flex items-center gap-1">
+                            <input autoFocus type="number" min={1} value={editCreditsValue}
+                              onChange={e => setEditCreditsValue(e.target.value)} placeholder="no limit"
+                              className="w-16 h-6 text-[12px] border border-[#C90031] rounded px-1.5 outline-none text-center"
+                              onKeyDown={e => { if (e.key === 'Enter') handleSetCredits(l.id); if (e.key === 'Escape') setEditingLecturer(null) }}
+                            />
+                            <span className="text-[11px] text-[#6B7280]">cr</span>
+                            <button onClick={() => handleSetCredits(l.id)} disabled={savingCredits}
+                              className="p-0.5 rounded bg-[#C90031] text-white hover:bg-[#A80028] disabled:opacity-50"><Check className="w-3 h-3" /></button>
+                            <button onClick={() => setEditingLecturer(null)}
+                              className="p-0.5 rounded border border-[#E5E7EB] text-[#6B7280] hover:bg-white"><X className="w-3 h-3" /></button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[12px] font-bold ${l.is_full ? 'text-[#EF4444]' : 'text-[#374151]'}`}>{l.used_credits}/{cap} cr</span>
+                            <button onClick={() => { setEditingLecturer(l.id); setEditCreditsValue(String(l.max_credits || '')) }}
+                              className="p-0.5 rounded text-[#D1D5DB] hover:text-[#C90031]" title="Edit credit limit"><Pencil className="w-3 h-3" /></button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
+                        <div className={`h-2 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      {l.is_full && <p className="text-[11px] text-[#EF4444] mt-1 font-medium">Workload full</p>}
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
       </div>{/* end tab content */}

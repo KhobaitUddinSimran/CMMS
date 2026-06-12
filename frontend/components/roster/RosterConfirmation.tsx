@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle, AlertCircle } from 'lucide-react'
+import { CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import { Modal } from '../common/Modal'
 import { Button } from '../common/Button'
 
@@ -10,6 +10,8 @@ interface RosterConfirmationProps {
     success: boolean
     accounts_created: number
     enrollments_linked: number
+    pending_email_count?: number
+    pending_students?: number
     errors: number
     message: string
     student_emails?: string[]
@@ -51,7 +53,7 @@ export function RosterConfirmation({
         </div>
 
         {/* Results Summary */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
             <div className="text-2xl font-bold text-green-700">
               {result.accounts_created}
@@ -63,6 +65,22 @@ export function RosterConfirmation({
               {result.enrollments_linked}
             </div>
             <div className="text-xs text-blue-600 font-medium">Enrollments Linked</div>
+          </div>
+          <div className={`p-3 border rounded-lg ${
+            (result.pending_email_count || result.pending_students || 0) > 0
+              ? 'bg-yellow-50 border-yellow-200'
+              : 'bg-gray-50 border-gray-200'
+          }`}>
+            <div className={`text-2xl font-bold ${
+              (result.pending_email_count || result.pending_students || 0) > 0 ? 'text-yellow-700' : 'text-gray-700'
+            }`}>
+              {result.pending_email_count || result.pending_students || 0}
+            </div>
+            <div className={`text-xs font-medium ${
+              (result.pending_email_count || result.pending_students || 0) > 0 ? 'text-yellow-600' : 'text-gray-600'
+            }`}>
+              Pending Email
+            </div>
           </div>
           <div className={`p-3 border rounded-lg ${
             result.errors > 0
@@ -89,13 +107,28 @@ export function RosterConfirmation({
             <div className="text-xs text-blue-700">
               <p className="font-medium mb-1">What&apos;s Next?</p>
               <ul className="list-disc list-inside space-y-0.5">
-                <li>New students will receive OTP via email</li>
+                <li>New students with email will receive OTP via email</li>
                 <li>They can log in and set their password</li>
-                <li>Check your email for delivery confirmation</li>
+                <li>Students without email can be invited from Roster Management</li>
               </ul>
             </div>
           </div>
         </div>
+
+        {/* Pending Students Warning */}
+        {(result.pending_email_count || result.pending_students || 0) > 0 && (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex gap-2">
+              <Clock className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-yellow-700">
+                <p className="font-medium">{(result.pending_email_count || result.pending_students)} student(s) created without email</p>
+                <p className="mt-1">
+                  Go to <strong>Roster Management</strong> to add email addresses and send invitations, or students can self-register using their matric number.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* New Student Emails (optional) */}
         {result.student_emails && result.student_emails.length > 0 && (

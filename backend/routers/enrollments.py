@@ -264,6 +264,38 @@ async def drop_student_from_course(
         raise HTTPException(status_code=500, detail="Failed to drop student")
 
 
+# ==================== Drop ALL Students from Course ====================
+@router.delete("/{course_id}/enrollments")
+async def drop_all_students_from_course(
+    course_id: str,
+    current_user=Depends(get_current_user),
+):
+    """Drop (soft-delete) ALL active students from a course in one operation"""
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        course = _get_course_or_404(course_id)
+        _verify_course_access(course, current_user)
+
+        resp = (
+            supabase.table("enrollments")
+            .update({"status": "dropped"})
+            .eq("course_id", course_id)
+            .eq("status", "active")
+            .execute()
+        )
+
+        dropped_count = len(resp.data) if resp.data else 0
+        return {"message": f"Dropped {dropped_count} student(s) from course", "dropped": dropped_count}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error dropping all students from course {course_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to drop all students")
+
+
 # ==================== Roster Upload (Preview) ====================
 @router.post("/{course_id}/roster/preview")
 async def preview_roster_upload(
@@ -300,10 +332,12 @@ async def preview_roster_upload(
         # Parse headers (case-insensitive)
         headers = [str(h).strip().lower() if h else "" for h in rows[0]]
         
-        # Map column indices
+        # Map column indices — supports both legacy format and UTM roster format
+        # UTM format: BIL, NO.MATRIK, SEC, NAMA, KUR, PNGK, (empty), T/T
+        # Matric is now REQUIRED as primary key. Email is optional.
         col_map = {}
         for i, h in enumerate(headers):
-            if h in ("student_id", "matric_number", "matric"):
+            if h in ("student_id", "matric_number", "matric", "no.matrik", "no. matrik", "no_matrik"):
                 col_map["student_id"] = i
             elif h in ("email",):
                 col_map["email"] = i
@@ -311,16 +345,20 @@ async def preview_roster_upload(
                 col_map["first_name"] = i
             elif h in ("last_name", "lastname"):
                 col_map["last_name"] = i
-            elif h in ("full_name", "name"):
+            elif h in ("full_name", "name", "nama"):
                 col_map["full_name"] = i
+            elif h in ("sec", "section"):
+                col_map["section"] = i
 
-        if "email" not in col_map:
-            raise HTTPException(status_code=400, detail="Missing required column: email")
+        # Matric number is REQUIRED - it's the primary lookup key
+        if "student_id" not in col_map:
+            raise HTTPException(status_code=400, detail="Missing required column: 'NO.MATRIK' or 'matric_number'")
 
         # Process rows for preview
         students = []
         new_count = 0
         existing_count = 0
+        pending_email_count = 0
         error_count = 0
 
         for row_idx, row in enumerate(rows[1:], start=2):
@@ -329,17 +367,20 @@ async def preview_roster_upload(
                 if not row or all(cell is None or str(cell).strip() == "" for cell in row):
                     continue
 
-                email = str(row[col_map["email"]]).strip().lower() if row[col_map.get("email", 0)] else ""
+                # Get matric number (REQUIRED)
+                matric = str(row[col_map["student_id"]]).strip() if row[col_map["student_id"]] else ""
+                if not matric:
+                    continue  # Skip rows without matric
 
-                # Skip rows with empty email silently
-                if not email:
-                    continue
-
-                # Validate email domain
-                if not (email.endswith("@utm.my") or email.endswith("@graduate.utm.my")):
-                    students.append({"student_id": "", "email": email, "first_name": "", "last_name": "", "status": "error", "error": f"Invalid email domain: {email}"})
-                    error_count += 1
-                    continue
+                # Get email (OPTIONAL)
+                email = ""
+                if "email" in col_map and row[col_map["email"]]:
+                    email = str(row[col_map["email"]]).strip().lower()
+                    # Validate email domain if provided
+                    if email and not (email.endswith("@utm.my") or email.endswith("@graduate.utm.my") or email.endswith("@student.utm.my")):
+                        students.append({"student_id": matric, "email": email, "first_name": "", "last_name": "", "status": "error", "error": f"Invalid email domain: {email}"})
+                        error_count += 1
+                        continue
 
                 # Get name
                 if "full_name" in col_map:
@@ -351,16 +392,30 @@ async def preview_roster_upload(
                     first_name = str(row[col_map.get("first_name", 0)]).strip() if col_map.get("first_name") is not None and row[col_map["first_name"]] else ""
                     last_name = str(row[col_map.get("last_name", 0)]).strip() if col_map.get("last_name") is not None and row[col_map["last_name"]] else ""
 
-                matric = str(row[col_map.get("student_id", 0)]).strip() if col_map.get("student_id") is not None and row[col_map["student_id"]] else ""
+                section = str(row[col_map["section"]]).strip() if col_map.get("section") is not None and row[col_map["section"]] else ""
 
-                # Check if user exists in DB
-                user_resp = supabase.table("users").select("id").eq("email", email).execute()
+                # Check if user exists by matric first (primary key), then email fallback
+                existing_user = None
+                user_resp = supabase.table("users").select("id, email").eq("matric_number", matric).execute()
                 if user_resp.data:
-                    students.append({"student_id": matric, "email": email, "first_name": first_name, "last_name": last_name, "status": "existing"})
+                    existing_user = user_resp.data[0]
+                elif email:
+                    # Fallback: check by email for backwards compatibility
+                    user_resp = supabase.table("users").select("id, email").eq("email", email).execute()
+                    if user_resp.data:
+                        existing_user = user_resp.data[0]
+
+                if existing_user:
+                    students.append({"student_id": matric, "email": email or existing_user.get("email", ""), "first_name": first_name, "last_name": last_name, "section": section, "status": "existing"})
                     existing_count += 1
                 else:
-                    students.append({"student_id": matric, "email": email, "first_name": first_name, "last_name": last_name, "status": "new"})
-                    new_count += 1
+                    # New student - check if email provided
+                    if email:
+                        students.append({"student_id": matric, "email": email, "first_name": first_name, "last_name": last_name, "section": section, "status": "new"})
+                        new_count += 1
+                    else:
+                        students.append({"student_id": matric, "email": "", "first_name": first_name, "last_name": last_name, "section": section, "status": "pending_email"})
+                        pending_email_count += 1
 
             except Exception as row_err:
                 students.append({"student_id": "", "email": "", "first_name": "", "last_name": "", "status": "error", "error": f"Row {row_idx}: {str(row_err)}"})
@@ -370,8 +425,9 @@ async def preview_roster_upload(
             "students": students,
             "new_count": new_count,
             "existing_count": existing_count,
+            "pending_email_count": pending_email_count,
             "error_count": error_count,
-            "summary": f"{new_count} new accounts will be created, {existing_count} existing linked",
+            "summary": f"{new_count} new accounts will be created, {existing_count} existing linked, {pending_email_count} pending email",
             "total_rows": len(students),
         }
 
@@ -421,11 +477,12 @@ async def upload_roster(
         if len(rows) < 2:
             raise HTTPException(status_code=400, detail="File must have header + data rows")
 
-        # Parse headers
+        # Parse headers — supports both legacy and UTM roster format
+        # UTM format: BIL, NO.MATRIK, SEC, NAMA, KUR, PNGK, (empty), T/T
         headers = [str(h).strip().lower() if h else "" for h in rows[0]]
         col_map = {}
         for i, h in enumerate(headers):
-            if h in ("student_id", "matric_number", "matric"):
+            if h in ("student_id", "matric_number", "matric", "no.matrik", "no. matrik", "no_matrik"):
                 col_map["student_id"] = i
             elif h in ("email",):
                 col_map["email"] = i
@@ -433,14 +490,18 @@ async def upload_roster(
                 col_map["first_name"] = i
             elif h in ("last_name", "lastname"):
                 col_map["last_name"] = i
-            elif h in ("full_name", "name"):
+            elif h in ("full_name", "name", "nama"):
                 col_map["full_name"] = i
+            elif h in ("sec", "section"):
+                col_map["section"] = i
 
-        if "email" not in col_map:
-            raise HTTPException(status_code=400, detail="Missing required column: email")
+        # Matric number is REQUIRED as primary lookup key. Email is optional.
+        if "student_id" not in col_map:
+            raise HTTPException(status_code=400, detail="Missing required column: 'NO.MATRIK' or 'matric_number'")
 
         created_count = 0
         linked_count = 0
+        pending_email_count = 0
         errors = []
         student_emails_created = []
 
@@ -450,74 +511,94 @@ async def upload_roster(
                 if not row or all(cell is None or str(cell).strip() == "" for cell in row):
                     continue
 
-                email = str(row[col_map["email"]]).strip().lower() if row[col_map.get("email", 0)] else ""
-
-                # Skip rows with empty email silently
-                if not email:
+                # Get matric number (REQUIRED)
+                matric = str(row[col_map["student_id"]]).strip() if row[col_map["student_id"]] else ""
+                if not matric:
                     continue
 
-                if not (email.endswith("@utm.my") or email.endswith("@graduate.utm.my")):
-                    errors.append(f"Row {row_idx}: Invalid email domain: {email}")
-                    continue
+                # Get email (OPTIONAL)
+                email = ""
+                if "email" in col_map and row[col_map["email"]]:
+                    email = str(row[col_map["email"]]).strip().lower()
+                    # Validate email domain if provided
+                    if email and not (email.endswith("@utm.my") or email.endswith("@graduate.utm.my") or email.endswith("@student.utm.my")):
+                        errors.append(f"Row {row_idx}: Invalid email domain: {email}")
+                        continue
 
                 # Get name
                 if "full_name" in col_map:
-                    full_name = str(row[col_map["full_name"]]).strip() if row[col_map["full_name"]] else email.split("@")[0]
+                    full_name = str(row[col_map["full_name"]]).strip() if row[col_map["full_name"]] else matric
+                    parts = full_name.split(" ", 1)
+                    first_name = parts[0]
+                    last_name = parts[1] if len(parts) > 1 else ""
                 else:
                     first = str(row[col_map.get("first_name", 0)]).strip() if col_map.get("first_name") is not None and row[col_map["first_name"]] else ""
                     last = str(row[col_map.get("last_name", 0)]).strip() if col_map.get("last_name") is not None and row[col_map["last_name"]] else ""
-                    full_name = f"{first} {last}".strip() or email.split("@")[0]
+                    full_name = f"{first} {last}".strip() or matric
+                    first_name = first
+                    last_name = last
 
-                matric = str(row[col_map.get("student_id", 0)]).strip() if col_map.get("student_id") is not None and row[col_map["student_id"]] else None
-
-                # Check if user exists
-                user_resp = supabase.table("users").select("id").eq("email", email).execute()
-
+                # Check if user exists by matric first (primary key), then email fallback
+                existing_user = None
+                user_resp = supabase.table("users").select("id, email, matric_number").eq("matric_number", matric).execute()
                 if user_resp.data:
+                    existing_user = user_resp.data[0]
+                elif email:
+                    # Fallback: check by email for backwards compatibility
+                    user_resp = supabase.table("users").select("id, email, matric_number").eq("email", email).execute()
+                    if user_resp.data:
+                        existing_user = user_resp.data[0]
+                        # If found by email but no matric, update the matric
+                        if not existing_user.get("matric_number"):
+                            supabase.table("users").update({"matric_number": matric}).eq("id", existing_user["id"]).execute()
+
+                if existing_user:
                     # Existing user → just enroll
-                    student_id = user_resp.data[0]["id"]
+                    student_id = existing_user["id"]
                     linked_count += 1
                 else:
                     # New user → provision as an invited, not-yet-active account.
                     # Generate a one-time invitation token that the student will
-                    # exchange for a real password on first login. Account is
-                    # inactive until they accept the invite; no bogus
-                    # `email_verified`, no preset approval bypass.
+                    # exchange for a real password on first login.
                     invite_token = _generate_invitation_token()
                     hashed = hash_password(invite_token)
                     expires_at = (datetime.utcnow() + timedelta(days=14)).isoformat()
 
                     new_user = {
-                        "email": email,
+                        "matric_number": matric,
                         "full_name": full_name,
                         "password_hash": hashed,
                         "role": "student",
                         "is_active": False,  # activates when invite is accepted
                         "email_verified": False,
                         "approval_status": "approved",  # coordinator-provisioned
-                        "invitation_status": "pending",
-                        "invitation_expires_at": expires_at,
+                        "invitation_status": "pending" if email else "pending_email",  # no email = needs manual invite
+                        "invitation_expires_at": expires_at if email else None,
                         "invited_by": current_user.get("user_id"),
                     }
-                    if matric:
-                        new_user["matric_number"] = matric
+                    # Only set email if provided
+                    if email:
+                        new_user["email"] = email
 
                     create_resp = supabase.table("users").insert(new_user).execute()
                     if not create_resp.data:
-                        errors.append(f"Row {row_idx}: Failed to create account for {email}")
+                        errors.append(f"Row {row_idx}: Failed to create account for matric {matric}")
                         continue
 
                     student_id = create_resp.data[0]["id"]
                     created_count += 1
-                    student_emails_created.append(email)
+                    if email:
+                        student_emails_created.append(email)
+                    else:
+                        pending_email_count += 1
 
-                    # Send invitation email. If it fails, surface the error —
-                    # a silently dead invite is worse than a loud failure.
-                    try:
-                        await EmailService.send_student_otp(email, invite_token, full_name)
-                    except Exception as email_err:
-                        logger.error(f"Failed to send invitation email to {email}: {email_err}")
-                        errors.append(f"Row {row_idx}: Account created but invitation email failed for {email} — resend from Roster Management")
+                    # Send invitation email only if email was provided
+                    if email:
+                        try:
+                            await EmailService.send_student_otp(email, invite_token, full_name)
+                        except Exception as email_err:
+                            logger.error(f"Failed to send invitation email to {email}: {email_err}")
+                            errors.append(f"Row {row_idx}: Account created but invitation email failed for {email} — resend from Roster Management")
 
                 # Create enrollment (skip if already active) with correct session
                 existing_enroll = (
@@ -553,13 +634,15 @@ async def upload_roster(
             "success": len(errors) == 0,
             "accounts_created": created_count,
             "enrollments_linked": linked_count,
+            "pending_email_count": pending_email_count,
             "errors": len(errors),
             "error_details": errors,
-            "message": f"Roster processed: {created_count} accounts created, {linked_count} existing linked, {len(errors)} errors",
+            "message": f"Roster processed: {created_count} accounts created, {linked_count} existing linked, {pending_email_count} pending email, {len(errors)} errors",
             "student_emails": student_emails_created,
-            "total_rows": created_count + linked_count + len(errors),
+            "total_rows": created_count + linked_count + pending_email_count + len(errors),
             "created_students": created_count,
             "existing_students": linked_count,
+            "pending_students": pending_email_count,
             "failed_students": len(errors),
         }
 
@@ -582,3 +665,93 @@ async def confirm_roster_import(
     In this implementation, the actual upload endpoint handles everything,
     so this just returns a success acknowledgement."""
     return {"message": "Import confirmed", "status": "complete"}
+
+
+# ==================== Invite Pending Student ====================
+class InvitePendingStudentRequest(BaseModel):
+    email: str
+
+
+@router.post("/{course_id}/students/{student_id}/invite")
+async def invite_pending_student(
+    course_id: str,
+    student_id: str,
+    data: InvitePendingStudentRequest,
+    current_user=Depends(get_current_user),
+):
+    """Add email to a pending student (created without email) and send invitation.
+    
+    This allows coordinators to manually invite students who were imported
+    from rosters that didn't include email addresses.
+    """
+    if not has_effective_role(current_user, "lecturer", "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers, coordinators, and admins can invite students")
+    
+    try:
+        # Validate course access
+        course = _get_course_or_404(course_id)
+        _verify_course_access(course, current_user)
+        
+        # Validate email format
+        email = data.email.strip().lower()
+        if not email or "@" not in email:
+            raise HTTPException(status_code=400, detail="Invalid email format")
+        
+        # Check if email already exists
+        existing = supabase.table("users").select("id").eq("email", email).execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Email already registered to another student")
+        
+        # Get the pending student
+        student_resp = supabase.table("users").select("*").eq("id", student_id).eq("role", "student").execute()
+        if not student_resp.data:
+            raise HTTPException(status_code=404, detail="Student not found")
+        
+        student = student_resp.data[0]
+        
+        # Verify student is in pending state (no email or invitation_status is pending_email)
+        if student.get("email") and student.get("invitation_status") != "pending_email":
+            raise HTTPException(status_code=400, detail="Student already has an email and invitation")
+        
+        # Generate invitation token
+        invite_token = _generate_invitation_token()
+        hashed = hash_password(invite_token)
+        expires_at = (datetime.utcnow() + timedelta(days=14)).isoformat()
+        
+        # Update student with email and invitation
+        update_data = {
+            "email": email,
+            "password_hash": hashed,
+            "invitation_status": "pending",
+            "invitation_expires_at": expires_at,
+            "invited_by": current_user.get("user_id"),
+        }
+        
+        update_resp = supabase.table("users").update(update_data).eq("id", student_id).execute()
+        if not update_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to update student email")
+        
+        # Send invitation email
+        try:
+            await EmailService.send_student_otp(email, invite_token, student.get("full_name", ""))
+        except Exception as email_err:
+            logger.error(f"Failed to send invitation email to {email}: {email_err}")
+            raise HTTPException(status_code=500, detail=f"Email updated but invitation failed to send: {str(email_err)}")
+        
+        AuditService.log(
+            "STUDENT_INVITED", current_user.get("user_id"), student_id,
+            metadata={"course_id": course_id, "email": email, "matric": student.get("matric_number")},
+        )
+        
+        return {
+            "success": True,
+            "message": f"Invitation sent to {email}",
+            "student_id": student_id,
+            "email": email,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error inviting student {student_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to send invitation")

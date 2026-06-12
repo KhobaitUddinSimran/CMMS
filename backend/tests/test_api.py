@@ -27,27 +27,26 @@ class TestLogin:
     
     def test_login_missing_fields(self, client):
         """Should reject login with missing fields"""
-        response = client.post("/api/auth/login", json={"email": "test@graduate.utm.my"})
+        response = client.post("/auth/login", json={"email": "test@graduate.utm.my"})
         assert response.status_code == 422
     
     def test_login_invalid_email(self, client):
         """Should reject invalid email"""
         response = client.post(
-            "/api/auth/login",
-            json={"email": "nonexistent@graduate.utm.my", "password": "wrong"}
+            "/auth/login",
+            json={"email": "nonexistent@graduate.utm.my", "password": "wrong", "role": "student"}
         )
         assert response.status_code == 401
     
     def test_login_success(self, client):
         """Should login with valid credentials"""
         response = client.post(
-            "/api/auth/login",
-            json={"email": "uddinsimran@graduate.utm.my", "password": "password@cmms"}
+            "/auth/login",
+            json={"email": "student@graduate.utm.my", "password": "password@cmsss", "role": "student"}
         )
         assert response.status_code == 200
         data = response.json()
-        assert "access_token" in data
-        assert data["token_type"] == "bearer"
+        assert "token" in data
         assert "user" in data
 
 
@@ -59,8 +58,8 @@ class TestRateLimiting:
         # Make multiple failed attempts
         for i in range(6):
             response = client.post(
-                "/api/auth/login",
-                json={"email": "uddinsimran@graduate.utm.my", "password": "wrong"}
+                "/auth/login",
+                json={"email": "student@graduate.utm.my", "password": "wrong", "role": "student"}
             )
             # On 6th attempt in dev, should hit rate limit
             if i >= 5:
@@ -82,11 +81,11 @@ class TestProtectedRoutes:
         """Should accept request with valid token"""
         # First login
         login = client.post(
-            "/api/auth/login",
-            json={"email": "uddinsimran@graduate.utm.my", "password": "password@cmms"}
+            "/auth/login",
+            json={"email": "student@graduate.utm.my", "password": "password@cmsss", "role": "student"}
         )
         if login.status_code == 200:
-            token = login.json()["access_token"]
+            token = login.json()["token"]
             # Use token for protected route
             response = client.get(
                 "/api/users/me",

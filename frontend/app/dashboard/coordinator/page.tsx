@@ -6,11 +6,10 @@ import { useAuth } from '@/lib/contexts/auth-context'
 import { Card } from '@/components/common/Card'
 import { Spinner } from '@/components/common/Spinner'
 import { listCourses, listLecturers } from '@/lib/api/courses'
-import { listMessages } from '@/lib/api/messages'
 import { listTimelines } from '@/lib/api/semester'
 import {
   BookOpen, Users, Plus, Upload, ClipboardList,
-  BarChart3, ChevronRight, Settings, Mail, CalendarDays, Layers
+  BarChart3, ChevronRight, Settings, CalendarDays, Layers, MessageCircle
 } from 'lucide-react'
 
 interface CourseItem {
@@ -32,7 +31,6 @@ export default function CoordinatorDashboard() {
   const [loading, setLoading] = useState(true)
   const [courses, setCourses] = useState<CourseItem[]>([])
   const [totalCourses, setTotalCourses] = useState(0)
-  const [unreadCount, setUnreadCount] = useState(0)
   const [nextDeadline, setNextDeadline] = useState<{ label: string; date: string } | null>(null)
 
   useEffect(() => {
@@ -42,23 +40,18 @@ export default function CoordinatorDashboard() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [data, staffList, msgs, timelines] = await Promise.allSettled([
+      const [data, staffList, timelines] = await Promise.allSettled([
         listCourses({ limit: 500 }),
         listLecturers(),
-        listMessages(),
         listTimelines(),
       ])
 
-      if (msgs.status === 'fulfilled') {
-        setUnreadCount((msgs.value as any).unread_count || 0)
-      }
       if (timelines.status === 'fulfilled') {
         const today = new Date()
         const upcoming = ((timelines.value as any[]) || [])
           .flatMap((tl: any) => [
             { label: `Midterm (${tl.academic_year} Sem ${tl.semester})`, date: tl.midterm_deadline },
             { label: `Grade Submission (${tl.academic_year} Sem ${tl.semester})`, date: tl.grade_submission_deadline },
-            { label: `Final Deadline (${tl.academic_year} Sem ${tl.semester})`, date: tl.final_deadline },
           ])
           .filter(d => d.date && new Date(d.date) >= today)
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -147,19 +140,15 @@ export default function CoordinatorDashboard() {
 
       {/* Stats — bottom row: 2 contextual info cards, wider */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <button className="text-left" onClick={() => router.push('/messages')}>
+        <button className="text-left" onClick={() => router.push('/queries')}>
           <Card className="hover:shadow-md transition-shadow">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-[#FEE2E2] flex items-center justify-center flex-shrink-0">
-                <Mail className="w-5 h-5 text-[#C90031]" />
+                <MessageCircle className="w-5 h-5 text-[#C90031]" />
               </div>
               <div>
-                <p className="text-sm text-[#6B7280]">Unread Messages</p>
-                {loading ? <Spinner size="sm" /> : (
-                  <p className={`text-xl font-bold mt-0.5 ${unreadCount > 0 ? 'text-[#C90031]' : 'text-[#111827]'}`}>
-                    {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
-                  </p>
-                )}
+                <p className="text-sm text-[#6B7280]">Student Queries</p>
+                <p className="text-[13px] text-[#9CA3AF] mt-0.5">View &amp; respond to queries</p>
               </div>
             </div>
           </Card>

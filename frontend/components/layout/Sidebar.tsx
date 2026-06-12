@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
 import {
   Home, BookOpen, BarChart3, User, Table, Settings,
-  Users, Building2, Download, FileText, Lock, Database, LogOut, Flag, CalendarDays, Layers,
+  Users, Download, FileText, Lock, Database, LogOut, Flag, CalendarDays, Layers,
   Upload, HelpCircle, UserCheck, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import type { UserRole } from '@/types'
@@ -48,7 +48,6 @@ const navByRole: Record<UserRole, NavItem[]> = {
   ],
   hod: [
     { icon: <Home className="w-5 h-5" />, label: 'Dashboard', path: '/dashboard' },
-    { icon: <Building2 className="w-5 h-5" />, label: 'Departments', path: '/departments' },
     { icon: <BarChart3 className="w-5 h-5" />, label: 'Analytics', path: '/analytics' },
     { icon: <Download className="w-5 h-5" />, label: 'Export', path: '/export' },
     { icon: <Layers className="w-5 h-5" />, label: 'Course Management', path: '/course-management' },

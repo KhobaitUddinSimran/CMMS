@@ -121,3 +121,16 @@ export interface PendingSignupsResponse {
     submitted_at: string
   }>
 }
+
+/**
+ * Complete student profile for accounts imported without email
+ */
+export async function completeProfile(data: {
+  matric_number: string
+  invitation_token: string
+  email: string
+  password: string
+}): Promise<{ success: boolean; message: string; token: string; user: unknown }> {
+  const { data: response } = await authApiClient.post('/auth/complete-profile', data)
+  return response
+}

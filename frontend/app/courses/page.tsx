@@ -52,16 +52,6 @@ export default function CoursesPage() {
   const canCreateCourses = userRole === 'admin' || userRole === 'coordinator'
   const canManageCourses = userRole === 'admin' || userRole === 'coordinator' || userRole === 'lecturer'
 
-  if (loading) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <Spinner />
-        </div>
-      </MainLayout>
-    )
-  }
-
   const filtered = courses.filter(c =>
     !search ||
     c.code?.toLowerCase().includes(search.toLowerCase()) ||
@@ -113,7 +103,11 @@ export default function CoursesPage() {
         </div>
 
         {/* Courses Grid */}
-        {courses.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Spinner />
+          </div>
+        ) : courses.length === 0 ? (
           <Card>
             <div className="text-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-[#FEE2E2] flex items-center justify-center mx-auto mb-4">

@@ -185,24 +185,87 @@ async def set_semester_courses(
     current_user: User = Depends(get_current_user),
 ):
     """Replace the course selection for this semester timeline (bulk replace).
+    When a course's academic_year differs from the timeline's, find or create
+    a year-scoped clone so assignments don't leak across years.
     Body: { "course_ids": ["<uuid>", ...] }
     Requires coordinator, hod, or admin."""
     _require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-    course_ids: list = data.get("course_ids", [])
+    incoming_ids: list = data.get("course_ids", [])
 
     try:
-        # Delete existing selection
-        supabase.table("semester_course_selections").delete().eq("timeline_id", timeline_id).execute()
+        # Fetch timeline details
+        tl_resp = supabase.table("semester_timelines").select("academic_year, semester").eq("id", timeline_id).execute()
+        if not tl_resp.data:
+            raise HTTPException(status_code=404, detail="Timeline not found")
+        timeline_ay = tl_resp.data[0]["academic_year"]
+        timeline_sem = tl_resp.data[0]["semester"]
 
-        # Insert new selection
-        if course_ids:
-            rows = [{"timeline_id": timeline_id, "course_id": cid} for cid in course_ids]
+        resolved_ids = []
+        for cid in incoming_ids:
+            c_resp = supabase.table("courses").select("*").eq("id", cid).execute()
+            if not c_resp.data:
+                continue  # skip missing course
+            course = c_resp.data[0]
+
+            # If already correct year, use as-is
+            if course.get("academic_year") == timeline_ay:
+                resolved_ids.append(cid)
+                continue
+
+            # Find existing clone for this year (same code + year)
+            clone_resp = (
+                supabase.table("courses")
+                .select("id")
+                .eq("code", course["code"])
+                .eq("academic_year", timeline_ay)
+                .is_("archived_at", "null")
+                .execute()
+            )
+            if clone_resp.data:
+                resolved_ids.append(clone_resp.data[0]["id"])
+                continue
+
+            # Create new year-scoped clone (no lecturer, correct year/sem)
+            clone_payload = {
+                "code": course["code"],
+                "name": course.get("name"),
+                "credits": course.get("credits"),
+                "semester": timeline_sem,
+                "academic_year": timeline_ay,
+                "lecturer_id": None,
+                "coordinator_id": course.get("coordinator_id"),
+                "department_id": course.get("department_id"),
+                "max_students": course.get("max_students"),
+                "category": course.get("category"),
+                "has_final_exam": course.get("has_final_exam"),
+                "lecture_hours": course.get("lecture_hours"),
+                "tutorial_hours": course.get("tutorial_hours"),
+                "lab_hours": course.get("lab_hours"),
+                "lab_name": course.get("lab_name"),
+                "special_notes": course.get("special_notes"),
+            }
+            # Remove None values to avoid schema issues
+            clone_payload = {k: v for k, v in clone_payload.items() if v is not None}
+
+            new_resp = supabase.table("courses").insert(clone_payload).execute()
+            if new_resp.data:
+                resolved_ids.append(new_resp.data[0]["id"])
+                logger.info(f"Cloned course {course['code']} to {timeline_ay} (new id: {new_resp.data[0]['id']})")
+            else:
+                logger.error(f"Failed to clone course {course['code']} for {timeline_ay}")
+
+        # Delete existing selection and insert resolved ids
+        supabase.table("semester_course_selections").delete().eq("timeline_id", timeline_id).execute()
+        if resolved_ids:
+            rows = [{"timeline_id": timeline_id, "course_id": rid} for rid in resolved_ids]
             supabase.table("semester_course_selections").insert(rows).execute()
 
-        return {"timeline_id": timeline_id, "course_ids": course_ids, "count": len(course_ids)}
+        return {"timeline_id": timeline_id, "course_ids": resolved_ids, "count": len(resolved_ids)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error setting semester courses: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update course selection")
