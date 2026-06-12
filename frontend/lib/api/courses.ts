@@ -158,11 +158,16 @@ export interface LecturerWorkload {
  */
 export async function getLecturerWorkloads(
   semester?: string | number,
-  academic_year?: string
+  academic_year?: string,
+  timeline_id?: string
 ): Promise<LecturerWorkload[]> {
   const params: Record<string, string> = {}
-  if (semester !== undefined && semester !== '') params.semester = String(semester)
-  if (academic_year) params.academic_year = academic_year
+  if (timeline_id) {
+    params.timeline_id = timeline_id
+  } else {
+    if (semester !== undefined && semester !== '') params.semester = String(semester)
+    if (academic_year) params.academic_year = academic_year
+  }
   const response = await apiClient.get('/courses/lecturer-workloads', { params })
   return response.data || []
 }

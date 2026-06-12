@@ -141,25 +141,39 @@ async def list_courses(
 async def get_lecturer_workloads(
     semester: Optional[str] = Query(None),
     academic_year: Optional[str] = Query(None),
+    timeline_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
 ):
     """Return current credit load per lecturer for a given semester/academic_year.
+    When timeline_id is provided, workloads are computed for the courses selected
+    in that semester timeline (via semester_course_selections) rather than by
+    semester/academic_year — because selected courses may have a different
+    semester value in the courses table than the timeline itself.
     Cap is per-lecturer (`users.max_teaching_credits`; advisory only if NULL)."""
     _require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     try:
-        query = supabase.table("courses").select("id, lecturer_id, credits, semester, academic_year").is_("archived_at", "null")
-        if semester is not None and semester != "":
-            try:
-                query = query.eq("semester", int(semester))
-            except (ValueError, TypeError):
-                query = query.eq("semester", semester)
-        if academic_year:
-            query = query.eq("academic_year", academic_year)
+        base_query = supabase.table("courses").select("id, lecturer_id, credits").is_("archived_at", "null")
 
-        courses_data = (query.execute()).data or []
+        if timeline_id:
+            sel_resp = supabase.table("semester_course_selections").select("course_id").eq("timeline_id", timeline_id).execute()
+            course_ids = [s["course_id"] for s in (sel_resp.data or [])]
+            if course_ids:
+                base_query = base_query.in_("id", course_ids)
+            else:
+                courses_data = []
+                base_query = None
+        elif semester is not None and semester != "":
+            try:
+                base_query = base_query.eq("semester", int(semester))
+            except (ValueError, TypeError):
+                base_query = base_query.eq("semester", semester)
+            if academic_year:
+                base_query = base_query.eq("academic_year", academic_year)
+
+        courses_data = (base_query.execute()).data or [] if base_query is not None else []
 
         workload: dict = {}
         for c in courses_data:

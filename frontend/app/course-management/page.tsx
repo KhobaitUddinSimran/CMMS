@@ -139,7 +139,7 @@ export default function CourseManagementPage() {
     try {
       const [courseRes, workloadRes, staffRes] = await Promise.allSettled([
         listCourses({ limit: 500 }),
-        getLecturerWorkloads(activeSemester?.semester, activeSemester?.academic_year),
+        getLecturerWorkloads(undefined, undefined, activeSemester?.id),
         listLecturers(),
       ])
 
@@ -501,7 +501,7 @@ export default function CourseManagementPage() {
             setDownloadingLoad(true)
             try {
               const [workloads, enrollCounts] = await Promise.all([
-                getLecturerWorkloads(activeSemester?.semester, activeSemester?.academic_year),
+                getLecturerWorkloads(undefined, undefined, activeSemester?.id),
                 getCourseEnrollmentCounts(),
               ])
               const nameMap: Record<string, string> = {}
