@@ -77,7 +77,7 @@ services:
     rootDir: frontend
     nodeVersion: "20"
     buildCommand: npm install --include=dev && npm run build
-    startCommand: npm start
+    startCommand: node node_modules/.bin/next start -p $PORT
     envVars:
       # Automatically wired to the backend service URL
       - key: NEXT_PUBLIC_API_URL
