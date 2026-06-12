@@ -44,23 +44,38 @@ settings = Settings()
 
 # Initialize Supabase client.
 # Prefer service_role key (bypasses RLS) for backend operations; fall back to anon key.
+import threading as _threading
+import logging as _logging
+
 _effective_key = settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY
-if settings.SUPABASE_URL and _effective_key:
+
+def _init_supabase():
+    """Run create_client() in a background thread so a hanging WebSocket/
+    Realtime connection cannot block uvicorn from binding the port."""
+    global supabase
     try:
-        supabase = create_client(settings.SUPABASE_URL, _effective_key)
+        _client = create_client(settings.SUPABASE_URL, _effective_key)
+        supabase = _client
         if not settings.SUPABASE_SERVICE_KEY:
-            import logging as _logging
             _logging.getLogger(__name__).warning(
                 "SUPABASE_SERVICE_KEY not set — using anon key. "
-                "Writes may fail due to RLS. Set SUPABASE_SERVICE_KEY in backend/.env from "
-                "Supabase Dashboard → Project Settings → API → service_role key."
+                "Writes may fail due to RLS."
             )
+        else:
+            _logging.getLogger(__name__).info("Supabase client initialised (service role).")
     except Exception as _e:
-        import logging as _logging
         _logging.getLogger(__name__).error(
             f"Failed to initialise Supabase client: {_e}. "
             "Check SUPABASE_URL and SUPABASE_KEY environment variables."
         )
-        supabase = None
-else:
-    supabase = None
+
+supabase = None
+if settings.SUPABASE_URL and _effective_key:
+    _t = _threading.Thread(target=_init_supabase, daemon=True)
+    _t.start()
+    _t.join(timeout=20)  # 20 s max — prevents Realtime WebSocket hang blocking port bind
+    if _t.is_alive():
+        _logging.getLogger(__name__).error(
+            "Supabase client init timed out after 20 s — starting without DB. "
+            "Endpoints will return 503 until the client is ready."
+        )
