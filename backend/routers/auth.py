@@ -9,7 +9,7 @@ from core.security import hash_password, verify_password, create_access_token
 from core.config import supabase
 from models.user import User
 from dependencies.auth import get_current_user
-from services.email_service import EmailService
+from services.email_service import EmailService, _get_frontend_url
 from datetime import datetime, timedelta
 import uuid
 import os
@@ -405,9 +405,7 @@ async def password_reset(request: PasswordResetRequest):
                 logger.warning(f"Failed to persist reset token to DB, using in-memory fallback: {db_err}")
         if not stored_in_db:
             RESET_TOKENS[token] = {"email": email, "expires_at": datetime.now() + timedelta(minutes=30)}
-        cors_origins = os.getenv("CORS_ORIGINS", "")
-        frontend_url = cors_origins.split(",")[0].strip() if cors_origins else os.getenv("FRONTEND_URL", "http://localhost:3000")
-        reset_link = f"{frontend_url}/auth/password-reset?token={token}"
+        reset_link = f"{_get_frontend_url()}/auth/password-reset?token={token}"
         try:
             await EmailService.send_password_reset(email, reset_link)
         except Exception as email_err:
@@ -627,3 +625,108 @@ async def resend_verification(request: Request, req_data: ResendVerificationRequ
     except Exception as e:
         logger.error(f"Resend verification error: {e}")
         raise HTTPException(status_code=500, detail="Failed to resend verification email")
+
+
+# ==================== Student Self-Service: Complete Profile ====================
+class CompleteProfileRequest(BaseModel):
+    matric_number: str
+    invitation_token: str
+    email: str
+    password: str
+
+
+class CompleteProfileResponse(BaseModel):
+    success: bool
+    message: str
+    token: str | None = None
+    user: dict | None = None
+
+
+@router.post("/complete-profile", response_model=CompleteProfileResponse)
+async def complete_student_profile(request: Request, data: CompleteProfileRequest):
+    """Allow students imported without email to complete their profile.
+    
+    This endpoint is for students who were added via roster import but had no
+    email address. They use their matric number + invitation token to set
+    their email and password, then receive a login token.
+    """
+    try:
+        # Validate email format
+        email = data.email.strip().lower()
+        if not email or "@" not in email:
+            raise HTTPException(status_code=400, detail="Invalid email format")
+        
+        # Validate password strength
+        if len(data.password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        
+        # Find student by matric number
+        student_resp = supabase.table("users").select("*").eq("matric_number", data.matric_number.strip()).eq("role", "student").execute()
+        if not student_resp.data:
+            raise HTTPException(status_code=404, detail="Student not found. Please contact your coordinator.")
+        
+        student = student_resp.data[0]
+        
+        # Verify student is in pending_email state
+        if student.get("invitation_status") != "pending_email":
+            raise HTTPException(
+                status_code=400, 
+                detail="This account is already active or does not require profile completion. Please login normally."
+            )
+        
+        # Verify invitation token
+        stored_hash = student.get("password_hash")
+        if not stored_hash or not verify_password(data.invitation_token, stored_hash):
+            raise HTTPException(status_code=401, detail="Invalid invitation token")
+        
+        # Check if email already exists for another user
+        existing = supabase.table("users").select("id").eq("email", email).neq("id", student["id"]).execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Email already registered to another account")
+        
+        # Hash the new password
+        password_hash = hash_password(data.password)
+        
+        # Update student profile
+        update_data = {
+            "email": email,
+            "password_hash": password_hash,
+            "is_active": True,
+            "email_verified": True,
+            "invitation_status": "completed",
+            "invitation_expires_at": None,
+        }
+        
+        update_resp = supabase.table("users").update(update_data).eq("id", student["id"]).execute()
+        if not update_resp.data:
+            raise HTTPException(status_code=500, detail="Failed to update profile")
+        
+        # Generate login token
+        token = create_access_token(
+            user_id=student["id"], 
+            role="student", 
+            special_roles=[]
+        )
+        
+        logger.info(f"Student {data.matric_number} completed profile with email {email}")
+        
+        return CompleteProfileResponse(
+            success=True,
+            message="Profile completed successfully. Welcome to CMMS!",
+            token=token,
+            user={
+                "id": student["id"],
+                "email": email,
+                "full_name": student.get("full_name"),
+                "role": "student",
+                "is_active": True,
+                "email_verified": True,
+                "approval_status": student.get("approval_status", "approved"),
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Complete profile error for matric {data.matric_number}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to complete profile")

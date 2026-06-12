@@ -53,14 +53,22 @@ _FOOTER = """
 
 def _get_frontend_url() -> str:
     """Get the frontend URL from environment or config."""
-    # Try to extract first URL if CORS_ORIGINS is a comma-separated list
+    # Explicit FRONTEND_URL always wins (set this on Render/production)
+    explicit = os.getenv('FRONTEND_URL', '').strip()
+    if explicit:
+        return explicit
+    # Fall back to first non-localhost origin in CORS_ORIGINS
     cors_origins = os.getenv('CORS_ORIGINS', '')
     if cors_origins:
-        # Take the first URL if multiple are provided
+        for origin in cors_origins.split(','):
+            url = origin.strip()
+            if url and 'localhost' not in url and '127.0.0.1' not in url:
+                return url
+        # If only localhost origins are configured, take the first one anyway
         first_url = cors_origins.split(',')[0].strip()
         if first_url:
             return first_url
-    return os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    return 'http://localhost:3000'
 
 def _send_via_api(to: str, subject: str, html: str) -> bool:
     """Blocking Brevo HTTP API call — runs in asyncio.to_thread."""
@@ -196,7 +204,7 @@ class EmailService:
     @staticmethod
     async def send_verification_email(email: str, full_name: str, token: str):
         """Send email verification magic link (for students - OTP flow)"""
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        frontend_url = _get_frontend_url()
         verification_link = f"{frontend_url}/auth/verify-email?token={token}"
 
         subject = "Verify Your CMMS Student Account"
