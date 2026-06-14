@@ -32,24 +32,45 @@ async def list_timelines(current_user: User = Depends(get_current_user)):
 
 @router.post("", status_code=201)
 async def upsert_timeline(data: dict, current_user: User = Depends(get_current_user)):
-    """Create or update a semester timeline (upserts on academic_year + semester)."""
+    """Create or update a semester timeline (upserts on academic_year + semester).
+    Semesters 1–3 are supported. The timeline is linked to an academic_year record
+    if academic_year_id is provided or can be resolved from the academic_year name."""
     _require_supabase()
-    if not has_effective_role(current_user, "coordinator", "admin", "lecturer"):
-        raise HTTPException(status_code=403, detail="Insufficient permissions to manage timelines")
+    if not has_effective_role(current_user, "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Only coordinators, HODs, and admins can manage timelines")
 
     required = ("academic_year", "semester", "start_date", "end_date")
     for field in required:
         if not data.get(field):
             raise HTTPException(status_code=400, detail=f"{field} is required")
 
+    sem_num = int(data["semester"])
+    if sem_num not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="Semester must be 1, 2, or 3")
+
     payload = {
         "academic_year": data["academic_year"],
-        "semester": int(data["semester"]),
+        "semester": sem_num,
         "start_date": data["start_date"],
         "end_date": data["end_date"],
         "grade_submission_deadline": data.get("grade_submission_deadline") or None,
         "notes": data.get("notes") or None,
     }
+
+    # Resolve academic_year_id: prefer explicit id, else look up by name
+    ay_id = data.get("academic_year_id")
+    if not ay_id:
+        ay_resp = (
+            supabase.table("academic_years")
+            .select("id")
+            .eq("name", data["academic_year"])
+            .limit(1)
+            .execute()
+        )
+        if ay_resp.data:
+            ay_id = ay_resp.data[0]["id"]
+    if ay_id:
+        payload["academic_year_id"] = ay_id
 
     try:
         existing = (
@@ -158,11 +179,34 @@ async def send_reminders(timeline_id: str, current_user: User = Depends(get_curr
 
 @router.delete("/{timeline_id}", status_code=204)
 async def delete_timeline(timeline_id: str, current_user: User = Depends(get_current_user)):
-    """Delete a semester timeline."""
+    """Delete a semester timeline.
+    Also unassigns all lecturers from courses belonging to that semester/academic_year
+    and removes the semester course selections. Coordinator/HOD/admin only."""
     _require_supabase()
-    if not has_effective_role(current_user, "coordinator", "admin", "lecturer"):
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    if not has_effective_role(current_user, "coordinator", "hod", "admin"):
+        raise HTTPException(status_code=403, detail="Only coordinators, HODs, and admins can delete timelines")
+
+    # Fetch timeline to get academic_year + semester
+    tl_resp = supabase.table("semester_timelines").select("academic_year, semester").eq("id", timeline_id).limit(1).execute()
+    if not tl_resp.data:
+        raise HTTPException(status_code=404, detail="Timeline not found")
+
+    academic_year = tl_resp.data[0]["academic_year"]
+    semester = tl_resp.data[0]["semester"]
+
+    # Unassign lecturers from all courses in this semester/academic_year
+    supabase.table("courses").update({"lecturer_id": None}).eq("academic_year", academic_year).eq("semester", int(semester)).execute()
+
+    # Remove semester course selections for this timeline
+    supabase.table("semester_course_selections").delete().eq("timeline_id", timeline_id).execute()
+
+    # Delete the timeline itself
     supabase.table("semester_timelines").delete().eq("id", timeline_id).execute()
+
+    logger.info(
+        f"Timeline {timeline_id} ({academic_year} Sem {semester}) deleted by {current_user.get('user_id')}; "
+        f"lecturer assignments cleared"
+    )
 
 
 @router.get("/{timeline_id}/courses")

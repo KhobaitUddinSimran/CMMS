@@ -1,8 +1,46 @@
 import { apiClient } from './client'
 
+// ==================== Academic Year ====================
+
+export interface AcademicYear {
+  id: string
+  name: string
+  is_active: boolean
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function listAcademicYears(): Promise<AcademicYear[]> {
+  const { data } = await apiClient.get('/academic-years')
+  return data || []
+}
+
+export async function getActiveAcademicYear(): Promise<AcademicYear | null> {
+  const { data } = await apiClient.get('/academic-years/active')
+  return data || null
+}
+
+export async function createAcademicYear(name: string): Promise<AcademicYear> {
+  const { data } = await apiClient.post('/academic-years', { name })
+  return data
+}
+
+export async function activateAcademicYear(id: string): Promise<AcademicYear> {
+  const { data } = await apiClient.put(`/academic-years/${id}/activate`)
+  return data
+}
+
+export async function deleteAcademicYear(id: string): Promise<void> {
+  await apiClient.delete(`/academic-years/${id}`)
+}
+
+// ==================== Semester Timelines ====================
+
 export interface SemesterTimeline {
   id: string
   academic_year: string
+  academic_year_id?: string | null
   semester: number
   start_date: string
   end_date: string
@@ -15,6 +53,7 @@ export interface SemesterTimeline {
 
 export interface SemesterTimelineInput {
   academic_year: string
+  academic_year_id?: string
   semester: number | string
   start_date: string
   end_date: string

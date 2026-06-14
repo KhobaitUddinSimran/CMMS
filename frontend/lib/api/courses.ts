@@ -147,26 +147,28 @@ export interface LecturerWorkload {
   full_name: string
   email: string
   used_credits: number
-  max_credits: number | null
-  remaining_credits: number | null
+  max_credits: number
+  remaining_credits: number
+  is_overloaded: boolean
   is_full: boolean
 }
 
 /**
- * Get credit load per lecturer for a given semester/academic_year.
- * Cap is per-lecturer (users.max_teaching_credits); null means no limit.
+ * Get annual credit load per lecturer for a given academic year.
+ * Credits are summed across ALL semesters in the year — cap is 12 cr/year by default.
  */
 export async function getLecturerWorkloads(
-  semester?: string | number,
+  academic_year_id?: string,
   academic_year?: string,
   timeline_id?: string
 ): Promise<LecturerWorkload[]> {
   const params: Record<string, string> = {}
-  if (timeline_id) {
+  if (academic_year_id) {
+    params.academic_year_id = academic_year_id
+  } else if (academic_year) {
+    params.academic_year = academic_year
+  } else if (timeline_id) {
     params.timeline_id = timeline_id
-  } else {
-    if (semester !== undefined && semester !== '') params.semester = String(semester)
-    if (academic_year) params.academic_year = academic_year
   }
   const response = await apiClient.get('/courses/lecturer-workloads', { params })
   return response.data || []

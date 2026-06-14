@@ -13,8 +13,11 @@ import { downloadTeachingLoad } from '@/lib/utils/teachingLoadExcel'
 import {
   listTimelines, upsertTimeline, deleteTimeline,
   getSemesterCourses, setSemesterCourses, sendDeadlineReminders,
-  type SemesterTimeline, type SemesterTimelineInput,
+  listAcademicYears, getActiveAcademicYear, createAcademicYear,
+  activateAcademicYear, deleteAcademicYear,
+  type SemesterTimeline, type SemesterTimelineInput, type AcademicYear,
 } from '@/lib/api/semester'
+import { useAuthStore } from '@/stores/authStore'
 import { SemesterCalendar } from '@/components/semester/SemesterCalendar'
 import {
   BookOpen, Users, ChevronLeft, RefreshCw,
@@ -23,12 +26,13 @@ import {
   Save, Plus, Trash2, CheckSquare, Square, Bell,
 } from 'lucide-react'
 import { CurriculumLibrary } from '@/components/course-management/CurriculumLibrary'
+import { SearchableLecturerSelect } from '@/components/course-management/SearchableLecturerSelect'
 import { type CurriculumCourse } from '@/lib/data/mjiit-curriculum'
 
-const DEFAULT_MAX_CREDITS = 9
+const DEFAULT_MAX_CREDITS = 12
 
 const EMPTY_TIMELINE_FORM: SemesterTimelineInput = {
-  academic_year: '', semester: 1, start_date: '', end_date: '',
+  academic_year: '', academic_year_id: '', semester: 1, start_date: '', end_date: '',
   grade_submission_deadline: '', notes: '',
 }
 
@@ -89,12 +93,26 @@ interface LecturerOption {
   used_credits: number
   max_credits: number
   remaining_credits: number
+  is_overloaded: boolean
   is_full: boolean
 }
 
 export default function CourseManagementPage() {
   const router = useRouter()
   const { addToast } = useToastStore()
+  const { user } = useAuthStore()
+  const isHodOrAdmin = user?.role === 'admin' || user?.special_roles?.includes('hod')
+
+  // ── academic year state ───────────────────────────────────────────────────
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
+  const [activeAcademicYear, setActiveAcademicYear] = useState<AcademicYear | null>(null)
+  const [loadingYears, setLoadingYears] = useState(true)
+  const [newYearName, setNewYearName] = useState('')
+  const [creatingYear, setCreatingYear] = useState(false)
+  const [activatingYear, setActivatingYear] = useState<string | null>(null)
+  const [deletingYear, setDeletingYear] = useState<string | null>(null)
+  const [showYearPanel, setShowYearPanel] = useState(false)
+  const [lecturerSearchWorkloads, setLecturerSearchWorkloads] = useState('')
 
   // ── existing state ────────────────────────────────────────────────────────
   const [courses, setCourses] = useState<CourseRow[]>([])
@@ -139,7 +157,7 @@ export default function CourseManagementPage() {
     try {
       const [courseRes, workloadRes, staffRes] = await Promise.allSettled([
         listCourses({ limit: 500 }),
-        getLecturerWorkloads(undefined, undefined, activeSemester?.id),
+        getLecturerWorkloads(activeAcademicYear?.id, activeAcademicYear?.name),
         listLecturers(),
       ])
 
@@ -152,22 +170,24 @@ export default function CourseManagementPage() {
             email: s.email,
             full_name: s.full_name || s.email,
             used_credits: 0,
-            max_credits: DEFAULT_MAX_CREDITS,
-            remaining_credits: DEFAULT_MAX_CREDITS,
+            max_credits: s.max_teaching_credits ?? DEFAULT_MAX_CREDITS,
+            remaining_credits: s.max_teaching_credits ?? DEFAULT_MAX_CREDITS,
+            is_overloaded: false,
             is_full: false,
           }
         }
       }
 
       if (workloadRes.status === 'fulfilled') {
-        for (const w of workloadRes.value as any[]) {
+        for (const w of workloadRes.value) {
           workloadMap[w.lecturer_id] = {
             id: w.lecturer_id,
             email: workloadMap[w.lecturer_id]?.email ?? '',
             full_name: w.full_name,
             used_credits: w.used_credits,
             max_credits: w.max_credits ?? DEFAULT_MAX_CREDITS,
-            remaining_credits: w.remaining_credits,
+            remaining_credits: w.remaining_credits ?? Math.max(0, (w.max_credits ?? DEFAULT_MAX_CREDITS) - w.used_credits),
+            is_overloaded: w.is_overloaded ?? false,
             is_full: w.is_full,
           }
         }
@@ -189,9 +209,69 @@ export default function CourseManagementPage() {
     } finally {
       setLoading(false)
     }
-  }, [addToast, activeSemester])
+  }, [addToast, activeAcademicYear])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // ── academic year functions ───────────────────────────────────────────────
+  const loadAcademicYears = useCallback(async () => {
+    setLoadingYears(true)
+    try {
+      const [years, active] = await Promise.all([listAcademicYears(), getActiveAcademicYear()])
+      setAcademicYears(years)
+      setActiveAcademicYear(active)
+    } catch {
+      addToast('Failed to load academic years', 'error')
+    } finally {
+      setLoadingYears(false)
+    }
+  }, [addToast])
+
+  useEffect(() => { loadAcademicYears() }, [loadAcademicYears])
+
+  const handleCreateYear = async () => {
+    const name = newYearName.trim()
+    if (!name) { addToast('Enter an academic year name (e.g. 2025/2026)', 'error'); return }
+    setCreatingYear(true)
+    try {
+      await createAcademicYear(name)
+      setNewYearName('')
+      addToast(`Academic year '${name}' created`, 'success')
+      await loadAcademicYears()
+    } catch (e: any) {
+      addToast(e?.response?.data?.detail || 'Failed to create academic year', 'error')
+    } finally {
+      setCreatingYear(false)
+    }
+  }
+
+  const handleActivateYear = async (id: string) => {
+    setActivatingYear(id)
+    try {
+      await activateAcademicYear(id)
+      addToast('Academic year activated', 'success')
+      await loadAcademicYears()
+      await loadData()
+    } catch (e: any) {
+      addToast(e?.response?.data?.detail || 'Failed to activate academic year', 'error')
+    } finally {
+      setActivatingYear(null)
+    }
+  }
+
+  const handleDeleteYear = async (id: string, name: string) => {
+    if (!window.confirm(`Delete academic year '${name}'? This cannot be undone.`)) return
+    setDeletingYear(id)
+    try {
+      await deleteAcademicYear(id)
+      addToast(`Academic year '${name}' deleted`, 'success')
+      await loadAcademicYears()
+    } catch (e: any) {
+      addToast(e?.response?.data?.detail || 'Failed to delete academic year', 'error')
+    } finally {
+      setDeletingYear(null)
+    }
+  }
 
   // ── timeline functions ────────────────────────────────────────────────────
   const loadTimelines = useCallback(async () => {
@@ -239,13 +319,25 @@ export default function CourseManagementPage() {
   }, [activeSemesterId, addToast])
 
   const handleSaveTimeline = async () => {
-    if (!timelineForm.academic_year || !timelineForm.semester || !timelineForm.start_date || !timelineForm.end_date) {
+    const effectiveYear = (!activeSemester && activeAcademicYear) ? activeAcademicYear.name : timelineForm.academic_year
+    const effectiveYearId = (!activeSemester && activeAcademicYear) ? activeAcademicYear.id : timelineForm.academic_year_id
+    if (!effectiveYear || !timelineForm.semester || !timelineForm.start_date || !timelineForm.end_date) {
       addToast('Academic year, semester, start and end dates are required', 'error')
       return
     }
+    // Block duplicate: only when creating new (activeSemester is null)
+    if (!activeSemester) {
+      const duplicate = timelines.find(
+        tl => tl.academic_year === effectiveYear && tl.semester === Number(timelineForm.semester)
+      )
+      if (duplicate) {
+        addToast(`Semester ${timelineForm.semester} for ${effectiveYear} already exists. Select it from the list to edit.`, 'error')
+        return
+      }
+    }
     setSavingTimeline(true)
     try {
-      const saved = await upsertTimeline(timelineForm)
+      const saved = await upsertTimeline({ ...timelineForm, academic_year: effectiveYear, academic_year_id: effectiveYearId })
       addToast('Timeline saved', 'success')
       await loadTimelines()
       // Update activeSemester to the newly saved record
@@ -258,12 +350,14 @@ export default function CourseManagementPage() {
   }
 
   const handleDeleteTimeline = async (id: string) => {
-    if (!window.confirm('Delete this semester timeline? This cannot be undone.')) return
+    if (!window.confirm('Delete this semester timeline? All lecturer assignments for courses in this semester will also be cleared. This cannot be undone.')) return
     try {
       await deleteTimeline(id)
-      addToast('Timeline deleted', 'success')
+      addToast('Timeline deleted — lecturer assignments for that semester have been cleared', 'success')
       if (activeSemester?.id === id) setActiveSemester(null)
       setTimelines(t => t.filter(x => x.id !== id))
+      // Reload courses and workloads to reflect cleared assignments
+      await loadData()
     } catch {
       addToast('Failed to delete timeline', 'error')
     }
@@ -362,12 +456,13 @@ export default function CourseManagementPage() {
     setSavingCredits(true)
     try {
       await updateTeachingCredits(lecturerId, parsed)
-      setLecturers(prev => prev.map(l =>
-        l.id === lecturerId
-          ? { ...l, max_credits: parsed ?? DEFAULT_MAX_CREDITS, remaining_credits: Math.max(0, (parsed ?? DEFAULT_MAX_CREDITS) - l.used_credits), is_full: parsed !== null && l.used_credits >= parsed }
-          : l
-      ))
-      addToast(parsed === null ? 'Credit limit removed (no limit)' : `Credit limit set to ${parsed} cr`, 'success')
+      setLecturers(prev => prev.map(l => {
+        if (l.id !== lecturerId) return l
+        const cap = parsed ?? DEFAULT_MAX_CREDITS
+        const newUsed = l.used_credits
+        return { ...l, max_credits: cap, remaining_credits: Math.max(0, cap - newUsed), is_overloaded: newUsed > cap, is_full: newUsed >= cap }
+      }))
+      addToast(parsed === null ? `Credit limit reset to default (${DEFAULT_MAX_CREDITS} cr/year)` : `Credit limit set to ${parsed} cr/year`, 'success')
       setEditingLecturer(null)
     } catch (e: any) {
       addToast(e?.response?.data?.detail || 'Failed to update credit limit', 'error')
@@ -390,16 +485,14 @@ export default function CourseManagementPage() {
       if (courseCredits > 0) {
         setLecturers(prev => prev.map(l => {
           if (l.id === prevLecturerId && prevLecturerId !== lecturerId) {
-            // Previous lecturer loses these credits
             const newUsed = Math.max(0, l.used_credits - courseCredits)
-            const cap = l.max_credits || DEFAULT_MAX_CREDITS
-            return { ...l, used_credits: newUsed, remaining_credits: Math.max(0, cap - newUsed), is_full: newUsed >= cap }
+            const cap = l.max_credits ?? DEFAULT_MAX_CREDITS
+            return { ...l, used_credits: newUsed, remaining_credits: Math.max(0, cap - newUsed), is_overloaded: newUsed > cap, is_full: newUsed >= cap }
           }
           if (!isUnassign && l.id === lecturerId) {
-            // New lecturer gains these credits
             const newUsed = l.used_credits + courseCredits
-            const cap = l.max_credits || DEFAULT_MAX_CREDITS
-            return { ...l, used_credits: newUsed, remaining_credits: Math.max(0, cap - newUsed), is_full: newUsed >= cap }
+            const cap = l.max_credits ?? DEFAULT_MAX_CREDITS
+            return { ...l, used_credits: newUsed, remaining_credits: Math.max(0, cap - newUsed), is_overloaded: newUsed > cap, is_full: newUsed >= cap }
           }
           return l
         }))
@@ -458,7 +551,12 @@ export default function CourseManagementPage() {
     [courses]
   )
 
-  const overloadedCount = useMemo(() => lecturers.filter(l => l.is_full).length, [lecturers])
+  const overloadedCount = useMemo(() => lecturers.filter(l => l.is_overloaded || l.is_full).length, [lecturers])
+
+  const filteredLecturersWorkloads = useMemo(() => {
+    const q = lecturerSearchWorkloads.trim().toLowerCase()
+    return q ? lecturers.filter(l => l.full_name.toLowerCase().includes(q) || l.email.toLowerCase().includes(q)) : lecturers
+  }, [lecturers, lecturerSearchWorkloads])
 
   return (
     <MainLayout>
@@ -474,34 +572,34 @@ export default function CourseManagementPage() {
           <p className="text-[13px] text-[#6B7280] mt-0.5">Assign lecturers · Setup semester timeline · Select offered courses</p>
         </div>
 
-        {/* Active semester selector */}
+        {/* Active academic year badge */}
         <div className="flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-[#6B7280] shrink-0" />
-          <select
-            value={activeSemester?.id ?? ''}
-            onChange={e => {
-              const tl = timelines.find(t => t.id === e.target.value) || null
-              setActiveSemester(tl)
-            }}
-            className="text-[13px] border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C90031]/20 focus:border-[#C90031] min-w-[200px]"
-          >
-            <option value="">— All courses —</option>
-            {timelines.map(tl => (
-              <option key={tl.id} value={tl.id}>{tl.academic_year} Sem {tl.semester}</option>
-            ))}
-          </select>
+          {loadingYears ? (
+            <Spinner size="sm" />
+          ) : activeAcademicYear ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF1F2] border border-[#FECACA] rounded-lg text-[13px] font-semibold text-[#C90031]">
+              AY {activeAcademicYear.name}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FEF3C7] border border-[#FDE68A] rounded-lg text-[13px] font-medium text-[#92400E]">
+              No active academic year
+            </span>
+          )}
+          {isHodOrAdmin && (
+            <button onClick={() => setShowYearPanel(v => !v)}
+              className={`px-3 py-1.5 text-[12px] font-medium rounded-lg border transition ${showYearPanel ? 'bg-[#C90031] text-white border-[#C90031]' : 'bg-white border-[#E5E7EB] text-[#374151] hover:bg-gray-50'}`}>
+              Manage Years
+            </button>
+          )}
         </div>
 
-        <button onClick={() => setCurriculumOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 bg-[#C90031] hover:bg-[#A80028] text-white rounded-lg text-[13px] font-semibold transition">
-          <Library className="w-4 h-4" /> Curriculum Library
-        </button>
         <button
           onClick={async () => {
             setDownloadingLoad(true)
             try {
               const [workloads, enrollCounts] = await Promise.all([
-                getLecturerWorkloads(undefined, undefined, activeSemester?.id),
+                getLecturerWorkloads(activeAcademicYear?.id, activeAcademicYear?.name),
                 getCourseEnrollmentCounts(),
               ])
               const nameMap: Record<string, string> = {}
@@ -520,11 +618,61 @@ export default function CourseManagementPage() {
         >
           {downloadingLoad ? <><RefreshCw className="w-4 h-4 animate-spin" />Generating…</> : <><FileDown className="w-4 h-4" />Export Excel</>}
         </button>
+        <button onClick={() => setCurriculumOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 bg-[#C90031] hover:bg-[#A80028] text-white rounded-lg text-[13px] font-semibold transition">
+          <Library className="w-4 h-4" /> Curriculum Library
+        </button>
         <button onClick={loadData}
           className="flex items-center gap-2 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-[13px] font-medium text-[#374151] hover:bg-gray-50 transition">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
+
+      {/* ── HOD: Academic Year Management Panel ─────────────────────────────── */}
+      {isHodOrAdmin && showYearPanel && (
+        <div className="border border-[#E5E7EB] rounded-xl bg-white p-4 space-y-4 mt-3">
+          <h2 className="text-[14px] font-bold text-[#111827] flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-[#C90031]" /> Academic Years
+          </h2>
+          <div className="flex gap-2">
+            <input
+              type="text" placeholder="e.g. 2025/2026"
+              value={newYearName} onChange={e => setNewYearName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreateYear()}
+              className="flex-1 text-[13px] border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C90031]/20 focus:border-[#C90031]"
+            />
+            <button onClick={handleCreateYear} disabled={creatingYear || !newYearName.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#C90031] hover:bg-[#A80028] text-white text-[13px] font-medium rounded-lg disabled:opacity-50">
+              {creatingYear ? <Spinner size="sm" /> : <Plus className="w-4 h-4" />} Create
+            </button>
+          </div>
+          {loadingYears ? <div className="flex justify-center py-4"><Spinner /></div> : (
+            <div className="flex flex-wrap gap-2">
+              {academicYears.length === 0 && <p className="text-[13px] text-[#9CA3AF]">No academic years yet.</p>}
+              {academicYears.map(ay => (
+                <div key={ay.id} className={`flex items-center gap-1.5 rounded-lg border text-[13px] font-medium px-3 py-1.5 ${
+                  ay.is_active ? 'bg-[#FFF1F2] border-[#FECACA] text-[#C90031]' : 'bg-white border-[#E5E7EB] text-[#374151]'
+                }`}>
+                  <span>{ay.name}</span>
+                  {ay.is_active && <span className="text-[11px] font-bold ml-1">● ACTIVE</span>}
+                  {!ay.is_active && (
+                    <button onClick={() => handleActivateYear(ay.id)} disabled={activatingYear === ay.id}
+                      className="text-[11px] text-[#2563EB] hover:underline ml-1 disabled:opacity-50">
+                      {activatingYear === ay.id ? <Spinner size="sm" /> : 'Set Active'}
+                    </button>
+                  )}
+                  {!ay.is_active && (
+                    <button onClick={() => handleDeleteYear(ay.id, ay.name)} disabled={deletingYear === ay.id}
+                      className="p-0.5 text-[#D1D5DB] hover:text-red-500 disabled:opacity-50">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Tab bar ────────────────────────────────────────────────────────── */}
       <div className="flex gap-0 border-b border-[#E5E7EB] bg-white sticky top-0 z-10">
@@ -555,14 +703,20 @@ export default function CourseManagementPage() {
       ══════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'distribute' && (
         <>
-          {/* Active semester banner */}
-          {activeSemester && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-[13px] text-blue-800">
+          {/* Active academic year / semester context */}
+          {activeAcademicYear ? (
+            <div className="flex items-center gap-2 px-4 py-2 bg-[#FFF1F2] border border-[#FECACA] rounded-lg text-[13px] text-[#9F1239]">
               <CalendarDays className="w-4 h-4 shrink-0" />
-              Showing courses selected for <strong>{activeSemester.academic_year} — Semester {activeSemester.semester}</strong>.
-              {selectedCourseIds.size === 0 && !loadingSelection && (
-                <span className="ml-1 text-amber-700"> No courses selected yet — go to Setup tab to choose courses.</span>
+              Academic Year: <strong>{activeAcademicYear.name}</strong>
+              {activeSemester && <span className="ml-2">· Semester {activeSemester.semester}</span>}
+              {activeSemester && selectedCourseIds.size === 0 && !loadingSelection && (
+                <span className="ml-2 text-amber-700">No courses selected yet — go to Setup tab.</span>
               )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-4 py-2 bg-[#FEF3C7] border border-[#FDE68A] rounded-lg text-[13px] text-[#92400E]">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              No active academic year set. {isHodOrAdmin ? 'Use "Manage Years" above to create and activate one.' : 'Ask your HOD to activate an academic year.'}
             </div>
           )}
 
@@ -647,17 +801,12 @@ export default function CourseManagementPage() {
                           </td>
                           <td className="py-3 px-4">
                             {isBusy ? <Spinner size="sm" /> : (
-                              <select
+                              <SearchableLecturerSelect
                                 value={course.lecturer_id ?? ''}
-                                onChange={e => handleAssign(course.id, e.target.value)}
-                                className="text-[13px] border border-[#E5E7EB] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#C90031]/20 focus:border-[#C90031] min-w-[160px]">
-                                <option value="">— Unassign —</option>
-                                {lecturers.map(l => (
-                                  <option key={l.id} value={l.id} disabled={l.is_full && l.id !== course.lecturer_id}>
-                                    {l.full_name} ({l.used_credits}/{l.max_credits || DEFAULT_MAX_CREDITS} cr{l.is_full ? ' FULL' : ''})
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={id => handleAssign(course.id, id)}
+                                lecturers={lecturers}
+                                defaultCredits={DEFAULT_MAX_CREDITS}
+                              />
                             )}
                           </td>
                         </tr>
@@ -720,6 +869,33 @@ export default function CourseManagementPage() {
               )}
             </div>
 
+            {/* Sibling semesters in the same academic year */}
+            {activeSemester && (() => {
+              const siblings = timelines.filter(
+                tl => tl.academic_year === activeSemester.academic_year && tl.id !== activeSemester.id
+              )
+              return siblings.length > 0 ? (
+                <div className="px-3 py-2.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
+                  <p className="text-[11px] font-semibold text-[#166534] mb-1.5">
+                    Other semesters in {activeSemester.academic_year}:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {siblings.map(s => (
+                      <button key={s.id}
+                        onClick={() => setActiveSemester(s)}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-[#86EFAC] text-[12px] font-medium text-[#166534] hover:bg-[#DCFCE7] transition">
+                        Sem {s.semester} · {s.start_date} → {s.end_date}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="px-3 py-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-[11px] text-[#9CA3AF]">
+                  No other semesters configured for {activeSemester.academic_year} yet.
+                </div>
+              )
+            })()}
+
             <Card
               header={
                 <div className={`-mx-5 -mt-4 px-4 py-2.5 rounded-t-xl text-[12px] font-semibold flex items-center gap-2 ${
@@ -737,12 +913,24 @@ export default function CourseManagementPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[12px] font-medium text-[#374151] mb-1">Academic Year *</label>
-                    <select value={timelineForm.academic_year}
-                      onChange={e => setTimelineForm(f => ({ ...f, academic_year: e.target.value }))}
-                      className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#C90031]">
-                      <option value="">Select year</option>
-                      {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
+                    {activeAcademicYear && !activeSemester ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={activeAcademicYear.name}
+                          className="w-full border border-[#C90031]/40 bg-[#FFF1F2] rounded-lg px-3 py-2 text-[13px] text-[#C90031] font-medium"
+                        />
+                        <span className="text-[10px] text-[#C90031] font-semibold whitespace-nowrap">ACTIVE AY</span>
+                      </div>
+                    ) : (
+                      <select value={timelineForm.academic_year}
+                        onChange={e => setTimelineForm(f => ({ ...f, academic_year: e.target.value }))}
+                        className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#C90031]">
+                        <option value="">Select year</option>
+                        {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[12px] font-medium text-[#374151] mb-1">Semester *</label>
@@ -751,6 +939,7 @@ export default function CourseManagementPage() {
                       className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#C90031]">
                       <option value={1}>Semester 1</option>
                       <option value={2}>Semester 2</option>
+                      <option value={3}>Semester 3 (Short)</option>
                     </select>
                   </div>
                 </div>
@@ -913,61 +1102,62 @@ export default function CourseManagementPage() {
       ══════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'workloads' && (
         <div className="space-y-5">
-          {/* Active semester banner */}
-          {activeSemester && (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-[14px]">
-                <span className="text-[#6B7280]">Showing workloads for:</span>
-                <span className="ml-2 font-semibold text-[#C90031]">{activeSemester.academic_year} · Semester {activeSemester.semester}</span>
-              </div>
-              <div className="text-[12px] text-[#6B7280]">
-                {lecturers.filter(l => l.is_full).length} of {lecturers.length} lecturers at full capacity
-              </div>
+          {/* Year-scoped workload header */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-[14px]">
+              <span className="text-[#6B7280]">Annual credit load —</span>
+              <span className="ml-1.5 font-semibold text-[#C90031]">
+                {activeAcademicYear ? `AY ${activeAcademicYear.name}` : 'All academic years'}
+              </span>
+              <span className="ml-2 text-[12px] text-[#9CA3AF]">(cap: {DEFAULT_MAX_CREDITS} cr/year)</span>
             </div>
-          )}
+            <div className="text-[12px] text-[#6B7280]">
+              {lecturers.filter(l => l.is_overloaded).length} overloaded · {lecturers.filter(l => l.is_full && !l.is_overloaded).length} at capacity
+            </div>
+          </div>
 
-          {!activeSemester && (
-            <Card>
-              <div className="text-center py-10 text-[#9CA3AF]">
-                <Users className="w-10 h-10 mx-auto mb-3 text-[#D1D5DB]" />
-                <p className="font-medium">Select a semester timeline to view lecturer workloads</p>
-                <p className="text-[12px] mt-1">Workloads are scoped to the selected academic year and semester</p>
-              </div>
-            </Card>
-          )}
+          {/* Lecturer search */}
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+            <input type="text" placeholder="Search lecturers..."
+              value={lecturerSearchWorkloads} onChange={e => setLecturerSearchWorkloads(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-[13px] border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C90031]/20 focus:border-[#C90031]" />
+          </div>
 
           {loading ? (
             <div className="flex justify-center py-10"><Spinner /></div>
-          ) : lecturers.length === 0 ? (
+          ) : filteredLecturersWorkloads.length === 0 ? (
             <Card>
               <div className="text-center py-10 text-[#9CA3AF]">
                 <Users className="w-10 h-10 mx-auto mb-3 text-[#D1D5DB]" />
-                <p className="font-medium">No lecturer data available</p>
+                <p className="font-medium">{lecturerSearchWorkloads ? 'No lecturers match your search' : 'No lecturer data available'}</p>
               </div>
             </Card>
           ) : (
             <Card>
               <h2 className="text-[15px] font-bold text-[#111827] mb-4 flex items-center gap-2">
                 <Users className="w-5 h-5 text-[#6B7280]" />
-                Lecturer Workloads <span className="text-[12px] font-normal text-[#6B7280]">(per-lecturer cap)</span>
+                Lecturer Workloads <span className="text-[12px] font-normal text-[#6B7280]">(credits/year · cap editable per lecturer)</span>
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {lecturers.map(l => {
-                  const cap = l.max_credits || DEFAULT_MAX_CREDITS
+                {filteredLecturersWorkloads.map(l => {
+                  const cap = l.max_credits ?? DEFAULT_MAX_CREDITS
                   const pct = Math.min((l.used_credits / cap) * 100, 100)
-                  const barColor = l.is_full ? 'bg-[#EF4444]' : pct >= 67 ? 'bg-[#F59E0B]' : 'bg-[#10B981]'
+                  const isOver = l.is_overloaded || l.used_credits > cap
+                  const barColor = isOver ? 'bg-[#EF4444]' : pct >= 75 ? 'bg-[#F59E0B]' : 'bg-[#10B981]'
+                  const cardBorder = isOver ? 'border-red-300 bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-[#F9FAFB]'
                   return (
-                    <div key={l.id} className="p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
+                    <div key={l.id} className={`p-3 rounded-lg border ${cardBorder}`}>
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="text-[13px] font-medium text-[#111827] truncate max-w-[140px]">{l.full_name}</span>
                         {editingLecturer === l.id ? (
                           <div className="flex items-center gap-1">
                             <input autoFocus type="number" min={1} value={editCreditsValue}
-                              onChange={e => setEditCreditsValue(e.target.value)} placeholder="no limit"
+                              onChange={e => setEditCreditsValue(e.target.value)} placeholder={String(DEFAULT_MAX_CREDITS)}
                               className="w-16 h-6 text-[12px] border border-[#C90031] rounded px-1.5 outline-none text-center"
                               onKeyDown={e => { if (e.key === 'Enter') handleSetCredits(l.id); if (e.key === 'Escape') setEditingLecturer(null) }}
                             />
-                            <span className="text-[11px] text-[#6B7280]">cr</span>
+                            <span className="text-[11px] text-[#6B7280]">cr/yr</span>
                             <button onClick={() => handleSetCredits(l.id)} disabled={savingCredits}
                               className="p-0.5 rounded bg-[#C90031] text-white hover:bg-[#A80028] disabled:opacity-50"><Check className="w-3 h-3" /></button>
                             <button onClick={() => setEditingLecturer(null)}
@@ -975,16 +1165,22 @@ export default function CourseManagementPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <span className={`text-[12px] font-bold ${l.is_full ? 'text-[#EF4444]' : 'text-[#374151]'}`}>{l.used_credits}/{cap} cr</span>
+                            <span className={`text-[12px] font-bold ${isOver ? 'text-[#EF4444]' : l.is_full ? 'text-[#F59E0B]' : 'text-[#374151]'}`}>
+                              {l.used_credits}/{cap} cr/yr
+                            </span>
                             <button onClick={() => { setEditingLecturer(l.id); setEditCreditsValue(String(l.max_credits || '')) }}
-                              className="p-0.5 rounded text-[#D1D5DB] hover:text-[#C90031]" title="Edit credit limit"><Pencil className="w-3 h-3" /></button>
+                              className="p-0.5 rounded text-[#D1D5DB] hover:text-[#C90031]" title="Edit yearly credit limit"><Pencil className="w-3 h-3" /></button>
                           </div>
                         )}
                       </div>
                       <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
                         <div className={`h-2 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
                       </div>
-                      {l.is_full && <p className="text-[11px] text-[#EF4444] mt-1 font-medium">Workload full</p>}
+                      {isOver
+                        ? <p className="text-[11px] text-[#EF4444] mt-1 font-semibold">⚠ Overloaded — exceeds {cap} cr/year cap</p>
+                        : l.is_full
+                          ? <p className="text-[11px] text-[#F59E0B] mt-1 font-medium">At yearly capacity</p>
+                          : null}
                     </div>
                   )
                 })}

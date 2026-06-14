@@ -139,41 +139,37 @@ async def list_courses(
 
 @router.get("/lecturer-workloads")
 async def get_lecturer_workloads(
-    semester: Optional[str] = Query(None),
     academic_year: Optional[str] = Query(None),
+    academic_year_id: Optional[str] = Query(None),
     timeline_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
 ):
-    """Return current credit load per lecturer for a given semester/academic_year.
-    When timeline_id is provided, workloads are computed for the courses selected
-    in that semester timeline (via semester_course_selections) rather than by
-    semester/academic_year — because selected courses may have a different
-    semester value in the courses table than the timeline itself.
-    Cap is per-lecturer (`users.max_teaching_credits`; advisory only if NULL)."""
+    """Return per-lecturer credit load for a given academic year (all semesters combined).
+    Credits are tracked per YEAR, not per semester — 12 credits is the standard annual cap.
+    Filter priority: academic_year_id > academic_year name > timeline_id (resolves its year) > all courses."""
     _require_supabase()
     if not has_effective_role(current_user, "coordinator", "hod", "admin", "lecturer"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     try:
+        target_academic_year: Optional[str] = None
+
+        if academic_year_id:
+            ay_resp = supabase.table("academic_years").select("name").eq("id", academic_year_id).limit(1).execute()
+            if ay_resp.data:
+                target_academic_year = ay_resp.data[0]["name"]
+        elif academic_year:
+            target_academic_year = academic_year
+        elif timeline_id:
+            tl_resp = supabase.table("semester_timelines").select("academic_year").eq("id", timeline_id).limit(1).execute()
+            if tl_resp.data:
+                target_academic_year = tl_resp.data[0]["academic_year"]
+
         base_query = supabase.table("courses").select("id, lecturer_id, credits").is_("archived_at", "null")
+        if target_academic_year:
+            base_query = base_query.eq("academic_year", target_academic_year)
 
-        if timeline_id:
-            sel_resp = supabase.table("semester_course_selections").select("course_id").eq("timeline_id", timeline_id).execute()
-            course_ids = [s["course_id"] for s in (sel_resp.data or [])]
-            if course_ids:
-                base_query = base_query.in_("id", course_ids)
-            else:
-                courses_data = []
-                base_query = None
-        elif semester is not None and semester != "":
-            try:
-                base_query = base_query.eq("semester", int(semester))
-            except (ValueError, TypeError):
-                base_query = base_query.eq("semester", semester)
-            if academic_year:
-                base_query = base_query.eq("academic_year", academic_year)
-
-        courses_data = (base_query.execute()).data or [] if base_query is not None else []
+        courses_data = (base_query.execute()).data or []
 
         workload: dict = {}
         for c in courses_data:
@@ -182,8 +178,7 @@ async def get_lecturer_workloads(
                 continue
             workload[lid] = workload.get(lid, 0.0) + float(c.get("credits") or 0)
 
-        # Always include every teaching staff member (even with 0 load) so the
-        # UI workload list isn't empty at semester start.
+        # Always include every teaching staff member (even with 0 load).
         staff_resp = (
             supabase.table("users")
             .select("id, full_name, email, role, special_roles, max_teaching_credits")
@@ -191,24 +186,25 @@ async def get_lecturer_workloads(
             .execute()
         )
         staff = staff_resp.data or []
-        # merge load for lecturers not returned above (shouldn't happen but safe)
         for lid in list(workload.keys()):
             if not any(s["id"] == lid for s in staff):
                 staff.append({"id": lid, "full_name": "", "email": "", "max_teaching_credits": None})
 
+        DEFAULT_ANNUAL_CAP = 12.0
         result = []
         for s in staff:
             used = workload.get(s["id"], 0.0)
             raw_cap = s.get("max_teaching_credits")
-            cap = float(raw_cap) if raw_cap is not None else None
+            cap = float(raw_cap) if raw_cap is not None else DEFAULT_ANNUAL_CAP
             result.append({
                 "lecturer_id": s["id"],
                 "full_name": s.get("full_name", ""),
                 "email": s.get("email", ""),
                 "used_credits": round(used, 1),
-                "max_credits": cap,  # None means no limit set
-                "remaining_credits": round(max(0.0, cap - used), 1) if cap is not None else None,
-                "is_full": (used >= cap) if cap is not None else False,
+                "max_credits": cap,
+                "remaining_credits": round(max(0.0, cap - used), 1),
+                "is_overloaded": used > cap,
+                "is_full": used >= cap,
             })
         return result
     except HTTPException:
@@ -573,7 +569,9 @@ async def assign_lecturer(
         if lecturer.get("role") not in ["lecturer", "coordinator", "hod", "admin"]:
             raise HTTPException(status_code=400, detail="User is not a teaching staff member")
 
-        # Enforce per-lecturer credit cap (users.max_teaching_credits; no enforcement if NULL)
+        # Enforce per-lecturer annual credit cap (users.max_teaching_credits).
+        # Credits are summed across ALL semesters in the same academic_year.
+        # Cap is only enforced when max_teaching_credits is set (not NULL).
         override = bool(data.get("override")) and has_effective_role(current_user, "hod", "admin")
         override_reason = (data.get("override_reason") or "").strip()
         if course.get("lecturer_id") != lecturer_id:
@@ -584,7 +582,6 @@ async def assign_lecturer(
                 supabase.table("courses")
                 .select("credits")
                 .eq("lecturer_id", lecturer_id)
-                .eq("semester", course.get("semester"))
                 .eq("academic_year", course.get("academic_year"))
                 .is_("archived_at", "null")
                 .neq("id", course_id)
@@ -596,14 +593,14 @@ async def assign_lecturer(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Credit limit exceeded: {lecturer.get('full_name', 'This lecturer')} already has "
-                        f"{used_credits:.0f} credit(s) this semester. "
-                        f"Adding {course_credits:.0f} credit(s) would exceed their {cap:.0f}-credit cap. "
-                        f"Remaining capacity: {remaining:.0f} credit(s). An HOD or admin can override with a reason."
+                        f"Annual credit limit exceeded: {lecturer.get('full_name', 'This lecturer')} already has "
+                        f"{used_credits:.0f} credit(s) this academic year. "
+                        f"Adding {course_credits:.0f} credit(s) would exceed their {cap:.0f}-credit annual cap. "
+                        f"Remaining annual capacity: {remaining:.0f} credit(s). An HOD or admin can override with a reason."
                     ),
                 )
             if cap is not None and override and used_credits + course_credits > cap and not override_reason:
-                raise HTTPException(status_code=400, detail="override_reason is required when overriding the credit cap")
+                raise HTTPException(status_code=400, detail="override_reason is required when overriding the annual credit cap")
 
         resp = supabase.table("courses").update({"lecturer_id": lecturer_id}).eq("id", course_id).execute()
         if not resp.data:

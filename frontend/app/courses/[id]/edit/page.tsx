@@ -66,10 +66,7 @@ export default function EditCoursePage() {
 
       // Fetch credit workloads for this course's semester/academic_year
       try {
-        const workloads = await getLecturerWorkloads(
-          courseData.semester,
-          courseData.academic_year
-        )
+        const workloads = await getLecturerWorkloads(undefined, courseData.academic_year)
         const map: Record<string, LecturerWorkload> = {}
         for (const w of workloads) map[w.lecturer_id] = w
         setWorkloadMap(map)

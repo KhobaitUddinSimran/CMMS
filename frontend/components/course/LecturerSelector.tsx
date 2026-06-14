@@ -29,9 +29,9 @@ function CreditBar({ used, adding = 0, cap }: { used: number; adding?: number; c
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-[11px]">
-        <span className="text-[#6B7280]">Semester credit load</span>
+        <span className="text-[#6B7280]">Yearly credit load</span>
         <span className={`font-semibold ${wouldExceed ? 'text-red-600' : 'text-[#111827]'}`}>
-          {used}{adding > 0 ? ` + ${adding}` : ''} cr{hasLimit ? ` / ${effectiveCap}` : ' (no limit)'}
+          {used}{adding > 0 ? ` + ${adding}` : ''} cr/yr{hasLimit ? ` / ${effectiveCap}` : ' (no limit)'}
         </span>
       </div>
       <div className="h-2 rounded-full bg-[#E5E7EB] overflow-hidden flex">
@@ -107,13 +107,15 @@ export function LecturerSelector({
               <p className="text-[#6B7280]">{selected.email}</p>
             </div>
             {selectedLoad && (
-              selectedLoad.is_full
-                ? <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><AlertTriangle className="w-3 h-3" />Full</span>
-                : selectedLoad.max_credits !== null && selectedLoad.max_credits !== undefined && selectedLoad.used_credits >= (selectedLoad.max_credits ?? 0) * 0.8
-                  ? <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><AlertTriangle className="w-3 h-3" />Near limit</span>
-                  : selectedLoad.remaining_credits !== null
-                    ? <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><CheckCircle className="w-3 h-3" />{selectedLoad.remaining_credits} cr left</span>
-                    : <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><CheckCircle className="w-3 h-3" />No limit set</span>
+              (selectedLoad.is_overloaded || (selectedLoad.is_full && selectedLoad.used_credits > (selectedLoad.max_credits ?? 0)))
+                ? <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><AlertTriangle className="w-3 h-3" />Overloaded</span>
+                : selectedLoad.is_full
+                  ? <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><AlertTriangle className="w-3 h-3" />At capacity</span>
+                  : selectedLoad.max_credits !== null && selectedLoad.max_credits !== undefined && selectedLoad.used_credits >= (selectedLoad.max_credits ?? 0) * 0.8
+                    ? <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><AlertTriangle className="w-3 h-3" />Near yearly limit</span>
+                    : selectedLoad.remaining_credits !== null
+                      ? <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><CheckCircle className="w-3 h-3" />{selectedLoad.remaining_credits} cr/yr left</span>
+                      : <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-semibold whitespace-nowrap"><CheckCircle className="w-3 h-3" />No limit set</span>
             )}
           </div>
 
@@ -125,7 +127,7 @@ export function LecturerSelector({
 
           {wouldExceed && cap !== null && (
             <p className="text-red-600 font-medium text-[11px]">
-              ⚠ Assigning this course ({courseCredits} cr) would exceed this lecturer&apos;s {cap}-credit semester limit.
+              ⚠ Assigning this course ({courseCredits} cr) would exceed this lecturer&apos;s {cap}-credit/year annual cap.
             </p>
           )}
         </div>

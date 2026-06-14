@@ -27,7 +27,7 @@ async def list_users(
     if not supabase:
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
-        query = supabase.table("users").select("id, email, full_name, role, is_active")
+        query = supabase.table("users").select("id, email, full_name, role, is_active, max_teaching_credits")
         if is_teaching_filter:
             query = query.in_("role", TEACHING_ROLES)
         elif role:
