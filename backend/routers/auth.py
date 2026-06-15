@@ -19,8 +19,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 def get_rate_limit_key(request: Request) -> str:
-    if os.getenv("ENVIRONMENT", "development") == "development":
-        # Return unique key per request to disable rate limiting in development
+    env = os.getenv("ENVIRONMENT", "development")
+    showcase_mode = os.getenv("SHOWCASE_MODE", "false").lower() == "true"
+    
+    if env == "development" or showcase_mode:
+        # Return unique key per request to disable rate limiting in development or showcase mode
         return f"dev-{secrets.token_hex(8)}"
     # When behind the Next.js proxy on Render, the real client IP is in
     # X-Forwarded-For. Falling back to X-Real-IP, then the TCP peer address.
@@ -93,7 +96,7 @@ RESET_TOKENS: dict[str, dict] = {}
 
 # ==================== LOGIN ENDPOINT ====================
 @router.post("/login", response_model=LoginResponse)
-@limiter.limit("50/15minutes")
+@limiter.limit("500/15minutes")
 async def login(request: Request, credentials: LoginRequest):
     """Login — Supabase only."""
     try:
@@ -158,7 +161,7 @@ async def login(request: Request, credentials: LoginRequest):
 
 # ==================== SIGNUP ENDPOINT ====================
 @router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("100/1hour")
+@limiter.limit("500/1hour")
 async def signup(request: Request, signup_data: SignupRequest):
     """Signup — writes directly to Supabase as pending. Admin / coordinator /
     HOD roles are NEVER self-assignable; they must be granted by an existing
@@ -561,7 +564,7 @@ class ResendVerificationResponse(BaseModel):
     message: str
 
 @router.post("/resend-verification", response_model=ResendVerificationResponse)
-@limiter.limit("5/1hour")
+@limiter.limit("50/1hour")
 async def resend_verification(request: Request, req_data: ResendVerificationRequest):
     """Resend email verification link (for students)."""
     if not supabase:
