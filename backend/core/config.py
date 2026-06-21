@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Email Configuration
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
     EMAIL_FROM_ADDRESS: str = os.getenv("EMAIL_FROM_ADDRESS", "noreply@cmms.utm.my")
-    EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "CMMS")
+    EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "UTM MarkDesk")
     
     # Redis Configuration
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")

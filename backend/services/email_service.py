@@ -16,7 +16,7 @@ class BrevoConfig:
     def __init__(self):
         self.api_key = os.getenv('BREVO_API_KEY', '').strip()
         self.from_address = os.getenv('EMAIL_FROM_ADDRESS', '').strip()
-        self.from_name = os.getenv('EMAIL_FROM_NAME', 'CMMS').strip()
+        self.from_name = os.getenv('EMAIL_FROM_NAME', 'UTM MarkDesk').strip()
 
     @property
     def is_configured(self) -> bool:
@@ -47,7 +47,7 @@ def _get_smtp_config():
 _FOOTER = """
 <hr style="margin:32px 0 16px;border:none;border-top:1px solid #E5E7EB;"/>
 <p style="font-size:12px;color:#9CA3AF;margin:0;">
-    Carry Mark Management System (CMMS) &nbsp;·&nbsp; Universiti Teknologi Malaysia
+    UTM MarkDesk &nbsp;·&nbsp; Universiti Teknologi Malaysia
 </p>
 """
 
@@ -112,10 +112,10 @@ class EmailService:
     @staticmethod
     async def send_otp(email: str, otp: str, expires_in_minutes: int = 15):
         """Send OTP via email for password reset"""
-        subject = "Your CMMS Password Reset Code"
+        subject = "Your MarkDesk Password Reset Code"
         html = f"""
         <h2 style="color:#0F172A;">Password Reset Code</h2>
-        <p>You requested a password reset for your CMMS account.</p>
+        <p>You requested a password reset for your MarkDesk account.</p>
         <p>Your one-time code is:</p>
         <div style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#C90031;
                     background:#FFF1F2;padding:16px 24px;border-radius:8px;
@@ -131,11 +131,11 @@ class EmailService:
     @staticmethod
     async def send_student_otp(email: str, otp: str, student_name: str = "Student"):
         """Send OTP to new student account"""
-        subject = "Welcome to CMMS – Your Login Code"
+        subject = "Welcome to UTM MarkDesk – Your Login Code"
         html = f"""
-        <h2 style="color:#0F172A;">Welcome to CMMS!</h2>
+        <h2 style="color:#0F172A;">Welcome to UTM MarkDesk!</h2>
         <p>Hi {student_name},</p>
-        <p>Your CMMS student account has been created. Use this one-time code to log in for the first time:</p>
+        <p>Your MarkDesk student account has been created. Use this one-time code to log in for the first time:</p>
         <div style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#C90031;
                     background:#FFF1F2;padding:16px 24px;border-radius:8px;
                     display:inline-block;margin:12px 0;">
@@ -176,11 +176,11 @@ class EmailService:
     async def send_signup_confirmation(email: str, full_name: str, role: str):
         """Send signup confirmation email (for lecturers - admin approval flow)"""
         role_display = "Student" if role == "student" else "Lecturer"
-        subject = "CMMS Account Signup Received – Pending Review"
+        subject = "MarkDesk Account Signup Received – Pending Review"
         html = f"""
         <h2 style="color:#0F172A;">Signup Received!</h2>
         <p>Hi {full_name},</p>
-        <p>Thank you for registering with the <strong>Carry Mark Management System (CMMS)</strong>.</p>
+        <p>Thank you for registering with <strong>UTM MarkDesk</strong>.</p>
         <table style="border-collapse:collapse;margin:16px 0;">
             <tr>
                 <td style="padding:6px 12px;font-weight:bold;color:#374151;">Email</td>
@@ -207,11 +207,11 @@ class EmailService:
         frontend_url = _get_frontend_url()
         verification_link = f"{frontend_url}/auth/verify-email?token={token}"
 
-        subject = "Verify Your CMMS Student Account"
+        subject = "Verify Your UTM MarkDesk Account"
         html = f"""
-        <h2 style="color:#0F172A;">Welcome to CMMS!</h2>
+        <h2 style="color:#0F172A;">Welcome to UTM MarkDesk!</h2>
         <p>Hi {full_name},</p>
-        <p>Thank you for registering with the <strong>Carry Mark Management System (CMMS)</strong>.</p>
+        <p>Thank you for registering with <strong>UTM MarkDesk</strong>.</p>
         <p>Please click the button below to verify your email address and activate your account:</p>
         <p style="margin:24px 0;">
             <a href="{verification_link}"
@@ -234,17 +234,17 @@ class EmailService:
     async def send_approval_email(email: str, full_name: str):
         """Send account approval email"""
         frontend_url = _get_frontend_url()
-        subject = "Your CMMS Account Has Been Approved!"
+        subject = "Your UTM MarkDesk Account Has Been Approved!"
         html = f"""
         <h2 style="color:#0F172A;">Account Approved!</h2>
         <p>Hi {full_name},</p>
-        <p>Your CMMS account has been reviewed and <strong style="color:#16A34A;">approved</strong>.
+        <p>Your MarkDesk account has been reviewed and <strong style="color:#16A34A;">approved</strong>.
            You can now log in using your registered email and password.</p>
         <p style="margin:24px 0;">
             <a href="{frontend_url}/auth/login"
                style="background:#C90031;color:#fff;padding:12px 24px;border-radius:6px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
-                Log In to CMMS
+                Log In to MarkDesk
             </a>
         </p>
         <p style="color:#6B7280;font-size:13px;">Login email: <strong>{email}</strong></p>
@@ -255,11 +255,11 @@ class EmailService:
     @staticmethod
     async def send_rejection_email(email: str, full_name: str, reason: str = "Your application was not approved"):
         """Send account rejection email"""
-        subject = "CMMS Account Application – Review Complete"
+        subject = "UTM MarkDesk Account Application – Review Complete"
         html = f"""
         <h2 style="color:#0F172A;">Account Application Update</h2>
         <p>Hi {full_name},</p>
-        <p>We have reviewed your CMMS account application.</p>
+        <p>We have reviewed your MarkDesk account application.</p>
         <div style="background:#FFF7ED;border-left:4px solid #F97316;padding:12px 16px;
                     border-radius:4px;margin:16px 0;">
             <p style="margin:0;font-weight:bold;color:#C2410C;">Application Not Approved</p>
@@ -356,10 +356,10 @@ class EmailService:
     @staticmethod
     async def send_password_reset(email: str, reset_link: str):
         """Send password reset link via email"""
-        subject = "Reset Your CMMS Password"
+        subject = "Reset Your MarkDesk Password"
         html = f"""
         <h2 style="color:#0F172A;">Password Reset Request</h2>
-        <p>You requested a password reset for your CMMS account.</p>
+        <p>You requested a password reset for your MarkDesk account.</p>
         <p>Click the button below to set a new password.
            This link expires in <strong>30 minutes</strong>.</p>
         <p style="margin:24px 0;">

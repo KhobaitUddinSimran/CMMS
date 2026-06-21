@@ -46,8 +46,7 @@ export default function Home() {
           <div className="flex items-center gap-4">
             <img src="/logos/utm-logo.png" alt="UTM Logo" className="h-12 w-auto" />
             <div className="flex flex-col">
-              <h1 className="text-3xl font-black text-[#C90031] tracking-tight">CMMS</h1>
-              <p className="text-xs font-semibold text-[#C90031]">Universiti Teknologi Malaysia</p>
+              <h1 className="font-brand text-4xl font-extrabold text-[#001f3f] tracking-tight">MarkDesk</h1>
             </div>
           </div>
           <nav className="hidden md:flex items-center gap-8">
@@ -67,7 +66,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="max-w-3xl">
             <h2 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-              UTM Carry Mark Management System
+              UTM MarkDesk
             </h2>
             <p className="text-xl text-gray-200 mb-8">
               A unified platform built for UTM. Empower students, faculty, and administrators with real-time grade tracking, secure access control, and comprehensive reporting.
@@ -115,7 +114,7 @@ export default function Home() {
       <section id="features" className="py-24 bg-white scroll-mt-20">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-16">
-            <p className="text-[#C90031] font-semibold text-sm uppercase tracking-wider">Why CMMS</p>
+            <p className="text-[#C90031] font-semibold text-sm uppercase tracking-wider">Why MarkDesk</p>
             <h3 className="text-4xl font-bold text-gray-900 mt-2">Powerful Features for Every Role</h3>
             <p className="text-gray-600 mt-4 max-w-2xl mx-auto">Designed to simplify academic carry mark management with industry-leading features</p>
           </div>
@@ -172,8 +171,8 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
-              <p className="text-white font-semibold mb-4">CMMS</p>
-              <p className="text-sm text-gray-400">Carry Mark Management System for Universiti Teknologi Malaysia</p>
+              <p className="font-brand text-white font-bold text-lg mb-4">MarkDesk</p>
+              <p className="text-sm text-gray-400">UTM MarkDesk – Carry Mark &amp; Workload Management</p>
             </div>
             <div>
               <p className="text-white text-sm font-semibold mb-4">Quick Links</p>

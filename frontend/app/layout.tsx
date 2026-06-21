@@ -1,7 +1,7 @@
 // Root Layout - Global layout wrapper for all pages
 import './globals.css'
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Marcellus } from 'next/font/google'
 import { Providers } from './providers'
 import { ToastContainer } from '@/components/common/Toast'
 
@@ -11,9 +11,16 @@ const inter = Inter({
   display: 'swap',
 })
 
+const brand = Marcellus({
+  subsets: ['latin'],
+  variable: '--font-brand',
+  display: 'swap',
+  weight: ['400'],
+})
+
 export const metadata: Metadata = {
-  title: 'CMMS - Carry Mark Management System',
-  description: 'University carry mark tracking platform',
+  title: 'UTM MarkDesk',
+  description: 'UTM MarkDesk – Carry Mark & Workload Management',
 }
 
 export default function RootLayout({
@@ -22,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${brand.variable}`}>
       <body className={inter.className}>
         <Providers>
           {children}

@@ -317,12 +317,12 @@ async def get_current_user_info(current_user=Depends(get_current_user)):
     if supabase:
         try:
             resp = supabase.table("users").select(
-                "id, email, full_name, role, is_active, email_verified, approval_status"
+                "id, email, full_name, role, special_roles, is_active, email_verified, approval_status"
             ).eq("id", user_id).execute()
             if resp.data:
                 u = resp.data[0]
                 db_role = u.get("role", jwt_role)
-                db_special = [db_role] if db_role in ("coordinator", "hod") else []
+                db_special = u.get("special_roles") or []
                 return {
                     "id": u["id"],
                     "email": u.get("email", ""),
@@ -715,7 +715,7 @@ async def complete_student_profile(request: Request, data: CompleteProfileReques
         
         return CompleteProfileResponse(
             success=True,
-            message="Profile completed successfully. Welcome to CMMS!",
+            message="Profile completed successfully. Welcome to UTM MarkDesk!",
             token=token,
             user={
                 "id": student["id"],

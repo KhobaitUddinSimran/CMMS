@@ -190,7 +190,7 @@ function PendingApprovalContent() {
   // Approved Status
   if (approvalStatus === 'approved') {
     return (
-      <AuthLayout title="Account Approved!" subtitle="Welcome to CMMS">
+      <AuthLayout title="Account Approved!" subtitle="Welcome to MarkDesk">
         <div className="space-y-6 py-4 text-center">
           {/* Success Icon */}
           <div className="flex justify-center">

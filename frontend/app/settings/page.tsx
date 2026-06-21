@@ -116,12 +116,12 @@ export default function SettingsPage() {
             <LogOut className="w-5 h-5 text-[#EF4444] flex-shrink-0" />
             <div className="flex-1">
               <p className="text-[14px] font-medium text-[#EF4444]">Sign Out</p>
-              <p className="text-[12px] text-[#9CA3AF] mt-0.5">Sign out of your CMMS account</p>
+              <p className="text-[12px] text-[#9CA3AF] mt-0.5">Sign out of your MarkDesk account</p>
             </div>
           </button>
         </Card>
 
-        <p className="text-center text-[11px] text-[#D1D5DB]">CMMS v5.0 · Universiti Teknologi Malaysia</p>
+        <p className="text-center text-[11px] text-[#D1D5DB]">MarkDesk v5.0 · Universiti Teknologi Malaysia</p>
       </div>
     </MainLayout>
   )

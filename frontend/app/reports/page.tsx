@@ -141,7 +141,7 @@ export default function ReportsPage() {
     setBusy('enroll')
     const isFullYear = selectedSemester === 'all'
     try {
-      const [cRes, lecturerMap] = await Promise.all([listCourses({ limit: 500 }), buildLecturerMap()])
+      const [cRes, lecturerMap] = await Promise.all([listCourses({ limit: 2000 }), buildLecturerMap()])
       const allCourses: any[] = cRes.data || (cRes as any) || []
       const courses = allCourses.filter((c) => matchesYearSemester(c, selectedYear, selectedSemester))
       setProgress({ current: 0, total: courses.length, label: 'Fetching enrollments' })
@@ -185,7 +185,7 @@ export default function ReportsPage() {
       const filename = isFullYear
         ? `enrollment_report_${selectedYear}_fullyear_${dateStamp()}.csv`
         : `enrollment_report_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-      const titleRow = buildReportHeader('CMMS Enrollment Report', selectedYear, semLabel)
+      const titleRow = buildReportHeader('MarkDesk Enrollment Report', selectedYear, semLabel)
       const overall: (string | number)[][] = [
         ['OVERALL SUMMARY'],
         ['', 'Total Courses:', courses.length, '', 'Total Enrolled:', totalEnrolled],
@@ -202,7 +202,10 @@ export default function ReportsPage() {
           }, 0)
           groups.push({
             groupLabel: `SEMESTER ${sem}`,
-            blocks: semCourses.map((c) => makeEnrollBlock(courseData.find((d) => d.course.id === c.id)!)),
+            blocks: semCourses
+              .map((c) => courseData.find((d) => d.course.id === c.id))
+              .filter((cd): cd is ECD => !!cd)
+              .map(makeEnrollBlock),
             groupSummary: [['', `Semester ${sem} — ${semCourses.length} courses`, '', 'Enrolled:', semEnrolled]],
           })
         }
@@ -226,7 +229,7 @@ export default function ReportsPage() {
     const isFullYear = selectedSemester === 'all'
     try {
       const [cRes, lecturerMap, timelines] = await Promise.all([
-        listCourses({ limit: 500 }),
+        listCourses({ limit: 2000 }),
         buildLecturerMap(),
         listTimelines().catch(() => []),
       ])
@@ -303,7 +306,7 @@ export default function ReportsPage() {
       const filename = isFullYear
         ? `assessment_report_${selectedYear}_fullyear_${dateStamp()}.csv`
         : `assessment_report_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-      const titleRow = buildReportHeader('CMMS Assessment Configuration Report', selectedYear, semLabel)
+      const titleRow = buildReportHeader('MarkDesk Assessment Configuration Report', selectedYear, semLabel)
       const overall: (string | number)[][] = [
         ['OVERALL SUMMARY'],
         ['', 'Total Courses:', courses.length, '', 'Total Assessments:', totalAssessments],
@@ -317,7 +320,10 @@ export default function ReportsPage() {
           const semA = semCourses.reduce((s, c) => s + (courseData.find((d) => d.course.id === c.id)?.assessments.length ?? 0), 0)
           groups.push({
             groupLabel: `SEMESTER ${sem}`,
-            blocks: semCourses.map((c) => makeAssessBlock(courseData.find((d) => d.course.id === c.id)!)),
+            blocks: semCourses
+              .map((c) => courseData.find((d) => d.course.id === c.id))
+              .filter((cd): cd is ACD => !!cd)
+              .map(makeAssessBlock),
             groupSummary: [['', `Semester ${sem} — ${semCourses.length} courses`, '', 'Assessments:', semA]],
           })
         }
@@ -341,7 +347,7 @@ export default function ReportsPage() {
     setBusy('grades')
     const isFullYear = selectedSemester === 'all'
     try {
-      const [cRes, lecturerMap] = await Promise.all([listCourses({ limit: 500 }), buildLecturerMap()])
+      const [cRes, lecturerMap] = await Promise.all([listCourses({ limit: 2000 }), buildLecturerMap()])
       const allCourses: any[] = cRes.data || (cRes as any) || []
       const courses = allCourses.filter((c) => matchesYearSemester(c, selectedYear, selectedSemester))
       setProgress({ current: 0, total: courses.length, label: 'Fetching marks' })
@@ -413,11 +419,11 @@ export default function ReportsPage() {
         } catch { courseData.push({ course: c, blocks: [], totalEntries: 0 }) }
       }
 
-      const markHeaders = ['Student Email', 'Student Name', 'Raw Score', 'Max Score', 'Normalised %', 'Weighted Contribution', 'Status', 'Letter Grade', 'GPA Point', 'Pass/Fail']
+      const markHeaders = ['Student Email', 'Student Name', 'Raw Score', 'Max Score', 'Normalised %', 'Weighted Marks', 'Status', 'Letter Grade', 'GPA Point', 'Pass/Fail']
 
       const lines: string[] = []
       const semLabel = isFullYear ? 'Full Year' : `Semester ${selectedSemester}`
-      lines.push(esc(buildReportHeader('CMMS Grade Marks Report', selectedYear, semLabel)))
+      lines.push(esc(buildReportHeader('MarkDesk Grade Marks Report', selectedYear, semLabel)))
       lines.push('')
 
       function renderGradeCourse(cd: GCD) {

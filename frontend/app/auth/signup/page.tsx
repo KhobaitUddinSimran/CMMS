@@ -341,7 +341,7 @@ export default function SignupPage() {
   const isStudent = selectedRole === 'student'
 
   return (
-    <AuthLayout title="Account Created!" subtitle="Welcome to CMMS">
+    <AuthLayout title="Account Created!" subtitle="Welcome to MarkDesk">
       <div className="text-center space-y-6 py-4">
         {/* Success Icon */}
         <div className="flex justify-center">

@@ -75,7 +75,7 @@ export default function ExportPage() {
       u.is_active ? 'Yes' : 'No', formatDateLocal(u.created_at) || '',
     ])
     generateReportCsv(`students_${dateStamp()}.csv`, {
-      titleRow: buildReportHeader('CMMS Student List'),
+      titleRow: buildReportHeader('MarkDesk Student List'),
       headers: ['ID', 'Email', 'Full Name', 'Matric Number', 'Approval Status', 'Active', 'Created At'],
       rows,
       summaryRows: [['', '', '', '', '', 'Total Students:', rows.length]],
@@ -92,7 +92,7 @@ export default function ExportPage() {
       l.max_teaching_credits ?? '', formatDateLocal(l.created_at) || '',
     ])
     generateReportCsv(`faculty_directory_${dateStamp()}.csv`, {
-      titleRow: buildReportHeader('CMMS Faculty Directory'),
+      titleRow: buildReportHeader('MarkDesk Faculty Directory'),
       headers: ['ID', 'Email', 'Full Name', 'Base Role', 'Special Roles', 'Active', 'Max Teaching Credits', 'Created At'],
       rows,
       summaryRows: [['', '', '', '', '', '', 'Total Faculty:', rows.length]],
@@ -130,7 +130,7 @@ export default function ExportPage() {
   // Export 3: Course Summary (scoped by year + semester, grouped per course)
   async function exportCourseSummary() {
     const isFullYear = selectedSemester === 'all'
-    const [cRes, lecMap] = await Promise.all([listCourses({ limit: 500 }), buildLecturerMap()])
+    const [cRes, lecMap] = await Promise.all([listCourses({ limit: 2000 }), buildLecturerMap()])
     const allCourses = cRes.data || (cRes as any) || []
     const courses = allCourses.filter((c: any) => matchesYearSemester(c, selectedYear, selectedSemester))
 
@@ -168,7 +168,7 @@ export default function ExportPage() {
     const filename = isFullYear
       ? `course_summary_${selectedYear}_fullyear_${dateStamp()}.csv`
       : `course_summary_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-    const titleRow = buildReportHeader('CMMS Course Summary', selectedYear, semLabel)
+    const titleRow = buildReportHeader('MarkDesk Course Summary', selectedYear, semLabel)
     const overall: (string | number)[][] = [
       ['OVERALL SUMMARY'],
       ['', 'Total Courses:', courses.length, '', 'Total Active Enrolments:', totalEnrolled],
@@ -181,8 +181,8 @@ export default function ExportPage() {
         const semEnrolled = semCourses.reduce((s, c) => s + (courseData.find((d) => d.course.id === c.id)?.enrolled ?? 0), 0)
         const blocks: CourseBlock[] = []
         for (const c of semCourses) {
-          const cd = courseData.find((d) => d.course.id === c.id)!
-          blocks.push(makeSummaryBlock(cd))
+          const cd = courseData.find((d) => d.course.id === c.id)
+          if (cd) blocks.push(makeSummaryBlock(cd))
         }
         groups.push({
           groupLabel: `SEMESTER ${sem}`,
@@ -203,7 +203,7 @@ export default function ExportPage() {
     const isFullYear = selectedSemester === 'all'
     const [flagRes, cRes, lecMap] = await Promise.all([
       getFlaggedMarks(),
-      listCourses({ limit: 500 }),
+      listCourses({ limit: 2000 }),
       buildLecturerMap(),
     ])
     const allFlagged = flagRes.flagged_marks || []
@@ -254,7 +254,7 @@ export default function ExportPage() {
     const filename = isFullYear
       ? `flagged_marks_${selectedYear}_fullyear_${dateStamp()}.csv`
       : `flagged_marks_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-    const titleRow = buildReportHeader('CMMS Flagged Marks Report', selectedYear, semLabel)
+    const titleRow = buildReportHeader('MarkDesk Flagged Marks Report', selectedYear, semLabel)
     const overall: (string | number)[][] = [
       ['OVERALL SUMMARY'],
       ['', 'Courses with flags:', flagsByCourse.size, '', 'Total Flags:', totalFlags],
@@ -283,14 +283,14 @@ export default function ExportPage() {
 
   // Export 5: Audit Log (global — not scoped by year)
   async function exportAuditLog() {
-    const res = await getAuditLogs({ limit: 500, offset: 0 })
+    const res = await getAuditLogs({ limit: 2000, offset: 0 })
     const rows = (res.logs || []).map((l: any) => [
       formatDateTimeLocal(l.created_at) || '', l.action || '', auditActionCategory(l.action || ''),
       l.actor_email || '', l.actor_name || '', l.entity_type || '', l.entity_id || '',
       l.ip_address || '', auditDetails(l.old_values, l.new_values),
     ])
     generateReportCsv(`audit_log_${dateStamp()}.csv`, {
-      titleRow: buildReportHeader('CMMS Audit Log'),
+      titleRow: buildReportHeader('MarkDesk Audit Log'),
       headers: ['Timestamp', 'Action', 'Category', 'Actor Email', 'Actor Name', 'Entity Type', 'Entity ID', 'IP Address', 'Changes'],
       rows,
       summaryRows: [['', '', '', '', '', '', '', 'Total Entries:', rows.length]],

@@ -11,6 +11,9 @@ export default {
         success: '#10B981',
         error: '#EF4444',
       },
+      fontFamily: {
+        brand: ['var(--font-brand)', 'sans-serif'],
+      },
     },
   },
   plugins: [],

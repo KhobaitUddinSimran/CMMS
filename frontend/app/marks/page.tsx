@@ -155,7 +155,7 @@ export default function MarksPage() {
                           <th className="text-left px-4 py-2 font-medium">Type</th>
                           <th className="text-right px-4 py-2 font-medium">Score</th>
                           <th className="text-right px-4 py-2 font-medium">Weight</th>
-                          <th className="text-right px-5 py-2 font-medium">Contribution</th>
+                          <th className="text-right px-5 py-2 font-medium">Marks</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -175,7 +175,7 @@ export default function MarksPage() {
                       </tbody>
                       <tfoot>
                         <tr className="bg-[#F9FAFB] border-t-2 border-[#E5E7EB]">
-                          <td colSpan={4} className="px-5 py-3 font-semibold text-[#374151]">Carry Total</td>
+                          <td colSpan={4} className="px-5 py-3 font-semibold text-[#374151]">Total Carry Marks</td>
                           <td className="px-5 py-3 text-right font-bold text-[#111827] text-base">
                             {course.carry_total.toFixed(2)}%
                           </td>

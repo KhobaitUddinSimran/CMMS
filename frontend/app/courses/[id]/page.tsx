@@ -606,7 +606,7 @@ function StudentView({
           {/* Carry Total Banner */}
           <div className="bg-gradient-to-r from-[#C90031] to-[#9b0025] rounded-2xl p-6 text-white flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium opacity-80">Current Carry Total</p>
+              <p className="text-sm font-medium opacity-80">Total Carry Marks</p>
               <p className="text-4xl font-bold mt-1">{carryTotal}%</p>
               <p className="text-sm opacity-70 mt-1">of {maxPossible}% assessed so far</p>
             </div>
@@ -655,7 +655,7 @@ function StudentView({
 
                     <div className="text-right flex-shrink-0">
                       <p className="text-xl font-bold text-[#111827]">+{m.weighted_contribution.toFixed(1)}%</p>
-                      <p className="text-xs text-[#6B7280]">Contribution</p>
+                      <p className="text-xs text-[#6B7280]">Marks</p>
                     </div>
                   </div>
                 </Card>
