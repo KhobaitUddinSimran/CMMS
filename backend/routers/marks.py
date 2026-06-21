@@ -597,9 +597,9 @@ async def update_mark(
 
         mark = mark_resp.data[0]
 
-        # Cannot update published marks — must be unpublished via coordinator first
+        # Cannot update published marks — must be unpublished first
         if mark.get("status") == "published":
-            raise HTTPException(status_code=400, detail="Cannot update published marks. Ask the coordinator to unpublish first.")
+            raise HTTPException(status_code=400, detail="Cannot update published marks. Unpublish the marks from the grade sheet first.")
 
         # Enforce the semester-end grade submission deadline
         a_cid_resp = supabase.table("assessments").select("course_id").eq("id", mark["assessment_id"]).execute()
@@ -714,16 +714,41 @@ async def unpublish_marks(
     current_user=Depends(get_current_user),
 ):
     """Revert published marks back to draft so they can be corrected and re-published.
-    Only coordinators or admins can unpublish — lecturers must request it via
-    a coordinator to create an audit trail of who reopened the grade."""
+    Lecturers can unpublish marks for courses they are assigned to; coordinators,
+    HODs and admins can unpublish any marks."""
     _require_supabase()
-    if not has_effective_role(current_user, "coordinator", "admin"):
-        raise HTTPException(status_code=403, detail="Only coordinators and admins can unpublish marks")
+    if not has_effective_role(current_user, "lecturer", "coordinator", "admin"):
+        raise HTTPException(status_code=403, detail="Only lecturers, coordinators and admins can unpublish marks")
 
     reason = (getattr(request, "reason", None) or "").strip() if hasattr(request, "reason") else ""
     try:
+        mark_ids = request.mark_ids or []
+        if not mark_ids:
+            return {"message": "No marks to unpublish", "count": 0}
+
+        # Lecturers must own the course(s) these marks belong to.
+        if current_user.get("role") == "lecturer":
+            marks_resp = supabase.table("marks").select("id, assessment_id").in_("id", mark_ids).execute()
+            if not marks_resp.data:
+                return {"message": "No marks to unpublish", "count": 0}
+
+            assessment_ids = list({m["assessment_id"] for m in marks_resp.data})
+            assessments_resp = supabase.table("assessments").select("id, course_id").in_("id", assessment_ids).execute()
+            assessment_to_course = {a["id"]: a["course_id"] for a in (assessments_resp.data or [])}
+
+            seen_courses = set()
+            for course_id in assessment_to_course.values():
+                if course_id in seen_courses:
+                    continue
+                seen_courses.add(course_id)
+                course_resp = supabase.table("courses").select("*").eq("id", course_id).execute()
+                if course_resp.data:
+                    _verify_lecturer_course(course_resp.data[0], current_user)
+
+            mark_ids = [m["id"] for m in marks_resp.data if m["assessment_id"] in assessment_to_course]
+
         count = 0
-        for mark_id in request.mark_ids:
+        for mark_id in mark_ids:
             resp = (
                 supabase.table("marks")
                 .update({"status": "draft"})

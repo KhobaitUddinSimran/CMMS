@@ -101,12 +101,12 @@ async def get_current_user_info(
     if supabase:
         try:
             resp = supabase.table("users").select(
-                "id, email, full_name, role, is_active, email_verified, approval_status, created_at"
+                "id, email, full_name, role, special_roles, is_active, email_verified, approval_status, created_at"
             ).eq("id", user_id).execute()
             if resp.data:
                 u = resp.data[0]
                 db_role = u.get("role", role_from_token)
-                db_special = [db_role] if db_role in ("coordinator", "hod") else []
+                db_special = u.get("special_roles") or []
                 return {
                     "id": u["id"],
                     "email": u.get("email", ""),
