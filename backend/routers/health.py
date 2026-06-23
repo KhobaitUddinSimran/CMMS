@@ -26,7 +26,7 @@ async def test_email(to: str):
     from services.email_service import _send_smtp, _get_smtp_config
     cfg = _get_smtp_config()
     try:
-        await asyncio.to_thread(_send_smtp, to, "MarkDesk Email Test", "<p>Email system is working.</p>")
+        await asyncio.to_thread(_send_smtp, to, "MarksDesk Email Test", "<p>Email system is working.</p>")
         return {"sent": True}
     except Exception as exc:
         return {"sent": False, "error": type(exc).__name__, "detail": str(exc)}

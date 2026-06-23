@@ -75,7 +75,7 @@ export default function ExportPage() {
       u.is_active ? 'Yes' : 'No', formatDateLocal(u.created_at) || '',
     ])
     generateReportCsv(`students_${dateStamp()}.csv`, {
-      titleRow: buildReportHeader('MarkDesk Student List'),
+      titleRow: buildReportHeader('MarksDesk Student List'),
       headers: ['ID', 'Email', 'Full Name', 'Matric Number', 'Approval Status', 'Active', 'Created At'],
       rows,
       summaryRows: [['', '', '', '', '', 'Total Students:', rows.length]],
@@ -92,7 +92,7 @@ export default function ExportPage() {
       l.max_teaching_credits ?? '', formatDateLocal(l.created_at) || '',
     ])
     generateReportCsv(`faculty_directory_${dateStamp()}.csv`, {
-      titleRow: buildReportHeader('MarkDesk Faculty Directory'),
+      titleRow: buildReportHeader('MarksDesk Faculty Directory'),
       headers: ['ID', 'Email', 'Full Name', 'Base Role', 'Special Roles', 'Active', 'Max Teaching Credits', 'Created At'],
       rows,
       summaryRows: [['', '', '', '', '', '', 'Total Faculty:', rows.length]],
@@ -168,7 +168,7 @@ export default function ExportPage() {
     const filename = isFullYear
       ? `course_summary_${selectedYear}_fullyear_${dateStamp()}.csv`
       : `course_summary_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-    const titleRow = buildReportHeader('MarkDesk Course Summary', selectedYear, semLabel)
+    const titleRow = buildReportHeader('MarksDesk Course Summary', selectedYear, semLabel)
     const overall: (string | number)[][] = [
       ['OVERALL SUMMARY'],
       ['', 'Total Courses:', courses.length, '', 'Total Active Enrolments:', totalEnrolled],
@@ -254,7 +254,7 @@ export default function ExportPage() {
     const filename = isFullYear
       ? `flagged_marks_${selectedYear}_fullyear_${dateStamp()}.csv`
       : `flagged_marks_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-    const titleRow = buildReportHeader('MarkDesk Flagged Marks Report', selectedYear, semLabel)
+    const titleRow = buildReportHeader('MarksDesk Flagged Marks Report', selectedYear, semLabel)
     const overall: (string | number)[][] = [
       ['OVERALL SUMMARY'],
       ['', 'Courses with flags:', flagsByCourse.size, '', 'Total Flags:', totalFlags],
@@ -290,7 +290,7 @@ export default function ExportPage() {
       l.ip_address || '', auditDetails(l.old_values, l.new_values),
     ])
     generateReportCsv(`audit_log_${dateStamp()}.csv`, {
-      titleRow: buildReportHeader('MarkDesk Audit Log'),
+      titleRow: buildReportHeader('MarksDesk Audit Log'),
       headers: ['Timestamp', 'Action', 'Category', 'Actor Email', 'Actor Name', 'Entity Type', 'Entity ID', 'IP Address', 'Changes'],
       rows,
       summaryRows: [['', '', '', '', '', '', '', 'Total Entries:', rows.length]],

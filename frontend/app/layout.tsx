@@ -19,8 +19,8 @@ const brand = Marcellus({
 })
 
 export const metadata: Metadata = {
-  title: 'UTM MarkDesk',
-  description: 'UTM MarkDesk – Carry Mark & Workload Management',
+  title: 'MarksDesk',
+  description: 'MarksDesk – Carry Mark & Workload Management',
 }
 
 export default function RootLayout({

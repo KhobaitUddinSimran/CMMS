@@ -28,8 +28,8 @@ function AuthLayoutContent({ children, title, subtitle }: AuthLayoutProps) {
               />
               <div className="w-px h-8 bg-[#E5E7EB]" />
               <div>
-                <p className="font-brand text-[18px] font-extrabold tracking-tight text-[#001f3f] leading-none">MarkDesk</p>
-                <p className="text-[11px] text-[#94A3B8] mt-0.5 leading-none">UTM MarkDesk</p>
+                <p className="font-brand text-[18px] font-extrabold tracking-tight text-[#001f3f] leading-none">MarksDesk</p>
+                <p className="text-[11px] text-[#94A3B8] mt-0.5 leading-none">MarksDesk</p>
               </div>
             </div>
             <h1 className="text-[22px] font-bold text-[#0F172A] leading-tight tracking-tight">

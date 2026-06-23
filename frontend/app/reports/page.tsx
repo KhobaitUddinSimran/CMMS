@@ -185,7 +185,7 @@ export default function ReportsPage() {
       const filename = isFullYear
         ? `enrollment_report_${selectedYear}_fullyear_${dateStamp()}.csv`
         : `enrollment_report_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-      const titleRow = buildReportHeader('MarkDesk Enrollment Report', selectedYear, semLabel)
+      const titleRow = buildReportHeader('MarksDesk Enrollment Report', selectedYear, semLabel)
       const overall: (string | number)[][] = [
         ['OVERALL SUMMARY'],
         ['', 'Total Courses:', courses.length, '', 'Total Enrolled:', totalEnrolled],
@@ -306,7 +306,7 @@ export default function ReportsPage() {
       const filename = isFullYear
         ? `assessment_report_${selectedYear}_fullyear_${dateStamp()}.csv`
         : `assessment_report_${selectedYear}_S${selectedSemester}_${dateStamp()}.csv`
-      const titleRow = buildReportHeader('MarkDesk Assessment Configuration Report', selectedYear, semLabel)
+      const titleRow = buildReportHeader('MarksDesk Assessment Configuration Report', selectedYear, semLabel)
       const overall: (string | number)[][] = [
         ['OVERALL SUMMARY'],
         ['', 'Total Courses:', courses.length, '', 'Total Assessments:', totalAssessments],
@@ -423,7 +423,7 @@ export default function ReportsPage() {
 
       const lines: string[] = []
       const semLabel = isFullYear ? 'Full Year' : `Semester ${selectedSemester}`
-      lines.push(esc(buildReportHeader('MarkDesk Grade Marks Report', selectedYear, semLabel)))
+      lines.push(esc(buildReportHeader('MarksDesk Grade Marks Report', selectedYear, semLabel)))
       lines.push('')
 
       function renderGradeCourse(cd: GCD) {

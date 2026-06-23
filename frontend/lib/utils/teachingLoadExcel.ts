@@ -89,7 +89,7 @@ export async function downloadTeachingLoad(
   const COLS = 16  // Sheet 1 column count
 
   const wb = new ExcelJS.Workbook()
-  wb.creator  = 'MarkDesk — Teaching Load Export'
+  wb.creator  = 'MarksDesk — Teaching Load Export'
   wb.created  = new Date()
   wb.modified = new Date()
 
@@ -369,7 +369,7 @@ export async function downloadTeachingLoad(
     r.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' }
   }
 
-  const s1 = ws3.addRow([`MarkDesk — Teaching Load Statistics     ·     ${scope}`, ''])
+  const s1 = ws3.addRow([`MarksDesk — Teaching Load Statistics     ·     ${scope}`, ''])
   s1.height = 24
   ws3.mergeCells(s1.number, 1, s1.number, 2)
   applyFill(s1, FILL_TITLE, 'FFFFFFFF', true, 2)

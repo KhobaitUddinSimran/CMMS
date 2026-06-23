@@ -715,7 +715,7 @@ async def complete_student_profile(request: Request, data: CompleteProfileReques
         
         return CompleteProfileResponse(
             success=True,
-            message="Profile completed successfully. Welcome to UTM MarkDesk!",
+            message="Profile completed successfully. Welcome to MarksDesk!",
             token=token,
             user={
                 "id": student["id"],

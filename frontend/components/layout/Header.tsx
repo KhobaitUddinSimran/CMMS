@@ -36,8 +36,8 @@ export function Header({ title, userName, userInitials, role, onMenuToggle }: He
           className="h-8 w-auto object-contain shrink-0"
         />
         <div className="hidden sm:flex flex-col leading-none">
-          <span className="font-brand text-[16px] font-extrabold tracking-tight text-[#001f3f]">MarkDesk</span>
-          <span className="text-[10px] text-[#94A3B8] mt-0.5">UTM MarkDesk</span>
+          <span className="font-brand text-[16px] font-extrabold tracking-tight text-[#001f3f]">MarksDesk</span>
+          <span className="text-[10px] text-[#94A3B8] mt-0.5">MarksDesk</span>
         </div>
       </div>
 

@@ -19,14 +19,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Starting UTM MarkDesk...")
+    logger.info("🚀 Starting MarksDesk...")
     yield
     logger.info("⏹️  Shutting down...")
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="UTM MarkDesk",
-        description="UTM MarkDesk API",
+        title="MarksDesk",
+        description="MarksDesk API",
         version="1.0.0",
         lifespan=lifespan
     )
